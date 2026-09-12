@@ -1,0 +1,34 @@
+Additional permission under GNU AGPL version 3 section 7
+(App Store exception)
+
+Kuutti is licensed under the GNU Affero General Public License,
+version 3 (see the LICENSE file), together with the following
+additional permission granted by the copyright holders:
+
+    As an additional permission under section 7, you are allowed to
+    distribute the software through an app store, even if that store
+    has restrictive terms and conditions that are incompatible with
+    the AGPL, provided that the source is also available under the
+    AGPL with or without this permission through a channel without
+    those restrictive terms and conditions.
+
+Purpose. The terms of service of the Apple App Store, and potentially
+of other app stores, conflict with parts of the AGPL. Without this
+permission the app could not be published there by anyone other than
+the sole copyright holder. Kuutti has many contributors who keep their
+copyright, so the permission is granted by all of them.
+
+Scope. The permission applies to the whole program and to every
+contribution to it. A contributor who signs off a commit under the
+Developer Certificate of Origin (see the DCO file) submits that work
+under the AGPL together with this additional permission, because the
+licence indicated in this repository is the AGPL with this permission.
+
+Removal. As section 7 of the AGPL allows, anyone conveying a copy of
+this work may remove this additional permission from their copy. The
+copy remains under the AGPL.
+
+Where to find these terms. This file lives at the root of the source
+tree next to LICENSE. Source files, package metadata and release notes
+that state the licence should read "AGPL-3.0 with App Store exception,
+see LICENSE and LICENSE-EXCEPTION".
