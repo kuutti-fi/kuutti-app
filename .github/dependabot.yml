@@ -10,6 +10,12 @@ updates:
       github-actions:
         patterns: ["*"]
 
+  # Provider version bumps for the infrastructure code.
+  - package-ecosystem: "terraform"
+    directory: "/infra/bootstrap"
+    schedule:
+      interval: "weekly"
+
   # When a package manifest lands (package.json, go.mod, pyproject.toml, ...),
   # add its ecosystem here so dependency updates are proposed automatically:
   #

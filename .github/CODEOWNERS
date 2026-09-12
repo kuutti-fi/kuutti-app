@@ -7,3 +7,5 @@
 # Security-sensitive paths: workflows, repo automation, and the security policy.
 /.github/               @superseacat
 /SECURITY.md            @superseacat
+/infra/                 @superseacat
+/docs/adr/              @superseacat

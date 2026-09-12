@@ -1,0 +1,5 @@
+# cp to terraform.tfvars and fill in. terraform.tfvars is gitignored.
+# gh api repos/kuutti-fi/kuutti-app --jq '{repo_id: .id, owner_id: .owner.id}'
+
+github_owner_id      = "000000000"
+github_repository_id = "000000000"
