@@ -1,0 +1,11 @@
+#!/bin/sh
+# Rejects a commit whose message has no DCO sign-off, before it ever leaves
+# your machine. Enable once per clone:
+#
+#   git config core.hooksPath .githooks
+#
+# Then commit with `git commit -s`. See CONTRIBUTING.md.
+if ! grep -qE '^Signed-off-by: .+ <.+@.+>$' "$1"; then
+  echo "commit-msg: no Signed-off-by trailer. Use 'git commit -s' (see CONTRIBUTING.md)." >&2
+  exit 1
+fi

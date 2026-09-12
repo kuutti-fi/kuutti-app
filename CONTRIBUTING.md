@@ -26,7 +26,13 @@ Signed-off-by: Your Name <you@example.com>
 
 Use your real name. A GitHub noreply address is fine if you keep your email private.
 
-The `main` branch rejects pushes and merges whose commits lack the trailer, so an unsigned commit cannot land by accident. If you forgot, sign off after the fact:
+A DCO check runs on every push and pull request and fails on any commit without the trailer; a pull request cannot be merged while it fails. To catch it before you push, enable the repository hooks once per clone:
+
+```bash
+git config core.hooksPath .githooks
+```
+
+If you forgot, sign off after the fact:
 
 ```bash
 git commit --amend -s --no-edit

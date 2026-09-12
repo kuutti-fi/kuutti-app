@@ -1,0 +1,45 @@
+name: DCO
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  dco:
+    name: DCO sign-off
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Every commit carries a Signed-off-by trailer
+        env:
+          BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+          HEAD: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          # A brand-new branch or an unknown base: check only HEAD.
+          if [ -z "$BASE" ] || [ "$BASE" = "0000000000000000000000000000000000000000" ] || ! git cat-file -e "$BASE^{commit}" 2>/dev/null; then
+            range="$HEAD^!"
+          else
+            range="$BASE..$HEAD"
+          fi
+          missing=0
+          # --no-merges: merge commits carry no authored change and are skipped, as the DCO app does.
+          for c in $(git rev-list --no-merges "$range"); do
+            if ! git log -1 --format=%B "$c" | grep -qE '^Signed-off-by: .+ <.+@.+>$'; then
+              echo "::error::Commit $(git log -1 --format='%h %s' "$c") has no Signed-off-by trailer."
+              missing=$((missing + 1))
+            fi
+          done
+          if [ "$missing" -gt 0 ]; then
+            echo "$missing commit(s) lack a DCO sign-off. Commit with 'git commit -s'; to fix existing commits run 'git rebase --signoff main'. See CONTRIBUTING.md." >&2
+            exit 1
+          fi
+          echo "All commits in $range are signed off."
