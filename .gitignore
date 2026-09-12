@@ -1,0 +1,46 @@
+# --- Secrets and local configuration: never commit these ---
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+credentials*.json
+service-account*.json
+*.secret
+
+# --- Dependencies ---
+node_modules/
+.pnpm-store/
+vendor/
+
+# --- Build output and coverage ---
+dist/
+build/
+out/
+.next/
+.nuxt/
+.output/
+.svelte-kit/
+coverage/
+
+# --- Logs and caches ---
+*.log
+npm-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.cache/
+.turbo/
+.eslintcache
+
+# --- OS and editor noise ---
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.iml
+*.swp
+*~

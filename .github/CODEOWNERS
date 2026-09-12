@@ -1,0 +1,9 @@
+# Code owners are automatically requested for review on pull requests
+# and can be required by branch rulesets.
+#
+# Default owner for everything in the repository.
+*                       @superseacat
+
+# Security-sensitive paths: workflows, repo automation, and the security policy.
+/.github/               @superseacat
+/SECURITY.md            @superseacat
