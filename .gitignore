@@ -44,3 +44,6 @@ Thumbs.db
 *.iml
 *.swp
 *~
+
+# --- Claude Code per-developer overrides (the shared settings.json is committed) ---
+.claude/settings.local.json
