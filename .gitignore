@@ -64,3 +64,4 @@ android/
 expo-env.d.ts
 .metro-health-check*
 .kotlin/
+.claude/session-handoff.md

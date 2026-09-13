@@ -44,6 +44,14 @@ Before pushing: typecheck, lint, and tests pass locally. Do not push red.
 - Subject line imperative and under 72 characters; the body says what and why. Cite the TD or ADR when a change follows one.
 - Commit only what was asked. No generated artefacts, no unrelated lockfile churn, no `.env*`.
 
+## Session handoff
+
+Context is cheaper re-read than carried. `/clear` between tasks, `/compact` within one.
+
+- `.claude/session-handoff.md` (gitignored) is the bridge: goal, state, files touched, decisions, next steps, verification. A SessionStart hook injects it after `/clear`, `/compact`, and on startup; read it before acting. A PreCompact hook feeds it to the summary.
+- Before the user clears, when an issue closes, or before a long pause: run `/handoff` (or write the file in that shape yourself). Under 60 lines, facts only, nothing secret.
+- Within a task, prefer `/compact focus on <the current issue and its verification>` over letting the window fill.
+
 ## Non-negotiable rules
 
 From TD-1, TD-6, TD-7. A change that violates one is wrong regardless of who asked.
