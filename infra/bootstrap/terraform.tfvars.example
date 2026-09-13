@@ -3,3 +3,9 @@
 
 github_owner_id      = "000000000"
 github_repository_id = "000000000"
+
+# Alias on the project domain (TD-4), never a personal address. Confirm the SNS
+# subscription from that mailbox after apply.
+billing_alert_email = "billing@example.invalid"
+
+# monthly_budget_usd = 55   # TD-4: 50 EUR, in USD because Budgets are USD

@@ -1,0 +1,92 @@
+name: Infra OIDC
+
+# Keeps two properties of the bootstrap roles proven (ADR-001, #6): the plan
+# role is assumable from a pull request and from main, and it cannot decrypt a
+# SecureString even though ReadOnlyAccess alone would let it. The gate job is
+# for the one-time check of the GitHub environments: dispatched from a v* tag
+# with gate=prod it waits for the reviewer; from a branch with gate=staging
+# GitHub refuses the ref before it starts.
+
+on:
+  pull_request:
+    paths: ["infra/**", ".github/workflows/infra-oidc.yml"]
+  push:
+    branches: [main]
+    paths: ["infra/**", ".github/workflows/infra-oidc.yml"]
+  workflow_dispatch:
+    inputs:
+      gate:
+        description: GitHub environment to assume the apply role from
+        type: choice
+        options: [none, staging, prod]
+        default: none
+
+permissions:
+  contents: read
+
+jobs:
+  plan-role:
+    name: plan role cannot read secrets
+    # Nothing to prove before the bootstrap has been applied; a dispatch from a
+    # tag or a feature branch is not a subject the plan role trusts; and a fork
+    # pull request gets no OIDC token at all, so it is skipped rather than red.
+    if: >-
+      vars.AWS_PLAN_ROLE_ARN != ''
+      && github.event_name != 'workflow_dispatch'
+      && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION }}
+      AWS_ROLE_ARN: ${{ vars.AWS_PLAN_ROLE_ARN }}
+      AWS_ROLE_SESSION_NAME: gha-${{ github.run_id }}
+    steps:
+      # No third-party action: with AWS_WEB_IDENTITY_TOKEN_FILE and AWS_ROLE_ARN
+      # set, the CLI exchanges the token for role credentials on every call.
+      - name: Fetch the OIDC token
+        run: |
+          curl -sSf -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=sts.amazonaws.com" \
+            | jq -r .value > "$RUNNER_TEMP/oidc-token"
+          echo "AWS_WEB_IDENTITY_TOKEN_FILE=$RUNNER_TEMP/oidc-token" >> "$GITHUB_ENV"
+
+      - name: Assume kuutti-ci-plan
+        run: aws sts get-caller-identity --query Arn --output text | tee /dev/stderr | grep -q 'assumed-role/kuutti-ci-plan/'
+
+      - name: A SecureString is listable but not decryptable
+        env:
+          PARAM: /kuutti/ci-check/secret
+        run: |
+          aws ssm get-parameter --name "$PARAM" --query Parameter.Type --output text | grep -qx SecureString
+          if out=$(aws ssm get-parameter --name "$PARAM" --with-decryption 2>&1); then
+            echo "::error::kuutti-ci-plan decrypted $PARAM: the deny-data-access policy is not in force"
+            exit 1
+          fi
+          echo "$out"
+          echo "$out" | grep -qiE 'AccessDenied|not authorized' \
+            || { echo "::error::decrypt failed for a reason other than the deny"; exit 1; }
+
+  gate:
+    name: apply role from the ${{ inputs.gate }} environment
+    if: github.event_name == 'workflow_dispatch' && inputs.gate != 'none'
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.gate }}
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION }}
+      AWS_ROLE_ARN: ${{ vars.AWS_APPLY_ROLE_ARN }}
+      AWS_ROLE_SESSION_NAME: gha-${{ github.run_id }}
+    steps:
+      - name: Fetch the OIDC token
+        run: |
+          curl -sSf -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=sts.amazonaws.com" \
+            | jq -r .value > "$RUNNER_TEMP/oidc-token"
+          echo "AWS_WEB_IDENTITY_TOKEN_FILE=$RUNNER_TEMP/oidc-token" >> "$GITHUB_ENV"
+
+      - name: Assume kuutti-ci-apply
+        run: aws sts get-caller-identity --query Arn --output text | tee /dev/stderr | grep -q 'assumed-role/kuutti-ci-apply/'

@@ -32,3 +32,18 @@ provider "aws" {
     }
   }
 }
+
+# Billing metrics and their alarms exist only in us-east-1 (TD-4 keeps every
+# workload resource in eu-central-1; this is the one exception, forced by AWS).
+provider "aws" {
+  alias  = "us_east_1"
+  region = "us-east-1"
+
+  default_tags {
+    tags = {
+      Project   = var.project
+      ManagedBy = "opentofu"
+      Component = "bootstrap"
+    }
+  }
+}

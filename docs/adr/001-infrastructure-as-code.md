@@ -23,14 +23,14 @@ Layout:
 
 ```
 infra/
-  bootstrap/        state bucket, GitHub OIDC provider, CI roles. Run once, locally.
+  bootstrap/        state bucket, GitHub OIDC provider, CI roles, budget and billing alarm. Run once, locally.
   modules/
     network/        VPC, subnets, route tables, security groups, DB subnet group
     data/           RDS instance, parameter group, backups
     compute/        EC2, EBS, Elastic IP, instance profile and role, user_data
     media/          S3 buckets, CloudFront, OAC, cache and origin request policies, ACM
     email/          SES identity, DKIM, configuration set, SNS topic
-    observability/  log groups, alarms, budget
+    observability/  log groups, alarms
   envs/
     staging/ prod/
   github/           repository settings, branch protection, environments
@@ -53,6 +53,10 @@ Two roles. The plan role has `ReadOnlyAccess` minus data: it is explicitly denie
 The state file is a secret store and is treated as one: versioning, encryption, public access blocked, access limited to the CI roles and the maintainer.
 
 RDS uses `manage_master_user_password = true` so the master password is generated and held by AWS in Secrets Manager and never appears in state. This is the reason Secrets Manager appears here despite being listed as "not adopted" in the infrastructure rules: it is used by RDS, not by the application, which continues to read its own secrets from SSM Parameter Store.
+
+### Admin access for the bootstrap apply
+
+Added 2026-09-13 (#6). The one human identity in the account is an **IAM Identity Center** user for the maintainer with a single `AdministratorAccess` permission set; the CLI gets short-lived credentials through `aws configure sso`. No IAM user and no long-lived access key exist, which is what the "no static keys anywhere" rule requires. The cost is that Identity Center needs AWS Organizations, so enabling it makes this account the management account of a one-account organisation. When the account later moves under an organisation owned by the association, that organisation and its Identity Center instance are deleted first, the invitation is accepted, and admin access is re-created on the association's side. Everything under `infra/` survives that move unchanged; only the human login is rebuilt. The fallback, if Identity Center cannot be enabled, is one IAM user with MFA and console-issued session credentials, still with no access key.
 
 ### GitHub OIDC trust, specific to this repository
 

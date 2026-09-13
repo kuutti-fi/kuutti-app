@@ -31,3 +31,19 @@ variable "deploy_environments" {
   type        = list(string)
   default     = ["staging", "prod"]
 }
+
+variable "billing_alert_email" {
+  description = "Mailbox for budget and billing-alarm notifications: an alias on the project domain, never a personal address (TD-4). The SNS subscription is confirmed from that mailbox."
+  type        = string
+
+  validation {
+    condition     = can(regex("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$", var.billing_alert_email))
+    error_message = "billing_alert_email must be an email address; set it in terraform.tfvars."
+  }
+}
+
+variable "monthly_budget_usd" {
+  description = "Monthly cost budget. TD-4 sets 50 EUR; the AWS/Billing metric behind the alarm is USD-only, so this is the USD equivalent rounded up and the budget uses the same number."
+  type        = number
+  default     = 55
+}

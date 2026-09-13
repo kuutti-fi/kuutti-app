@@ -34,3 +34,8 @@ output "permissions_boundary_arn" {
   description = "Every role created by the apply role must set permissions_boundary to this ARN, or the create call is refused."
   value       = aws_iam_policy.boundary.arn
 }
+
+output "billing_topic_arn" {
+  description = "Budget and billing-alarm notifications go here. Test delivery: aws sns publish --region us-east-1 --topic-arn <arn> --subject 'kuutti billing test' --message test"
+  value       = aws_sns_topic.billing.arn
+}
