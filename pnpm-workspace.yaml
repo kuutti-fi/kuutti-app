@@ -1,0 +1,30 @@
+packages:
+  - apps/*
+  - packages/*
+  - services/*
+
+# Hoisted layout for Metro compatibility (TD-2).
+nodeLinker: hoisted
+
+# Peers with "*" ranges (expo-router lists reanimated, gesture-handler, testing
+# libraries) must be installed deliberately with `npx expo install`, never
+# auto-resolved to whatever is newest.
+autoInstallPeers: false
+
+# One version of each shared tool across the workspace. Expo SDK 57 pins react,
+# react-native and typescript; everything else follows those.
+catalog:
+  typescript: ~6.0.3
+  vitest: ^5.0.0
+  react: 19.2.3
+  react-dom: 19.2.3
+  "@types/react": ~19.2.2
+  "@types/react-dom": ~19.2.2
+
+
+allowBuilds:
+  esbuild: true
+
+# Supply chain: a version must be at least one day old before pnpm installs it
+# (pnpm's default, stated explicitly). Exclusions are a decision, not a convenience.
+minimumReleaseAge: 1440

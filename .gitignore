@@ -47,3 +47,20 @@ Thumbs.db
 
 # --- Claude Code per-developer overrides (the shared settings.json is committed) ---
 .claude/settings.local.json
+
+# --- Expo and Metro ---
+.expo/
+.expo-shared/
+*.jks
+*.p8
+*.mobileprovision
+*.orig.*
+web-build/
+ios/
+android/
+
+# --- TypeScript build info ---
+*.tsbuildinfo
+expo-env.d.ts
+.metro-health-check*
+.kotlin/

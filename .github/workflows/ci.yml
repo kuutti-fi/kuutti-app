@@ -1,0 +1,64 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    name: ${{ matrix.task }}
+    # arm64 runners: free for public repositories, and the same architecture as the t4g box.
+    runs-on: ubuntu-24.04-arm
+    strategy:
+      fail-fast: false
+      matrix:
+        task: [typecheck, lint, test]
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+
+      - name: Enable pnpm
+        run: corepack enable
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: ${{ matrix.task }}
+        run: pnpm ${{ matrix.task }}
+
+  docker-build:
+    name: docker-build
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Build the API image for linux/arm64
+        run: |
+          docker build --platform linux/arm64 \
+            --build-arg APP_VERSION=0.0.0-ci \
+            --build-arg GIT_COMMIT=${GITHUB_SHA::7} \
+            --build-arg BUILT_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            -f apps/api/Dockerfile -t kuutti-api:ci .
+
+      - name: Image starts and answers /health
+        run: |
+          docker run -d --name api -p 3000:3000 kuutti-api:ci
+          for i in $(seq 1 20); do
+            if curl -fsS http://127.0.0.1:3000/health; then echo; exit 0; fi
+            sleep 1
+          done
+          echo "no healthy answer"; docker logs api; exit 1

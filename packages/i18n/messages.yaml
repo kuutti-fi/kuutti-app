@@ -1,0 +1,6 @@
+# Source of truth for user-facing text. Semantic keys, English text, a description
+# per key, Finnish and Swedish added by native reviewers or flagged machine: true.
+# The build step, typed t() and CI checks arrive with issue #13.
+smoke.title:
+  en: Kuutti
+  description: App name shown on the smoke screen.

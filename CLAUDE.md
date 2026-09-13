@@ -22,15 +22,14 @@ Inside each app, code is organised by vertical slice (identity, profile, media, 
 
 ## Commands
 
-The root `package.json` becomes the source of truth when M1 lands; keep this list in sync with it. Target set:
+Root `package.json` is the source of truth; keep this list in sync with it.
 
-- `pnpm install` (frozen lockfile in CI)
-- `docker compose up` for Postgres, MinIO, and the mock IdP
-- `pnpm dev` runs the API with tsx watch, migrating and seeding on start
-- `pnpm --filter mobile start` for `expo start --dev-client`; never Expo Go
-- `pnpm typecheck`, `pnpm lint` (Biome), `pnpm test` (Vitest for api and packages), `pnpm --filter mobile test` (jest-expo)
-- `pnpm --filter db generate` for drizzle-kit migrations
-- `pnpm i18n:translate` fills missing locale keys, flagged `machine: true`
+- `pnpm install --frozen-lockfile`. Node 22.18+ and pnpm come from `package.json` (`engines`, `packageManager`); run `corepack enable` once.
+- `pnpm dev` runs the API with tsx watch on port 3000. `pnpm dev:mobile` starts the Expo dev client; never Expo Go. `pnpm dev:admin` starts Vite.
+- `pnpm typecheck`, `pnpm lint` (Biome, including the slice import boundary), `pnpm format`, `pnpm test` (Vitest for api and packages, jest-expo for mobile).
+- `pnpm check:scenarios` verifies every Gherkin scenario has a same-named test.
+- `pnpm --filter @kuutti/db generate` for drizzle-kit migrations (#4). `pnpm i18n:translate` (#13).
+- `docker compose up` for Postgres, MinIO, and the mock IdP (#5).
 
 Before pushing: typecheck, lint, and tests pass locally. Do not push red.
 

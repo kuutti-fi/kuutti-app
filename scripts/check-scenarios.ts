@@ -29,7 +29,16 @@ type Scenario = {
 const ROOT = process.cwd();
 const FEATURE_DIRS = ["features"];
 const TEST_DIRS = ["apps", "packages"];
-const SKIP_DIRS = new Set(["node_modules", ".git", "dist", "build", ".expo", ".turbo", "coverage", ".next"]);
+const SKIP_DIRS = new Set([
+  "node_modules",
+  ".git",
+  "dist",
+  "build",
+  ".expo",
+  ".turbo",
+  "coverage",
+  ".next",
+]);
 const PENDING_TAG = "@pending";
 
 function walk(dir: string, keep: (name: string) => boolean, out: string[] = []): string[] {
@@ -117,7 +126,9 @@ function collectTestNames(files: string[]): Map<string, string[]> {
 function main(): number {
   const list = process.argv.includes("--list");
 
-  const featureFiles = FEATURE_DIRS.flatMap((d) => walk(join(ROOT, d), (n) => n.endsWith(".feature")));
+  const featureFiles = FEATURE_DIRS.flatMap((d) =>
+    walk(join(ROOT, d), (n) => n.endsWith(".feature")),
+  );
   const testFiles = TEST_DIRS.flatMap((d) =>
     walk(join(ROOT, d), (n) => n.endsWith(".test.ts") || n.endsWith(".test.tsx")),
   );
@@ -153,7 +164,11 @@ function main(): number {
       );
     }
     if (list) {
-      const status = holders ? `implemented in ${holders.join(", ")}` : isPending ? "pending" : "MISSING";
+      const status = holders
+        ? `implemented in ${holders.join(", ")}`
+        : isPending
+          ? "pending"
+          : "MISSING";
       console.log(`${s.file}:${s.line}  ${s.name}  [${status}]`);
     }
   }

@@ -1,0 +1,43 @@
+{
+  "name": "@kuutti/mobile",
+  "version": "0.0.0",
+  "private": true,
+  "main": "expo-router/entry",
+  "description": "Expo app. Routes under app/ stay thin; features live under src/features/<slice>/.",
+  "scripts": {
+    "start": "expo start --dev-client",
+    "android": "expo start --dev-client --android",
+    "ios": "expo start --dev-client --ios",
+    "web": "expo start --web",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "jest"
+  },
+  "dependencies": {
+    "@expo/metro-runtime": "~57.0.15",
+    "@kuutti/schema": "workspace:*",
+    "expo": "~57.0.22",
+    "expo-constants": "~57.0.18",
+    "expo-dev-client": "~57.0.19",
+    "expo-image": "~57.0.5",
+    "expo-linking": "~57.0.10",
+    "expo-router": "~57.0.21",
+    "expo-secure-store": "~57.0.4",
+    "expo-status-bar": "~57.0.1",
+    "react": "catalog:",
+    "react-dom": "catalog:",
+    "react-native": "0.86.3",
+    "react-native-safe-area-context": "~5.7.0",
+    "react-native-screens": "~4.26.2",
+    "react-native-web": "^0.21.2"
+  },
+  "devDependencies": {
+    "@react-native/jest-preset": "^0.86.3",
+    "@testing-library/react-native": "^14.0.1",
+    "@types/jest": "29.5.14",
+    "@types/react": "catalog:",
+    "jest": "~29.7.0",
+    "jest-expo": "~57.0.5",
+    "test-renderer": "^1.2.0",
+    "typescript": "catalog:"
+  }
+}

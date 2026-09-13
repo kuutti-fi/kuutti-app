@@ -1,0 +1,45 @@
+import { fireEvent, render, screen, waitFor } from "@testing-library/react-native";
+import { SmokeScreen } from "./SmokeScreen";
+
+const ok = {
+  status: "ok",
+  version: "0.0.0-test",
+  commit: "abc1234",
+  builtAt: "2026-09-13T00:00:00.000Z",
+};
+
+function mockFetch(impl: () => Promise<Partial<Response>>) {
+  globalThis.fetch = jest.fn(impl) as unknown as typeof fetch;
+}
+
+describe("SmokeScreen", () => {
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it("shows the API version and commit when the API answers", async () => {
+    mockFetch(async () => ({ ok: true, status: 200, json: async () => ok }));
+    await render(<SmokeScreen />);
+    await waitFor(() => expect(screen.getByText("API 0.0.0-test")).toBeTruthy());
+    expect(screen.getByText("commit abc1234")).toBeTruthy();
+  });
+
+  it("shows an explicit error state when the API is unreachable, and retries", async () => {
+    mockFetch(async () => {
+      throw new Error("Network request failed");
+    });
+    await render(<SmokeScreen />);
+    await waitFor(() => expect(screen.getByLabelText("API unreachable")).toBeTruthy());
+    expect(screen.getByText("Network request failed")).toBeTruthy();
+
+    mockFetch(async () => ({ ok: true, status: 200, json: async () => ok }));
+    await fireEvent.press(screen.getByRole("button", { name: "Retry" }));
+    await waitFor(() => expect(screen.getByLabelText("API status")).toBeTruthy());
+  });
+
+  it("gives the retry control a role and a label", async () => {
+    mockFetch(async () => ({ ok: true, status: 200, json: async () => ok }));
+    await render(<SmokeScreen />);
+    expect(screen.getByRole("button", { name: "Retry" })).toBeTruthy();
+  });
+});

@@ -1,0 +1,118 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.5.13/schema.json",
+  "vcs": {
+    "enabled": true,
+    "clientKind": "git",
+    "useIgnoreFile": true
+  },
+  "files": {
+    "includes": [
+      "**",
+      "!**/node_modules",
+      "!**/dist",
+      "!**/.expo",
+      "!**/drizzle/meta",
+      "!**/expo-env.d.ts",
+      "!pnpm-lock.yaml"
+    ]
+  },
+  "formatter": {
+    "enabled": true,
+    "indentStyle": "space",
+    "indentWidth": 2,
+    "lineWidth": 100
+  },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "preset": "recommended"
+    }
+  },
+  "javascript": {
+    "formatter": {
+      "quoteStyle": "double",
+      "semicolons": "always",
+      "trailingCommas": "all"
+    }
+  },
+  "assist": {
+    "enabled": true,
+    "actions": {
+      "source": {
+        "organizeImports": "on"
+      }
+    }
+  },
+  "overrides": [
+    {
+      "includes": [
+        "apps/api/src/**",
+        "apps/mobile/src/**",
+        "apps/mobile/app/**",
+        "apps/admin/src/**"
+      ],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": [
+                      "**/identity/*",
+                      "**/identity/**",
+                      "!**/identity/index",
+                      "!**/identity/index.ts",
+                      "**/profile/*",
+                      "**/profile/**",
+                      "!**/profile/index",
+                      "!**/profile/index.ts",
+                      "**/media/*",
+                      "**/media/**",
+                      "!**/media/index",
+                      "!**/media/index.ts",
+                      "**/pond/*",
+                      "**/pond/**",
+                      "!**/pond/index",
+                      "!**/pond/index.ts",
+                      "**/matching/*",
+                      "**/matching/**",
+                      "!**/matching/index",
+                      "!**/matching/index.ts",
+                      "**/chat/*",
+                      "**/chat/**",
+                      "!**/chat/index",
+                      "!**/chat/index.ts",
+                      "**/safety/*",
+                      "**/safety/**",
+                      "!**/safety/index",
+                      "!**/safety/index.ts",
+                      "**/research/*",
+                      "**/research/**",
+                      "!**/research/index",
+                      "!**/research/index.ts",
+                      "**/rewards/*",
+                      "**/rewards/**",
+                      "!**/rewards/index",
+                      "!**/rewards/index.ts",
+                      "**/notifications/*",
+                      "**/notifications/**",
+                      "!**/notifications/index",
+                      "!**/notifications/index.ts",
+                      "**/smoke/*",
+                      "**/smoke/**",
+                      "!**/smoke/index",
+                      "!**/smoke/index.ts"
+                    ],
+                    "message": "Slices import from a neighbour only through its index.ts, never its internals. Move shared code down into lib/ or export it from the neighbour's index. See .claude/rules/layout.md."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
+}
