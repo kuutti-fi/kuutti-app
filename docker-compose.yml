@@ -1,0 +1,73 @@
+# Local development stack (#5). `pnpm env:up` runs this for you; on its own:
+#   docker compose up -d --wait
+# Every published port binds to 127.0.0.1. Values mirror env.example and are
+# not secrets. Deployed environments use RDS, S3 and the Telia broker instead.
+name: kuutti
+
+services:
+  postgres:
+    image: postgres:17.9
+    environment:
+      POSTGRES_USER: kuutti
+      POSTGRES_PASSWORD: kuutti
+      POSTGRES_DB: kuutti
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      # Creates kuutti_test once, when the volume is new.
+      - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/10-test-database.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kuutti -d kuutti"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  # S3 stand-in (TD-2). Console at http://127.0.0.1:9001, API at :9000.
+  minio:
+    image: minio/minio:RELEASE.2025-10-15T17-29-55Z
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: kuutti
+      MINIO_ROOT_PASSWORD: kuutti-dev-only
+    ports:
+      - "127.0.0.1:9000:9000"
+      - "127.0.0.1:9001:9001"
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  # One-shot: the media bucket exists before the API starts.
+  minio-init:
+    image: minio/mc:RELEASE.2025-08-13T08-35-41Z
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >-
+        mc alias set local http://minio:9000 kuutti kuutti-dev-only &&
+        mc mb --ignore-existing local/kuutti-media &&
+        echo "bucket kuutti-media ready"
+    restart: "no"
+
+  # Stand-in for the Telia ID Broker: issuer http://127.0.0.1:8080/ftn.
+  # The login page accepts arbitrary FTN-shaped claims (services/mock-idp/README.md).
+  mock-idp:
+    image: ghcr.io/navikt/mock-oauth2-server:6.0.2
+    environment:
+      SERVER_PORT: "8080"
+      JSON_CONFIG_PATH: /config/config.json
+      LOG_LEVEL: INFO
+    ports:
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - ./services/mock-idp/config.json:/config/config.json:ro
+
+volumes:
+  postgres-data:
+  minio-data:

@@ -303,6 +303,10 @@ async function ensureDatabase(): Promise<void> {
     await streamed("db", "32", "docker", ["compose", "up", "-d", "--wait"]);
     await waitFor("postgres", () => portOpen(host, port), 60_000);
   } else {
+    if (composeFile)
+      env(
+        "docker compose not available: falling back to Homebrew PostgreSQL; MinIO and the mock IdP stay down (pnpm env:doctor)",
+      );
     const brew = brewPostgres();
     if (!brew) {
       fail(

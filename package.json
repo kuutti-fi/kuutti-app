@@ -14,6 +14,7 @@
     "env:up": "node --env-file-if-exists=.env scripts/dev-env.ts up",
     "env:down": "node --env-file-if-exists=.env scripts/dev-env.ts down",
     "env:status": "node --env-file-if-exists=.env scripts/dev-env.ts status",
+    "env:doctor": "node scripts/doctor.ts",
     "dev:mobile": "pnpm --filter @kuutti/mobile start",
     "dev:admin": "pnpm --filter @kuutti/admin dev",
     "typecheck": "pnpm -r run typecheck",

@@ -109,6 +109,62 @@ jobs:
       - name: No forbidden identifiers in the schema
         run: pnpm check:schema-words
 
+  compose:
+    name: compose
+    # The local stack as a developer runs it: Postgres, MinIO, the mock bank IdP.
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+
+      - name: Enable pnpm
+        run: corepack enable
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Every published port binds to loopback
+        run: |
+          docker compose config --format json | python3 -c '
+          import json, sys
+          bad = [(n, p) for n, s in json.load(sys.stdin)["services"].items() for p in s.get("ports", []) if p.get("host_ip") != "127.0.0.1"]
+          print("all published ports on 127.0.0.1" if not bad else f"not loopback: {bad}")
+          sys.exit(1 if bad else 0)'
+
+      - name: Start the stack
+        run: |
+          cp env.example .env
+          docker compose up -d --wait
+          docker compose ps
+
+      - name: Mock bank IdP issues FTN-shaped claims
+        run: node services/mock-idp/verify.ts
+
+      - name: Migrate and seed against compose Postgres
+        run: |
+          pnpm --filter @kuutti/db migrate
+          pnpm --filter @kuutti/db seed --env development
+
+      - name: API and db tests against compose Postgres and MinIO
+        env:
+          DATABASE_URL: postgres://kuutti:kuutti@127.0.0.1:5432/kuutti_test
+          S3_ENDPOINT: http://127.0.0.1:9000
+          S3_BUCKET: kuutti-media
+          S3_ACCESS_KEY: kuutti
+          S3_SECRET_KEY: kuutti-dev-only
+        run: |
+          pnpm --filter @kuutti/db test
+          pnpm --filter @kuutti/api test
+
+      - name: Stack logs on failure
+        if: failure()
+        run: docker compose logs --no-color | tail -100
+
   docker-build:
     name: docker-build
     runs-on: ubuntu-24.04-arm

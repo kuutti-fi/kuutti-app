@@ -46,6 +46,29 @@ git rebase --signoff main
 
 Commits made through the GitHub web editor are signed off automatically.
 
+## Local setup
+
+Fifteen minutes from clone to a running app. Prerequisites: Node 22.18 or newer, Docker Desktop or OrbStack, git.
+
+```bash
+git clone https://github.com/kuutti-fi/kuutti-app.git && cd kuutti-app
+corepack enable                     # pnpm at the version pinned in package.json
+cp env.example .env                 # local values only, nothing secret
+pnpm install
+pnpm env:doctor                     # names anything missing and the fix
+pnpm env:up                         # database, storage, mock bank IdP, API, app, admin
+```
+
+`env:up` starts Postgres, MinIO and the mock bank IdP with `docker compose`, migrates and seeds, then runs the API on http://localhost:3000, Metro on http://localhost:8081 (web target and the dev client), and the admin panel on http://localhost:5173, with prefixed logs. Ctrl+C stops the apps; `pnpm env:down` also stops the containers; `pnpm env:status` shows who holds which port. Without Docker, `env:up` falls back to Homebrew PostgreSQL and the storage and IdP stand-ins are unavailable.
+
+Checks that everything is right:
+
+- `curl -s localhost:3000/health` shows `"db":"ok"` and `"migrations":"current"`.
+- http://localhost:8081 shows the API version and commit.
+- `node services/mock-idp/verify.ts` runs a bank login against the mock IdP and prints the claims.
+
+On a phone, install the dev client build (see `apps/mobile/README.md`), open it, and connect to Metro on this machine; the API URL is derived from the Metro host. The real Telia test bed exists only on staging.
+
 ## Branch and history rules
 
 - `main` is the only long-lived branch. It cannot be deleted or force-pushed.

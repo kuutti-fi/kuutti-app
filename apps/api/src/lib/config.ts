@@ -29,6 +29,22 @@ const Env = z.object({
   MIGRATIONS_DIR: z.string().min(1).default("../../packages/db/drizzle"),
 
   CORS_ALLOWED_ORIGINS: z.string().optional(),
+
+  // Object storage: MinIO locally (env.example), S3 through the instance role on AWS.
+  S3_ENDPOINT: z.string().min(1).optional(),
+  S3_REGION: z.string().min(1).default("eu-central-1"),
+  S3_BUCKET: z.string().min(1).default("kuutti-media"),
+  S3_ACCESS_KEY: z.string().min(1).optional(),
+  S3_SECRET_KEY: z.string().min(1).optional(),
+  S3_FORCE_PATH_STYLE: z
+    .enum(["true", "false"])
+    .default("false")
+    .transform((v) => v === "true"),
+
+  // Bank identification (M2): the mock IdP locally, the Telia broker on staging and production.
+  OIDC_ISSUER: z.string().min(1).optional(),
+  OIDC_CLIENT_ID: z.string().min(1).optional(),
+  OIDC_REDIRECT_URI: z.string().min(1).optional(),
   BODY_LIMIT_BYTES: z.coerce.number().int().min(1024).default(1_048_576),
   RATE_LIMIT_PER_MINUTE: z.coerce.number().int().min(1).default(120),
   SSM_PARAMETER_PREFIX: z.string().min(1).optional(),
