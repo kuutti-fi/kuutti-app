@@ -1,4 +1,12 @@
 export { type JournalEntry, readJournal } from "./journal.ts";
+export {
+  ageFromYearMonth,
+  CENTURY_SIGNS,
+  generateHetu,
+  isAdult,
+  type ParsedHetu,
+  parseHetu,
+} from "./lib/hetu-format.ts";
 export { MIGRATE_LOCK_KEY, type MigrateResult, migrate } from "./migrate.ts";
 export { type MigrationsStatus, migrationsStatus } from "./migrations.ts";
 export {
@@ -8,3 +16,5 @@ export {
   type PoolOptions,
   type Queryable,
 } from "./pool.ts";
+export * from "./schema/index.ts";
+export { MATCHING_CONFIG_V1, SEED_PONDS, type SeedResult, seed } from "./seed.ts";

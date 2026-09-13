@@ -19,7 +19,8 @@
     "test": "pnpm -r run test",
     "check:scenarios": "node scripts/check-scenarios.ts",
     "i18n:translate": "pnpm --filter @kuutti/i18n translate",
-    "openapi": "pnpm --filter @kuutti/api openapi"
+    "openapi": "pnpm --filter @kuutti/api openapi",
+    "check:schema-words": "node scripts/check-schema-words.ts"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.13"

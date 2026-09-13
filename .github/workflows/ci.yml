@@ -99,6 +99,16 @@ jobs:
           pnpm openapi
           git diff --exit-code -- apps/api/openapi.json packages/schema/src/api.generated.ts
 
+      - name: Migrations match the schema
+        run: |
+          pnpm --filter @kuutti/db check
+          pnpm --filter @kuutti/db generate --name ci-drift-check
+          git diff --exit-code -- packages/db/drizzle
+          test -z "$(git status --porcelain -- packages/db/drizzle)" || { git status --porcelain -- packages/db/drizzle; echo "schema changed without a committed migration"; exit 1; }
+
+      - name: No forbidden identifiers in the schema
+        run: pnpm check:schema-words
+
   docker-build:
     name: docker-build
     runs-on: ubuntu-24.04-arm
@@ -135,7 +145,7 @@ jobs:
             -e DATABASE_URL=postgres://kuutti:kuutti@127.0.0.1:5432/kuutti \
             kuutti-api:ci
           for i in $(seq 1 30); do
-            if out=$(curl -fsS http://127.0.0.1:3000/health); then echo "$out"; echo "$out" | grep -q '"db":"ok"' && exit 0; fi
+            if out=$(curl -fsS http://127.0.0.1:3000/health); then echo "$out"; echo "$out" | grep -q '"db":"ok"' && echo "$out" | grep -q '"migrations":"current"' && exit 0; fi
             sleep 1
           done
           echo "no healthy answer"; docker logs api; exit 1
