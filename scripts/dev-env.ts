@@ -23,7 +23,7 @@
  * default, which is not a secret. No dependencies. Node 22.18+.
  */
 import { type ChildProcess, spawn } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { connect } from "node:net";
 import { resolve } from "node:path";
 
@@ -36,7 +36,7 @@ type Service = {
   color: string;
   port: number;
   readyUrl: string;
-  filter: string;
+  dir: string;
   script: string;
   extraArgs?: string[];
   env?: Record<string, string>;
@@ -48,7 +48,7 @@ const SERVICES: Service[] = [
     color: "36",
     port: 3000,
     readyUrl: "http://localhost:3000/health",
-    filter: "@kuutti/api",
+    dir: "apps/api",
     script: "dev",
   },
   {
@@ -56,7 +56,7 @@ const SERVICES: Service[] = [
     color: "35",
     port: 8081,
     readyUrl: "http://localhost:8081/",
-    filter: "@kuutti/mobile",
+    dir: "apps/mobile",
     script: "start",
     extraArgs: ["--port", "8081"],
     env: { EXPO_NO_TELEMETRY: "1" },
@@ -66,14 +66,15 @@ const SERVICES: Service[] = [
     color: "33",
     port: 5173,
     readyUrl: "http://localhost:5173/",
-    filter: "@kuutti/admin",
+    dir: "apps/admin",
     script: "dev",
     extraArgs: ["--port", "5173", "--strictPort"],
   },
 ];
 
 const OURS = /(node|pnpm|npm|npx|tsx|expo|vite|metro)/i;
-const SHELLS = /(^|\/)(zsh|bash|sh|fish|login|Terminal|iTerm|WebStorm|code)(\s|$)/i;
+const WRAPPER_SHELL = /^(\/bin\/)?(sh|bash|zsh) -c /;
+const SHELLS = /(^|\/)(-?zsh|-?bash|-?sh|fish|login|Terminal|iTerm|WebStorm|code)(\s|$)/i;
 
 // ---------------------------------------------------------------- output
 
@@ -95,13 +96,14 @@ const fail = (line: string): never => {
 function run(
   cmd: string,
   args: string[],
-  opts: { cwd?: string; env?: Record<string, string> } = {},
+  opts: { cwd?: string; env?: Record<string, string>; detached?: boolean } = {},
 ) {
   return new Promise<{ code: number | null; out: string; err: string }>((done) => {
     const child = spawn(cmd, args, {
       cwd: opts.cwd ?? ROOT,
       env: { ...process.env, ...opts.env },
       stdio: ["ignore", "pipe", "pipe"],
+      detached: opts.detached ?? false,
     });
     let out = "";
     let err = "";
@@ -122,10 +124,17 @@ async function streamed(
   cmd: string,
   args: string[],
   extraEnv: Record<string, string> = {},
+  dir = ".",
 ) {
+  const cwd = resolve(ROOT, dir);
   const child = spawn(cmd, args, {
-    cwd: ROOT,
-    env: { ...process.env, FORCE_COLOR: "1", ...extraEnv },
+    cwd,
+    env: {
+      ...process.env,
+      PATH: `${cwd}/node_modules/.bin:${ROOT}/node_modules/.bin:${process.env.PATH ?? ""}`,
+      FORCE_COLOR: "1",
+      ...extraEnv,
+    },
     stdio: ["ignore", "pipe", "pipe"],
   });
   pipe(child, tag, color);
@@ -159,7 +168,12 @@ async function listeners(port: number): Promise<Owner[]> {
         .split("\n")
         .find((l) => l.startsWith("n"))
         ?.slice(1) ?? "";
-    owners.push({ pid, command, cwd, ours: cwd.startsWith(ROOT) && OURS.test(command) });
+    owners.push({
+      pid,
+      command,
+      cwd,
+      ours: cwd.startsWith(ROOT) && (OURS.test(command) || WRAPPER_SHELL.test(command)),
+    });
   }
   return owners;
 }
@@ -172,7 +186,8 @@ async function processTree(pid: number): Promise<number[]> {
     const ppid = Number((await run("ps", ["-o", "ppid=", "-p", String(current)])).out.trim());
     if (!ppid || ppid <= 1) break;
     const command = (await run("ps", ["-o", "command=", "-p", String(ppid)])).out.trim();
-    if (!OURS.test(command) || SHELLS.test(command)) break;
+    const wrapper = WRAPPER_SHELL.test(command);
+    if (!wrapper && (!OURS.test(command) || SHELLS.test(command))) break;
     chain.push(ppid);
     current = ppid;
   }
@@ -295,12 +310,12 @@ async function ensureDatabase(): Promise<void> {
       );
     }
     env(`starting Homebrew PostgreSQL from ${brew.dataDir}`);
+    // Own session (detached): the postmaster must outlive this process and must
+    // not sit in the terminal's foreground group, or Ctrl+C would stop it too.
     const started = await run(
       brew.pgCtl,
       ["-D", brew.dataDir, "-l", `${brew.dataDir}/server.log`, "-o", `-p ${port} -k /tmp`, "start"],
-      {
-        env: { LC_ALL: "en_US.UTF-8", LANG: "en_US.UTF-8" },
-      },
+      { env: { LC_ALL: "en_US.UTF-8", LANG: "en_US.UTF-8" }, detached: true },
     );
     if (started.code !== 0) fail(`pg_ctl start failed:\n${started.out}${started.err}`);
     await waitFor("postgres", () => portOpen(host, port), 30_000);
@@ -340,11 +355,23 @@ async function ensureDatabase(): Promise<void> {
 }
 
 async function migrateAndSeed(seed: boolean): Promise<void> {
-  await streamed("db", "32", "pnpm", ["--filter", "@kuutti/db", "migrate"], { DATABASE_URL });
+  await streamed(
+    "db",
+    "32",
+    "sh",
+    ["-c", packageScript("packages/db", "migrate")],
+    { DATABASE_URL },
+    "packages/db",
+  );
   if (seed)
-    await streamed("db", "32", "pnpm", ["--filter", "@kuutti/db", "seed", "--env", "development"], {
-      DATABASE_URL,
-    });
+    await streamed(
+      "db",
+      "32",
+      "sh",
+      ["-c", `${packageScript("packages/db", "seed")} --env development`],
+      { DATABASE_URL },
+      "packages/db",
+    );
 }
 
 // ---------------------------------------------------------------- services
@@ -361,28 +388,43 @@ function killChildrenNow(): void {
   }
 }
 
+/** The package's own script (single source of truth), run the way pnpm would: sh, with .bin on PATH. */
+function packageScript(dir: string, name: string): string {
+  const manifest = JSON.parse(readFileSync(resolve(ROOT, dir, "package.json"), "utf8")) as {
+    scripts?: Record<string, string>;
+  };
+  const script = manifest.scripts?.[name];
+  if (!script) fail(`${dir}/package.json has no "${name}" script`);
+  return script;
+}
+
 function startService(service: Service): void {
-  const args = [
-    "--filter",
-    service.filter,
-    service.script,
-    // pnpm passes options after the script name straight through; a "--" would reach the tool literally.
-    ...(service.extraArgs ?? []),
-  ];
-  const child = spawn("pnpm", args, {
-    cwd: ROOT,
-    env: { ...process.env, FORCE_COLOR: "1", DATABASE_URL, ...service.env },
+  const cwd = resolve(ROOT, service.dir);
+  const command = [packageScript(service.dir, service.script), ...(service.extraArgs ?? [])].join(
+    " ",
+  );
+  log(service.name, service.color, `$ ${command}`);
+  const child = spawn("sh", ["-c", command], {
+    cwd,
+    env: {
+      ...process.env,
+      PATH: `${cwd}/node_modules/.bin:${ROOT}/node_modules/.bin:${process.env.PATH ?? ""}`,
+      FORCE_COLOR: "1",
+      DATABASE_URL,
+      ...service.env,
+    },
     stdio: ["ignore", "pipe", "pipe"],
     detached: true,
   });
   pipe(child, service.name, service.color);
-  child.on("exit", (code) => {
-    if (!shuttingDown)
+  child.on("exit", (code, signal) => {
+    if (!shuttingDown) {
       log(
         service.name,
         "31",
-        `exited with ${code}; the rest keeps running, Ctrl+C stops everything`,
+        `exited (${signal ?? code}); the rest keeps running, Ctrl+C stops everything`,
       );
+    }
   });
   children.set(service.name, child);
 }
@@ -499,7 +541,7 @@ async function status(): Promise<void> {
 }
 
 const { command, skip, seed } = parseArgs(process.argv.slice(2));
-for (const signal of ["SIGINT", "SIGTERM"] as const) {
+for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"] as const) {
   process.on(signal, () => {
     if (shuttingDown) return;
     env("stopping");
