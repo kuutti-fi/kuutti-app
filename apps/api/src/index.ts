@@ -45,6 +45,18 @@ async function main(): Promise<void> {
     );
   });
 
+  server.on("error", (error: NodeJS.ErrnoException) => {
+    if (error.code === "EADDRINUSE") {
+      logger.fatal(
+        { port: config.PORT },
+        `port ${config.PORT} is already in use: another API is running, stop it or set PORT`,
+      );
+    } else {
+      logger.fatal({ err: error }, "server error");
+    }
+    pool.end().finally(() => process.exit(1));
+  });
+
   // Drain in-flight requests within 10 s so a redeploy drops nothing.
   const shutdown = (signal: string) => {
     logger.info({ signal }, "shutting down");
