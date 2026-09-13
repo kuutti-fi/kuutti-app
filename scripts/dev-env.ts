@@ -274,7 +274,17 @@ const composeFile = ["docker-compose.yml", "compose.yml", "docker-compose.yaml",
   .find(existsSync);
 
 async function hasDocker(): Promise<boolean> {
-  return (await run("docker", ["compose", "version"])).code === 0;
+  return (
+    (await run("docker", ["compose", "version"])).code === 0 &&
+    (await run("docker", ["info"])).code === 0
+  );
+}
+
+/** Is the listener on the database port our compose container? */
+async function composeHasPostgres(): Promise<boolean> {
+  if (!composeFile) return false;
+  const ps = await run("docker", ["compose", "ps", "--status", "running", "-q", "postgres"]);
+  return ps.code === 0 && ps.out.trim().length > 0;
 }
 
 function brewPostgres(): { pgCtl: string; psql: string; dataDir: string } | null {
@@ -296,11 +306,22 @@ async function ensureDatabase(): Promise<void> {
   const host = url.hostname;
   const port = Number(url.port || 5432);
 
+  const docker = composeFile ? await hasDocker() : false;
+  const brewListening = (await portOpen(host, port)) && !(await composeHasPostgres());
+
+  if (docker && brewListening && brewPostgres()) {
+    // Docker arrived after Homebrew PostgreSQL was the fallback: hand the port over.
+    const brew = brewPostgres() as NonNullable<ReturnType<typeof brewPostgres>>;
+    env("Homebrew PostgreSQL holds the port; stopping it so the compose stack can take over");
+    await run(brew.pgCtl, ["-D", brew.dataDir, "stop", "-m", "fast"]);
+    await waitFor("port release", async () => !(await portOpen(host, port)), 15_000);
+  }
+
   if (await portOpen(host, port)) {
     env(`database already listening on ${host}:${port}`);
-  } else if (composeFile && (await hasDocker())) {
+  } else if (docker) {
     env(`starting docker compose (${composeFile})`);
-    await streamed("db", "32", "docker", ["compose", "up", "-d", "--wait"]);
+    await streamed("db", "32", "docker", ["compose", "up", "-d", "--wait", "--quiet-pull"]);
     // One-shot bucket creation lives behind a profile (see docker-compose.yml).
     await streamed("db", "32", "docker", ["compose", "run", "--rm", "minio-init"]);
     await waitFor("postgres", () => portOpen(host, port), 60_000);
@@ -517,13 +538,13 @@ async function down(): Promise<void> {
   const url = new URL(DATABASE_URL);
   if (composeFile && (await hasDocker())) {
     await streamed("db", "32", "docker", ["compose", "down"]);
-  } else {
-    const brew = brewPostgres();
-    if (brew && (await portOpen(url.hostname, Number(url.port || 5432)))) {
-      env("stopping Homebrew PostgreSQL");
-      const stopped = await run(brew.pgCtl, ["-D", brew.dataDir, "stop", "-m", "fast"]);
-      if (stopped.code !== 0) env(`pg_ctl stop: ${stopped.err.trim() || stopped.out.trim()}`);
-    }
+  }
+  // Whatever still listens after compose is down is the Homebrew fallback.
+  const brew = brewPostgres();
+  if (brew && (await portOpen(url.hostname, Number(url.port || 5432)))) {
+    env("stopping Homebrew PostgreSQL");
+    const stopped = await run(brew.pgCtl, ["-D", brew.dataDir, "stop", "-m", "fast"]);
+    if (stopped.code !== 0) env(`pg_ctl stop: ${stopped.err.trim() || stopped.out.trim()}`);
   }
   env("everything is down");
 }
