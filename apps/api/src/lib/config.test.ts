@@ -31,9 +31,14 @@ describe("parseConfig", () => {
       DB_APP_PASSWORD: "p@ss word",
       APP_ENV: "staging",
     });
-    expect(config.databaseUrl).toBe(
-      "postgres://app:p%40ss%20word@rds.internal:5432/kuutti?sslmode=require",
-    );
+    const url = new URL(config.databaseUrl);
+    expect(url.protocol).toBe("postgres:");
+    expect(url.username).toBe("app");
+    expect(decodeURIComponent(url.password)).toBe("p@ss word");
+    expect(url.hostname).toBe("rds.internal");
+    expect(url.port).toBe("5432");
+    expect(url.pathname).toBe("/kuutti");
+    expect(url.searchParams.get("sslmode")).toBe("require");
     expect(config.corsAllowedOrigins.size).toBe(0);
   });
 
