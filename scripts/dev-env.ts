@@ -1,0 +1,513 @@
+/**
+ * dev-env: the whole local environment with one command.
+ *
+ *   pnpm env:up [--skip api,mobile,admin] [--no-seed]   start everything, Ctrl+C stops the apps
+ *   pnpm env:down                                       stop the apps and the database
+ *   pnpm env:status                                     who holds which port, database state
+ *
+ * What `up` does, in order:
+ *   1. Database: `docker compose up -d --wait` when a compose file exists and
+ *      Docker is installed (#5); otherwise Homebrew PostgreSQL, started for the
+ *      session with pg_ctl, with the kuutti role and databases created if missing.
+ *   2. Ports: a port held by a stale copy of one of our own processes (its
+ *      working directory is inside this repository) is freed; a port held by
+ *      anything else is a hard stop with the owner named. Nothing foreign is
+ *      ever killed.
+ *   3. Migrate and seed (both idempotent), so every app starts against a
+ *      current, populated database.
+ *   4. API (3000), Metro for the app and its web target (8081), admin (5173),
+ *      each in its own process group with prefixed output, readiness-checked.
+ *
+ * Runs with `node --env-file-if-exists=.env`: the runtime reads .env, this
+ * script never opens it (rule 9). DATABASE_URL falls back to the local
+ * default, which is not a secret. No dependencies. Node 22.18+.
+ */
+import { type ChildProcess, spawn } from "node:child_process";
+import { existsSync } from "node:fs";
+import { connect } from "node:net";
+import { resolve } from "node:path";
+
+const ROOT = resolve(import.meta.dirname, "..");
+const DEFAULT_DATABASE_URL = "postgres://kuutti:kuutti@127.0.0.1:5432/kuutti";
+const DATABASE_URL = process.env.DATABASE_URL ?? DEFAULT_DATABASE_URL;
+
+type Service = {
+  name: string;
+  color: string;
+  port: number;
+  readyUrl: string;
+  filter: string;
+  script: string;
+  extraArgs?: string[];
+  env?: Record<string, string>;
+};
+
+const SERVICES: Service[] = [
+  {
+    name: "api",
+    color: "36",
+    port: 3000,
+    readyUrl: "http://localhost:3000/health",
+    filter: "@kuutti/api",
+    script: "dev",
+  },
+  {
+    name: "mobile",
+    color: "35",
+    port: 8081,
+    readyUrl: "http://localhost:8081/",
+    filter: "@kuutti/mobile",
+    script: "start",
+    extraArgs: ["--port", "8081"],
+    env: { EXPO_NO_TELEMETRY: "1" },
+  },
+  {
+    name: "admin",
+    color: "33",
+    port: 5173,
+    readyUrl: "http://localhost:5173/",
+    filter: "@kuutti/admin",
+    script: "dev",
+    extraArgs: ["--port", "5173", "--strictPort"],
+  },
+];
+
+const OURS = /(node|pnpm|npm|npx|tsx|expo|vite|metro)/i;
+const SHELLS = /(^|\/)(zsh|bash|sh|fish|login|Terminal|iTerm|WebStorm|code)(\s|$)/i;
+
+// ---------------------------------------------------------------- output
+
+function paint(color: string, text: string): string {
+  return process.stdout.isTTY ? `\x1b[${color}m${text}\x1b[0m` : text;
+}
+function log(tag: string, color: string, line: string): void {
+  process.stdout.write(`${paint(color, `[${tag}]`)} ${line}\n`);
+}
+const env = (line: string) => log("env", "34", line);
+const fail = (line: string): never => {
+  log("env", "31", line);
+  killChildrenNow();
+  process.exit(1);
+};
+
+// ---------------------------------------------------------------- processes
+
+function run(
+  cmd: string,
+  args: string[],
+  opts: { cwd?: string; env?: Record<string, string> } = {},
+) {
+  return new Promise<{ code: number | null; out: string; err: string }>((done) => {
+    const child = spawn(cmd, args, {
+      cwd: opts.cwd ?? ROOT,
+      env: { ...process.env, ...opts.env },
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    let out = "";
+    let err = "";
+    child.stdout.on("data", (c: Buffer) => {
+      out += c.toString();
+    });
+    child.stderr.on("data", (c: Buffer) => {
+      err += c.toString();
+    });
+    child.on("error", (e) => done({ code: null, out, err: `${err}${e.message}` }));
+    child.on("close", (code) => done({ code, out, err }));
+  });
+}
+
+async function streamed(
+  tag: string,
+  color: string,
+  cmd: string,
+  args: string[],
+  extraEnv: Record<string, string> = {},
+) {
+  const child = spawn(cmd, args, {
+    cwd: ROOT,
+    env: { ...process.env, FORCE_COLOR: "1", ...extraEnv },
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  pipe(child, tag, color);
+  const code = await new Promise<number | null>((done) => child.on("close", done));
+  if (code !== 0) fail(`${tag} exited with ${code}`);
+}
+
+function pipe(child: ChildProcess, tag: string, color: string): void {
+  for (const stream of [child.stdout, child.stderr]) {
+    let buffer = "";
+    stream?.on("data", (chunk: Buffer) => {
+      buffer += chunk.toString();
+      const lines = buffer.split("\n");
+      buffer = lines.pop() ?? "";
+      for (const line of lines) if (line.trim() !== "") log(tag, color, line);
+    });
+  }
+}
+
+type Owner = { pid: number; command: string; cwd: string; ours: boolean };
+
+async function listeners(port: number): Promise<Owner[]> {
+  const { out } = await run("lsof", ["-nP", `-iTCP:${port}`, "-sTCP:LISTEN", "-t"]);
+  const pids = [...new Set(out.split(/\s+/).filter(Boolean).map(Number))];
+  const owners: Owner[] = [];
+  for (const pid of pids) {
+    const command = (await run("ps", ["-o", "command=", "-p", String(pid)])).out.trim();
+    const cwdOut = (await run("lsof", ["-a", "-p", String(pid), "-d", "cwd", "-Fn"])).out;
+    const cwd =
+      cwdOut
+        .split("\n")
+        .find((l) => l.startsWith("n"))
+        ?.slice(1) ?? "";
+    owners.push({ pid, command, cwd, ours: cwd.startsWith(ROOT) && OURS.test(command) });
+  }
+  return owners;
+}
+
+/** The listener plus its supervisors (pnpm, node --watch) up to, never including, a shell. */
+async function processTree(pid: number): Promise<number[]> {
+  const chain = [pid];
+  let current = pid;
+  for (let i = 0; i < 6; i += 1) {
+    const ppid = Number((await run("ps", ["-o", "ppid=", "-p", String(current)])).out.trim());
+    if (!ppid || ppid <= 1) break;
+    const command = (await run("ps", ["-o", "command=", "-p", String(ppid)])).out.trim();
+    if (!OURS.test(command) || SHELLS.test(command)) break;
+    chain.push(ppid);
+    current = ppid;
+  }
+  return chain;
+}
+
+async function alive(pid: number): Promise<boolean> {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function freePort(service: Pick<Service, "name" | "port">): Promise<void> {
+  const owners = await listeners(service.port);
+  if (owners.length === 0) return;
+  for (const owner of owners) {
+    if (!owner.ours) {
+      fail(
+        `port ${service.port} (${service.name}) is held by pid ${owner.pid}, not ours: ${owner.command}\n` +
+          `      working directory ${owner.cwd || "unknown"}. Stop it yourself or change the port; nothing foreign is killed.`,
+      );
+    }
+    const tree = await processTree(owner.pid);
+    env(
+      `port ${service.port} (${service.name}) held by a stale copy of ours, stopping pid ${tree.join(" < ")}`,
+    );
+    for (const pid of tree.reverse()) {
+      try {
+        process.kill(pid, "SIGTERM");
+      } catch {}
+    }
+    const deadline = Date.now() + 5_000;
+    while (Date.now() < deadline && (await Promise.all(tree.map(alive))).some(Boolean)) {
+      await sleep(200);
+    }
+    for (const pid of tree) if (await alive(pid)) process.kill(pid, "SIGKILL");
+  }
+  const still = await listeners(service.port);
+  if (still.length > 0)
+    fail(
+      `port ${service.port} is still busy after stopping pid ${still.map((o) => o.pid).join(", ")}`,
+    );
+}
+
+// ---------------------------------------------------------------- database
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
+function portOpen(host: string, port: number): Promise<boolean> {
+  return new Promise((done) => {
+    const socket = connect({ host, port });
+    socket.once("connect", () => {
+      socket.destroy();
+      done(true);
+    });
+    socket.once("error", () => done(false));
+    socket.setTimeout(1_000, () => {
+      socket.destroy();
+      done(false);
+    });
+  });
+}
+
+async function waitFor(
+  what: string,
+  probe: () => Promise<boolean>,
+  timeoutMs: number,
+): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (await probe()) return;
+    await sleep(500);
+  }
+  fail(`${what} did not come up within ${Math.round(timeoutMs / 1000)} s`);
+}
+
+const composeFile = ["docker-compose.yml", "compose.yml", "docker-compose.yaml", "compose.yaml"]
+  .map((f) => resolve(ROOT, f))
+  .find(existsSync);
+
+async function hasDocker(): Promise<boolean> {
+  return (await run("docker", ["compose", "version"])).code === 0;
+}
+
+function brewPostgres(): { pgCtl: string; psql: string; dataDir: string } | null {
+  for (const version of ["17", "18", "16"]) {
+    const bin = `/opt/homebrew/opt/postgresql@${version}/bin`;
+    if (existsSync(`${bin}/pg_ctl`)) {
+      return {
+        pgCtl: `${bin}/pg_ctl`,
+        psql: `${bin}/psql`,
+        dataDir: `/opt/homebrew/var/postgresql@${version}`,
+      };
+    }
+  }
+  return null;
+}
+
+async function ensureDatabase(): Promise<void> {
+  const url = new URL(DATABASE_URL);
+  const host = url.hostname;
+  const port = Number(url.port || 5432);
+
+  if (await portOpen(host, port)) {
+    env(`database already listening on ${host}:${port}`);
+  } else if (composeFile && (await hasDocker())) {
+    env(`starting docker compose (${composeFile})`);
+    await streamed("db", "32", "docker", ["compose", "up", "-d", "--wait"]);
+    await waitFor("postgres", () => portOpen(host, port), 60_000);
+  } else {
+    const brew = brewPostgres();
+    if (!brew) {
+      fail(
+        "no database: install Docker Desktop or OrbStack for docker compose (#5), or `brew install postgresql@17`",
+      );
+    }
+    env(`starting Homebrew PostgreSQL from ${brew.dataDir}`);
+    const started = await run(
+      brew.pgCtl,
+      ["-D", brew.dataDir, "-l", `${brew.dataDir}/server.log`, "-o", `-p ${port} -k /tmp`, "start"],
+      {
+        env: { LC_ALL: "en_US.UTF-8", LANG: "en_US.UTF-8" },
+      },
+    );
+    if (started.code !== 0) fail(`pg_ctl start failed:\n${started.out}${started.err}`);
+    await waitFor("postgres", () => portOpen(host, port), 30_000);
+  }
+
+  // Role and databases for the local default; a custom DATABASE_URL is the caller's business.
+  if (DATABASE_URL === DEFAULT_DATABASE_URL) {
+    const brew = brewPostgres();
+    if (brew && !composeFile) {
+      const psql = (sql: string, db = "postgres") =>
+        run(brew.psql, [
+          "-h",
+          host,
+          "-p",
+          String(port),
+          "-d",
+          db,
+          "-v",
+          "ON_ERROR_STOP=1",
+          "-tAc",
+          sql,
+        ]);
+      await psql(
+        "DO $$ BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'kuutti') THEN CREATE ROLE kuutti LOGIN PASSWORD 'kuutti' CREATEDB; END IF; END $$;",
+      );
+      for (const db of ["kuutti", "kuutti_test"]) {
+        const exists =
+          (await psql(`SELECT 1 FROM pg_database WHERE datname = '${db}'`)).out.trim() === "1";
+        if (!exists) {
+          env(`creating database ${db}`);
+          await psql(`CREATE DATABASE ${db} OWNER kuutti`);
+        }
+      }
+    }
+  }
+  env(`database ready at ${host}:${port} (${url.pathname.slice(1)})`);
+}
+
+async function migrateAndSeed(seed: boolean): Promise<void> {
+  await streamed("db", "32", "pnpm", ["--filter", "@kuutti/db", "migrate"], { DATABASE_URL });
+  if (seed)
+    await streamed("db", "32", "pnpm", ["--filter", "@kuutti/db", "seed", "--env", "development"], {
+      DATABASE_URL,
+    });
+}
+
+// ---------------------------------------------------------------- services
+
+const children = new Map<string, ChildProcess>();
+
+/** Synchronous best effort for the failure path; the graceful path is stopChildren(). */
+function killChildrenNow(): void {
+  for (const child of children.values()) {
+    if (!child.pid) continue;
+    try {
+      process.kill(-child.pid, "SIGTERM");
+    } catch {}
+  }
+}
+
+function startService(service: Service): void {
+  const args = [
+    "--filter",
+    service.filter,
+    service.script,
+    // pnpm passes options after the script name straight through; a "--" would reach the tool literally.
+    ...(service.extraArgs ?? []),
+  ];
+  const child = spawn("pnpm", args, {
+    cwd: ROOT,
+    env: { ...process.env, FORCE_COLOR: "1", DATABASE_URL, ...service.env },
+    stdio: ["ignore", "pipe", "pipe"],
+    detached: true,
+  });
+  pipe(child, service.name, service.color);
+  child.on("exit", (code) => {
+    if (!shuttingDown)
+      log(
+        service.name,
+        "31",
+        `exited with ${code}; the rest keeps running, Ctrl+C stops everything`,
+      );
+  });
+  children.set(service.name, child);
+}
+
+let shuttingDown = false;
+
+async function stopChildren(): Promise<void> {
+  shuttingDown = true;
+  for (const [name, child] of children) {
+    if (child.pid && (await alive(child.pid))) {
+      env(`stopping ${name}`);
+      try {
+        process.kill(-child.pid, "SIGTERM");
+      } catch {}
+    }
+  }
+  const deadline = Date.now() + 5_000;
+  while (Date.now() < deadline) {
+    const pids = [...children.values()]
+      .map((c) => c.pid)
+      .filter((p): p is number => p !== undefined);
+    if (!(await Promise.all(pids.map(alive))).some(Boolean)) break;
+    await sleep(200);
+  }
+  for (const child of children.values()) {
+    if (child.pid && (await alive(child.pid))) {
+      try {
+        process.kill(-child.pid, "SIGKILL");
+      } catch {}
+    }
+  }
+}
+
+async function httpOk(url: string): Promise<boolean> {
+  try {
+    const res = await fetch(url, { signal: AbortSignal.timeout(2_000) });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+// ---------------------------------------------------------------- commands
+
+function parseArgs(argv: string[]) {
+  const command = argv[0] ?? "up";
+  const skip = new Set((argv[argv.indexOf("--skip") + 1] ?? "").split(",").filter(Boolean));
+  if (!argv.includes("--skip")) skip.clear();
+  return { command, skip, seed: !argv.includes("--no-seed") };
+}
+
+async function up(skip: Set<string>, seed: boolean): Promise<void> {
+  const selected = SERVICES.filter((s) => !skip.has(s.name));
+  env(
+    `starting: database, ${selected.map((s) => s.name).join(", ") || "no apps"}${seed ? ", with seed" : ""}`,
+  );
+  if (!process.env.DATABASE_URL)
+    env(`DATABASE_URL not set; using the local default ${DEFAULT_DATABASE_URL}`);
+
+  await ensureDatabase();
+  for (const service of selected) await freePort(service);
+  await migrateAndSeed(seed);
+
+  for (const service of selected) startService(service);
+  for (const service of selected) {
+    await waitFor(
+      service.name,
+      () => httpOk(service.readyUrl),
+      service.name === "mobile" ? 120_000 : 60_000,
+    );
+    log(service.name, service.color, `ready at ${service.readyUrl}`);
+  }
+
+  env("everything is up. Ctrl+C stops the apps; `pnpm env:down` also stops the database.");
+  if (!skip.has("api"))
+    env("check: curl -s http://localhost:3000/health   (db ok, migrations current)");
+  if (!skip.has("mobile"))
+    env("check: open http://localhost:8081   (web target; the dev client uses the same Metro)");
+  if (!skip.has("admin")) env("check: open http://localhost:5173   (admin placeholder)");
+}
+
+async function down(): Promise<void> {
+  for (const service of SERVICES) await freePort(service);
+  const url = new URL(DATABASE_URL);
+  if (composeFile && (await hasDocker())) {
+    await streamed("db", "32", "docker", ["compose", "down"]);
+  } else {
+    const brew = brewPostgres();
+    if (brew && (await portOpen(url.hostname, Number(url.port || 5432)))) {
+      env("stopping Homebrew PostgreSQL");
+      const stopped = await run(brew.pgCtl, ["-D", brew.dataDir, "stop", "-m", "fast"]);
+      if (stopped.code !== 0) env(`pg_ctl stop: ${stopped.err.trim() || stopped.out.trim()}`);
+    }
+  }
+  env("everything is down");
+}
+
+async function status(): Promise<void> {
+  const url = new URL(DATABASE_URL);
+  env(
+    `database ${url.hostname}:${url.port || 5432}: ${(await portOpen(url.hostname, Number(url.port || 5432))) ? "listening" : "down"}`,
+  );
+  for (const service of SERVICES) {
+    const owners = await listeners(service.port);
+    if (owners.length === 0) log(service.name, service.color, `port ${service.port}: free`);
+    for (const o of owners) {
+      log(
+        service.name,
+        service.color,
+        `port ${service.port}: pid ${o.pid} ${o.ours ? "(ours)" : "(NOT ours)"} ${o.command.slice(0, 90)}`,
+      );
+    }
+  }
+}
+
+const { command, skip, seed } = parseArgs(process.argv.slice(2));
+for (const signal of ["SIGINT", "SIGTERM"] as const) {
+  process.on(signal, () => {
+    if (shuttingDown) return;
+    env("stopping");
+    stopChildren().then(() => process.exit(0));
+  });
+}
+
+if (command === "up") await up(skip, seed);
+else if (command === "down") await down();
+else if (command === "status") await status();
+else fail(`unknown command ${command}; use up, down, or status`);

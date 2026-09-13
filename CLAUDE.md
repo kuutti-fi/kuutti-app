@@ -25,7 +25,8 @@ Inside each app, code is organised by vertical slice (identity, profile, media, 
 Root `package.json` is the source of truth; keep this list in sync with it.
 
 - `pnpm install --frozen-lockfile`. Node 22.18+ and pnpm come from `package.json` (`engines`, `packageManager`); run `corepack enable` once.
-- `pnpm dev` runs the API with tsx watch on port 3000. `pnpm dev:mobile` starts the Expo dev client; never Expo Go. `pnpm dev:admin` starts Vite.
+- `pnpm env:up` starts the whole local environment: the database (docker compose once #5 lands, Homebrew PostgreSQL until then), migrate and seed, then the API on 3000, Metro on 8081 (app and web target), admin on 5173, with prefixed logs. It frees ports held by stale copies of our own processes and refuses to touch anything else. Ctrl+C stops the apps; `pnpm env:down` also stops the database; `pnpm env:status` shows who holds what.
+- One at a time: `pnpm dev` runs the API with tsx watch on port 3000. `pnpm dev:mobile` starts the Expo dev client; never Expo Go. `pnpm dev:admin` starts Vite.
 - `pnpm typecheck`, `pnpm lint` (Biome, including the slice import boundary), `pnpm format`, `pnpm test` (Vitest for api and packages, jest-expo for mobile).
 - `pnpm check:scenarios` verifies every Gherkin scenario has a same-named test.
 - `pnpm openapi` regenerates `apps/api/openapi.json` and the typed client paths in `packages/schema` from the route contracts (ADR-003); CI fails on drift.
