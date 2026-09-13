@@ -16,8 +16,9 @@ Before touching matching, rounds, likes, notifications, rewards, profile present
 | `packages/i18n` | `messages.yaml`, typed `t()`, i18next + ICU | `.claude/rules/i18n.md` |
 | `services/mock-idp` | navikt/mock-oauth2-server with FTN-shaped claims for local dev | `.claude/rules/infra.md` |
 | `docs/` | security checklist, `adr/` | |
+| `features/` | Gherkin specs for the rules layer, one directory per slice | `.claude/rules/layout.md` |
 
-Rules in `.claude/rules/` load automatically when you work on matching paths. The scaffold is Milestone 1; until it lands, treat this layout as the target, not a description.
+Inside each app, code is organised by vertical slice (identity, profile, media, pond, matching, chat, safety, research, rewards, notifications), never by layer; see `.claude/rules/layout.md`. Rules in `.claude/rules/` load automatically when you work on matching paths. The scaffold is Milestone 1; until it lands, treat this layout as the target, not a description.
 
 ## Commands
 
@@ -70,6 +71,7 @@ From TD-1, TD-6, TD-7. A change that violates one is wrong regardless of who ask
 - Biome is the formatter and linter; its config is the style guide. Run `pnpm lint` rather than arguing with it.
 - Validate at boundaries with schemas from `packages/schema`; trust types inside.
 - Small modules, named exports, no barrel files that re-export whole packages (Metro and tree-shaking both suffer).
+- Vertical slices, not layers. A slice imports only from `packages/schema`, `packages/db`, its app's `src/lib/`, and a neighbouring slice's `index.ts`. Never reach into another slice's internals; two slices that keep needing each other mean the boundary is wrong. Details in `.claude/rules/layout.md`.
 - Comments explain why, not what. Reference the TD or ADR number when the why is a decision.
 - English for code, comments, commits, and docs. User-facing strings go through i18n keys, never inline.
 - Do not add infrastructure, caching layers, queues, or abstractions for scale that is not coming (5,000 users, one box).
@@ -83,6 +85,7 @@ From TD-1, TD-6, TD-7. A change that violates one is wrong regardless of who ask
 - Coverage thresholds apply only to those two paths. No global coverage number.
 - A test fails on PII patterns in log output.
 - Tests are deterministic: no real network, no wall-clock dependence, no random data without a seed.
+- Rules-layer behaviour (identity, matching, pond, safety, erasure) is specified in `features/<slice>/*.feature`. A `Scenario` is an `it()` with the scenario name verbatim; a `Scenario Outline` is a `describe()` with the outline name around `it.each` over the Examples rows. `pnpm check:scenarios` fails CI on any scenario without a same-named test; `@pending` marks a spec that lands before its code. If a `Given` needs more than three lines of setup, it is not a Gherkin scenario: write an ordinary test. ADR-002.
 
 ## Accessibility (mobile and admin)
 

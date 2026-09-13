@@ -9,3 +9,5 @@
 /SECURITY.md            @superseacat
 /infra/                 @superseacat
 /docs/adr/              @superseacat
+/features/              @superseacat
+/apps/api/src/identity/ @superseacat
