@@ -301,6 +301,8 @@ async function ensureDatabase(): Promise<void> {
   } else if (composeFile && (await hasDocker())) {
     env(`starting docker compose (${composeFile})`);
     await streamed("db", "32", "docker", ["compose", "up", "-d", "--wait"]);
+    // One-shot bucket creation lives behind a profile (see docker-compose.yml).
+    await streamed("db", "32", "docker", ["compose", "run", "--rm", "minio-init"]);
     await waitFor("postgres", () => portOpen(host, port), 60_000);
   } else {
     if (composeFile)

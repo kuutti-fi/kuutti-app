@@ -1,5 +1,5 @@
 # Local development stack (#5). `pnpm env:up` runs this for you; on its own:
-#   docker compose up -d --wait
+#   docker compose up -d --wait && docker compose run --rm minio-init
 # Every published port binds to 127.0.0.1. Values mirror env.example and are
 # not secrets. Deployed environments use RDS, S3 and the Telia broker instead.
 name: kuutti
@@ -42,9 +42,12 @@ services:
       timeout: 5s
       retries: 12
 
-  # One-shot: the media bucket exists before the API starts.
+  # One-shot: the media bucket exists before the API starts. Behind a profile so
+  # `docker compose up -d --wait` (which treats an exited container as failure)
+  # ignores it; `docker compose run --rm minio-init` runs it, as env:up and CI do.
   minio-init:
     image: quay.io/minio/mc:RELEASE.2025-08-13T08-35-41Z
+    profiles: ["init"]
     depends_on:
       minio:
         condition: service_healthy
