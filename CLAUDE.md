@@ -28,6 +28,8 @@ Root `package.json` is the source of truth; keep this list in sync with it.
 - `pnpm dev` runs the API with tsx watch on port 3000. `pnpm dev:mobile` starts the Expo dev client; never Expo Go. `pnpm dev:admin` starts Vite.
 - `pnpm typecheck`, `pnpm lint` (Biome, including the slice import boundary), `pnpm format`, `pnpm test` (Vitest for api and packages, jest-expo for mobile).
 - `pnpm check:scenarios` verifies every Gherkin scenario has a same-named test.
+- `pnpm openapi` regenerates `apps/api/openapi.json` and the typed client paths in `packages/schema` from the route contracts (ADR-003); CI fails on drift.
+- API tests need Postgres: `DATABASE_URL`, or the local default `postgres://kuutti:kuutti@127.0.0.1:5432/kuutti_test`.
 - `pnpm --filter @kuutti/db generate` for drizzle-kit migrations (#4). `pnpm i18n:translate` (#13).
 - `docker compose up` for Postgres, MinIO, and the mock IdP (#5).
 

@@ -20,7 +20,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        task: [typecheck, lint, test]
+        task: [typecheck, lint]
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -39,9 +39,83 @@ jobs:
       - name: ${{ matrix.task }}
         run: pnpm ${{ matrix.task }}
 
+  test:
+    name: test
+    runs-on: ubuntu-24.04-arm
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: kuutti
+          POSTGRES_PASSWORD: kuutti
+          POSTGRES_DB: kuutti_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U kuutti"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgres://kuutti:kuutti@127.0.0.1:5432/kuutti_test
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+
+      - name: Enable pnpm
+        run: corepack enable
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: test
+        run: pnpm test
+
+  contracts:
+    name: contracts
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+
+      - name: Enable pnpm
+        run: corepack enable
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: OpenAPI document and generated types are committed and current
+        run: |
+          pnpm openapi
+          git diff --exit-code -- apps/api/openapi.json packages/schema/src/api.generated.ts
+
   docker-build:
     name: docker-build
     runs-on: ubuntu-24.04-arm
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: kuutti
+          POSTGRES_PASSWORD: kuutti
+          POSTGRES_DB: kuutti
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U kuutti"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -54,11 +128,14 @@ jobs:
             --build-arg BUILT_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
             -f apps/api/Dockerfile -t kuutti-api:ci .
 
-      - name: Image starts and answers /health
+      - name: Image starts, migrates, and answers /health with db ok
         run: |
-          docker run -d --name api -p 3000:3000 kuutti-api:ci
-          for i in $(seq 1 20); do
-            if curl -fsS http://127.0.0.1:3000/health; then echo; exit 0; fi
+          docker run -d --name api --network host \
+            -e APP_ENV=test \
+            -e DATABASE_URL=postgres://kuutti:kuutti@127.0.0.1:5432/kuutti \
+            kuutti-api:ci
+          for i in $(seq 1 30); do
+            if out=$(curl -fsS http://127.0.0.1:3000/health); then echo "$out"; echo "$out" | grep -q '"db":"ok"' && exit 0; fi
             sleep 1
           done
           echo "no healthy answer"; docker logs api; exit 1

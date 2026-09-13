@@ -1,8 +1,10 @@
 import { execSync } from "node:child_process";
+import type { Config } from "./config.ts";
 
 /**
- * Build identity. Injected at image build time (APP_VERSION, GIT_COMMIT, BUILT_AT);
- * in local dev, falls back to git so the smoke screen shows the working commit.
+ * Build identity. Injected at image build time (APP_VERSION, GIT_COMMIT,
+ * BUILT_AT); in local development the commit falls back to git so the smoke
+ * screen shows the working commit.
  */
 function gitShortCommit(): string | undefined {
   try {
@@ -14,10 +16,15 @@ function gitShortCommit(): string | undefined {
   }
 }
 
-const isProduction = process.env.NODE_ENV === "production";
+export type BuildInfo = { version: string; commit: string; builtAt: string };
 
-export const buildInfo = {
-  version: process.env.APP_VERSION ?? "0.0.0-dev",
-  commit: process.env.GIT_COMMIT ?? (isProduction ? "unknown" : (gitShortCommit() ?? "unknown")),
-  builtAt: process.env.BUILT_AT ?? new Date().toISOString(),
-} as const;
+export function buildInfo(
+  config: Pick<Config, "APP_VERSION" | "GIT_COMMIT" | "BUILT_AT" | "NODE_ENV">,
+): BuildInfo {
+  const fallbackCommit = config.NODE_ENV === "production" ? undefined : gitShortCommit();
+  return {
+    version: config.APP_VERSION,
+    commit: config.GIT_COMMIT ?? fallbackCommit ?? "unknown",
+    builtAt: config.BUILT_AT ?? new Date().toISOString(),
+  };
+}

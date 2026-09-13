@@ -1,0 +1,93 @@
+import { createRoute, z } from "@hono/zod-openapi";
+import { ErrorResponse } from "@kuutti/schema";
+import { describe, expect } from "vitest";
+import { test } from "../test/harness.ts";
+import { AppError } from "./errors.ts";
+
+const echoRoute = createRoute({
+  method: "post",
+  path: "/echo",
+  request: {
+    body: { content: { "application/json": { schema: z.object({ name: z.string().min(1) }) } } },
+  },
+  responses: {
+    200: {
+      description: "echo",
+      content: { "application/json": { schema: z.object({ name: z.string() }) } },
+    },
+  },
+});
+
+describe("error envelope", () => {
+  test("invalid body: 400 in the envelope, detail only in the log with the same requestId", async ({
+    ctx,
+  }) => {
+    ctx.app.openapi(echoRoute, (c) => c.json({ name: c.req.valid("json").name }, 200));
+
+    const res = await ctx.app.request("/echo", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ name: "" }),
+    });
+    expect(res.status).toBe(400);
+    const body = ErrorResponse.parse(await res.json());
+    expect(body.error.code).toBe("validation_failed");
+    expect(JSON.stringify(body)).not.toContain("too_small");
+
+    const line = ctx.logs().find((l) => l.msg === "request validation failed");
+    expect(line?.requestId).toBe(body.error.requestId);
+    expect(JSON.stringify(line?.issues)).toContain("too_small");
+  });
+
+  test("valid body reaches the handler", async ({ ctx }) => {
+    ctx.app.openapi(echoRoute, (c) => c.json({ name: c.req.valid("json").name }, 200));
+    const res = await ctx.app.request("/echo", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ name: "Kuutti" }),
+    });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ name: "Kuutti" });
+  });
+
+  test("unknown path: 404 envelope", async ({ ctx }) => {
+    const res = await ctx.app.request("/nope");
+    expect(res.status).toBe(404);
+    expect(ErrorResponse.parse(await res.json()).error.code).toBe("not_found");
+  });
+
+  test("AppError: its status and code, detail logged not returned", async ({ ctx }) => {
+    ctx.app.get("/teapot", () => {
+      throw new AppError(418, "teapot", "I am a teapot", { secretDetail: "brew" });
+    });
+    const res = await ctx.app.request("/teapot");
+    expect(res.status).toBe(418);
+    const text = await res.text();
+    expect(text).not.toContain("brew");
+    expect(ErrorResponse.parse(JSON.parse(text)).error.code).toBe("teapot");
+    expect(ctx.logs().some((l) => JSON.stringify(l.detail).includes("brew"))).toBe(true);
+  });
+
+  test("unexpected throw: 500 envelope, stack only in the log", async ({ ctx }) => {
+    ctx.app.get("/boom", () => {
+      throw new Error("kaboom with private detail");
+    });
+    const res = await ctx.app.request("/boom");
+    expect(res.status).toBe(500);
+    const text = await res.text();
+    expect(text).not.toContain("kaboom");
+    expect(ErrorResponse.parse(JSON.parse(text)).error).toMatchObject({ code: "internal_error" });
+    expect(ctx.logs().some((l) => l.msg === "unhandled error")).toBe(true);
+  });
+
+  test("body over the limit: 413 envelope", async ({ ctx }) => {
+    ctx.app.post("/big", async (c) => c.json({ size: (await c.req.text()).length }));
+    const res = await ctx.app.request("/big", {
+      method: "POST",
+      headers: { "content-type": "text/plain" },
+      body: "x".repeat(1_048_576 + 1),
+    });
+    expect(res.status).toBe(413);
+    expect(ErrorResponse.parse(await res.json()).error.code).toBe("payload_too_large");
+  });
+});

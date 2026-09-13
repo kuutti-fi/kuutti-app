@@ -18,9 +18,13 @@
     "format": "biome format --write .",
     "test": "pnpm -r run test",
     "check:scenarios": "node scripts/check-scenarios.ts",
-    "i18n:translate": "pnpm --filter @kuutti/i18n translate"
+    "i18n:translate": "pnpm --filter @kuutti/i18n translate",
+    "openapi": "pnpm --filter @kuutti/api openapi"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.13"
+  },
+  "dependencies": {
+    "zod": "^4.6.2"
   }
 }

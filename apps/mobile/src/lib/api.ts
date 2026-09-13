@@ -1,5 +1,6 @@
-import { HealthResponse } from "@kuutti/schema";
+import { type ApiPaths, HealthResponse } from "@kuutti/schema";
 import Constants from "expo-constants";
+import createClient from "openapi-fetch";
 
 /**
  * API base URL. EXPO_PUBLIC_API_URL wins (set per EAS profile and per preview);
@@ -25,10 +26,20 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * Typed client over the generated OpenAPI paths (ADR-003). Types come from
+ * packages/schema/src/api.generated.ts; the zod contracts guard the runtime.
+ */
+export const api = createClient<ApiPaths>({
+  baseUrl: apiBaseUrl(),
+  // Resolve fetch at call time: React Native may install it after this module loads, and tests mock it.
+  fetch: (request) => globalThis.fetch(request),
+});
+
 export async function fetchHealth(signal?: AbortSignal): Promise<HealthResponse> {
-  const res = await fetch(`${apiBaseUrl()}/health`, { signal });
-  if (!res.ok) throw new ApiError(`API answered ${res.status}`, res.status);
-  const parsed = HealthResponse.safeParse(await res.json());
-  if (!parsed.success) throw new ApiError("API answered with an unexpected shape");
-  return parsed.data;
+  const { data, error, response } = await api.GET("/health", { signal });
+  if (error !== undefined || data === undefined) {
+    throw new ApiError(`API answered ${response.status}`, response.status);
+  }
+  return HealthResponse.parse(data);
 }

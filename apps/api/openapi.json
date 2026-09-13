@@ -1,0 +1,95 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Kuutti API",
+    "version": "0.0.0",
+    "description": "Free, non-commercial dating app for Finland. Every account is verified through a Finnish bank. Source: AGPL-3.0 with App Store exception."
+  },
+  "components": {
+    "schemas": {
+      "HealthResponse": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "degraded"
+            ],
+            "description": "ok when the database answers and migrations are current; degraded otherwise."
+          },
+          "version": {
+            "type": "string",
+            "minLength": 1,
+            "description": "APP_VERSION injected at build time."
+          },
+          "commit": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Short git commit the build was made from."
+          },
+          "builtAt": {
+            "type": "string",
+            "minLength": 1,
+            "description": "ISO 8601 build timestamp."
+          },
+          "db": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "unreachable"
+            ],
+            "description": "SELECT 1 answered within 500 ms."
+          },
+          "migrations": {
+            "type": "string",
+            "enum": [
+              "current",
+              "pending"
+            ],
+            "description": "Committed migrations compared with the ones applied to this database."
+          }
+        },
+        "required": [
+          "status",
+          "version",
+          "commit",
+          "builtAt",
+          "db",
+          "migrations"
+        ]
+      }
+    },
+    "parameters": {}
+  },
+  "paths": {
+    "/health": {
+      "get": {
+        "summary": "Liveness and readiness in one answer",
+        "description": "200 when the database answers and committed migrations are applied; 503 with the same body when either fails.",
+        "responses": {
+          "200": {
+            "description": "Every dependency answers.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Database unreachable or migrations pending.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -13,7 +13,9 @@
       "!**/.expo",
       "!**/drizzle/meta",
       "!**/expo-env.d.ts",
-      "!pnpm-lock.yaml"
+      "!pnpm-lock.yaml",
+      "!apps/api/openapi.json",
+      "!packages/schema/src/api.generated.ts"
     ]
   },
   "formatter": {
