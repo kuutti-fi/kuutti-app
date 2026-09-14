@@ -27,12 +27,13 @@ permissions:
 jobs:
   plan-role:
     name: plan role cannot read secrets
-    # Nothing to prove before the bootstrap has been applied; a dispatch from a
-    # tag or a feature branch is not a subject the plan role trusts; and a fork
-    # pull request gets no OIDC token at all, so it is skipped rather than red.
+    # Nothing to prove before the bootstrap has been applied; a dispatch counts
+    # only from main, since the plan role trusts main and pull requests but not
+    # tags or feature branches; and a fork pull request gets no OIDC token at
+    # all, so it is skipped rather than red.
     if: >-
       vars.AWS_PLAN_ROLE_ARN != ''
-      && github.event_name != 'workflow_dispatch'
+      && (github.event_name != 'workflow_dispatch' || github.ref == 'refs/heads/main')
       && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: ubuntu-latest
     permissions:
