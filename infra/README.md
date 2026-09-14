@@ -174,7 +174,7 @@ TD-4 budgets 50 EUR a month. One environment is roughly 30 EUR (instance, databa
    infra/scripts/db-app-role.sh staging
    ```
 
-2. **Dokploy.** The first boot installs Docker and Dokploy `v0.30.6` (variable `dokploy_version`) with the installer vendored at `modules/compute/vendor/`, verified by hash on the box. Port 3000 is never opened; reach the UI through a port forward, create the admin account, and keep its credentials in the password manager:
+2. **Dokploy.** The first boot installs Docker and Dokploy `v0.30.6` (variable `dokploy_version`) with the installer vendored at `modules/compute/installer/`, verified by hash on the box. Port 3000 is never opened; reach the UI through a port forward, create the admin account, and keep its credentials in the password manager:
 
    ```sh
    aws ssm start-session --target "$(tofu output -raw instance_id)" --document-name AWS-StartPortForwardingSession --parameters portNumber=3000,localPortNumber=3000

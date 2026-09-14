@@ -251,7 +251,7 @@ resource "aws_instance" "api" {
     delete_on_termination = true
   }
 
-  # The Dokploy installer is vendored (vendor/) and the box verifies what it
+  # The Dokploy installer is vendored (installer/) and the box verifies what it
   # downloads against that copy's hash, so what runs as root at first boot is
   # exactly what was reviewed here.
   user_data = templatefile("${path.module}/templates/user_data.sh.tpl", {
@@ -261,7 +261,7 @@ resource "aws_instance" "api" {
     backup_bucket            = var.backup_bucket
     backup_prefix            = local.backup_prefix
     dokploy_version          = var.dokploy_version
-    dokploy_installer_sha256 = filesha256("${path.module}/vendor/dokploy-install.sh")
+    dokploy_installer_sha256 = filesha256("${path.module}/installer/dokploy-install.sh")
   })
 
   # A newer AMI or an edited first-boot script must not replace the running
