@@ -80,9 +80,11 @@ This is the only human login from here on. Root is used again only for billing, 
 In your own terminal, never in an agent session:
 
 ```sh
-brew install opentofu awscli          # already done on the maintainer's machine
+brew install opentofu awscli
 aws configure sso
 ```
+
+The install is already done on the maintainer's machine.
 
 Answer the prompts:
 
@@ -104,11 +106,13 @@ Profile name [<account-id>_AdministratorAccess]: kuutti
 Then:
 
 ```sh
-export AWS_PROFILE=kuutti          # put it in the shell profile for this project
+export AWS_PROFILE=kuutti
 aws sso login
-aws sts get-caller-identity        # Arn ends in AWSReservedSSO_AdministratorAccess_.../maintainer
-aws iam get-account-summary --query 'SummaryMap.[AccountMFAEnabled,AccountAccessKeysPresent]'   # [1, 0]
+aws sts get-caller-identity
+aws iam get-account-summary --query 'SummaryMap.[AccountMFAEnabled,AccountAccessKeysPresent]'
 ```
+
+Put the `export` in the shell profile you use for this project. The caller identity's Arn ends in `AWSReservedSSO_AdministratorAccess_<id>/maintainer`; the account summary prints `[1, 0]`, MFA on and no access keys.
 
 The session lasts eight hours; `aws sso login` again when it expires. No file under `~/.aws` ever contains a long-lived credential.
 

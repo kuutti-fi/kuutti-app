@@ -30,9 +30,11 @@ Everything in this section is click-ops by design: it is the part ADR-001 allows
 
 ```sh
 brew install opentofu awscli
-aws configure sso          # once; then `aws sso login`
+aws configure sso
 aws sts get-caller-identity
 ```
+
+`aws configure sso` runs once; afterwards `aws sso login` renews the session.
 
 Sign in from your own terminal. An agent working in this repository never types, reads or prints credentials and never opens `~/.aws/*`; it only runs `tofu` and `aws` commands that use the session you already hold.
 
@@ -48,12 +50,12 @@ Then:
 
 ```sh
 cd infra/bootstrap
-cp terraform.tfvars.example terraform.tfvars   # the two IDs and the billing alias
+cp terraform.tfvars.example terraform.tfvars
 tofu init
 tofu apply
 ```
 
-This runs with local state, because the bucket it creates is where state will live. The apply also creates the monthly budget (TD-4: 50 EUR, expressed as `monthly_budget_usd` because the billing metric is USD-only), the CloudWatch billing alarm in us-east-1, and the SNS topic both notify. AWS mails a subscription confirmation to the billing alias: confirm it, then send the test notification:
+Fill in the two GitHub IDs and the billing alias in `terraform.tfvars` before the apply. This runs with local state, because the bucket it creates is where state will live. The apply also creates the monthly budget (TD-4: 50 EUR, expressed as `monthly_budget_usd` because the billing metric is USD-only), the CloudWatch billing alarm in us-east-1, and the SNS topic both notify. AWS mails a subscription confirmation to the billing alias: confirm it, then send the test notification:
 
 ```sh
 aws sns publish --region us-east-1 --topic-arn "$(tofu output -raw billing_topic_arn)" \
@@ -62,12 +64,15 @@ aws sns publish --region us-east-1 --topic-arn "$(tofu output -raw billing_topic
 
 Migrate the state immediately afterwards:
 
+Put `tofu output -raw state_bucket` into the backend block of `versions.tf` and uncomment it, then:
+
 ```sh
-# put `tofu output -raw state_bucket` into the backend block of versions.tf and uncomment it, then
 tofu init -migrate-state
 rm -f terraform.tfstate terraform.tfstate.backup
-tofu plan     # must report no changes
+tofu plan
 ```
+
+The plan must report no changes.
 
 Commit `versions.tf` and `.terraform.lock.hcl`. The lockfile carries hashes for every platform the provider ships, so developer machines and both runner architectures init from it unchanged.
 
@@ -160,12 +165,12 @@ All are `SecureString` under the default `aws/ssm` key. The plan role is denied 
 The hetu HMAC key is never rotated (TD-1) and never leaves SSM except for one offline backup taken at creation. Generate it straight onto the offline medium so the value never sits in a shell history or a cloud drive, then load it:
 
 ```sh
-# <offline-medium>: an encrypted volume; its passphrase is held separately by the association
 openssl rand -hex 32 > /Volumes/<offline-medium>/kuutti-prod-hetu-hmac-key.txt
 aws ssm put-parameter --name /kuutti/prod/hetu-hmac-key --type SecureString \
   --value "$(cat /Volumes/<offline-medium>/kuutti-prod-hetu-hmac-key.txt)"
-# eject the medium; the association keeps it, not the maintainer's desk drawer
 ```
+
+`<offline-medium>` is an encrypted volume whose passphrase the association holds separately. Eject it afterwards; the association keeps it, not the maintainer's desk drawer.
 
 `db-app-password` is generated the same way without the offline copy, and rotated with `--overwrite`. The two signing keys are not random bytes: the CloudFront key is an RSA key pair whose public half becomes a CloudFront public-key resource (M3), and the Telia key is whatever the broker contract specifies (M2); their creation steps land with those milestones. The RDS master password is not managed here at all: `manage_master_user_password = true` leaves it with AWS so it never enters state.
 
