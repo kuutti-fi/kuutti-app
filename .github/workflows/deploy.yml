@@ -1,0 +1,53 @@
+name: Deploy
+
+# Called by build.yml: deploys an already-pushed image to one environment's
+# Dokploy and waits until /health runs that commit (#8). The GitHub environment
+# supplies DOKPLOY_URL, DOKPLOY_APPLICATION_ID and API_URL as variables and
+# DOKPLOY_TOKEN as its one secret; prod's environment also carries the
+# reviewer gate, so a prod deploy waits for approval before this runs.
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        description: staging or prod
+        type: string
+        required: true
+      image:
+        description: Full image reference to deploy
+        type: string
+        required: true
+      commit:
+        description: Short commit /health must report
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: deploy ${{ inputs.environment }}
+    runs-on: ubuntu-latest
+    environment:
+      name: ${{ inputs.environment }}
+      url: ${{ vars.API_URL }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: .github/scripts
+
+      - name: Point the Dokploy application at the image and deploy
+        env:
+          DOKPLOY_URL: ${{ vars.DOKPLOY_URL }}
+          DOKPLOY_TOKEN: ${{ secrets.DOKPLOY_TOKEN }}
+          DOKPLOY_APPLICATION_ID: ${{ vars.DOKPLOY_APPLICATION_ID }}
+          IMAGE: ${{ inputs.image }}
+        run: .github/scripts/dokploy-deploy.sh
+
+      - name: /health reports the commit with the database reachable
+        env:
+          API_URL: ${{ vars.API_URL }}
+          COMMIT: ${{ inputs.commit }}
+        run: .github/scripts/wait-healthy.sh

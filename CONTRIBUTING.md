@@ -69,6 +69,17 @@ Checks that everything is right:
 
 On a phone, install the dev client build (see `apps/mobile/README.md`), open it, and connect to Metro on this machine; the API URL is derived from the Metro host. The real Telia test bed exists only on staging.
 
+## Releases
+
+A release is an annotated tag on `main`, made by the maintainer:
+
+```sh
+git tag -a v0.1.0 -m "v0.1.0"
+git push origin v0.1.0
+```
+
+The tag retags the image `main` already built for that commit, so production runs the bytes staging ran; applies the production infrastructure and deploys behind the `prod` environment's approval; and drafts the release notes from the commits since the previous tag. Hotfix: branch from the last tag, pull request, tag, merge back (TD-2).
+
 ## Branch and history rules
 
 - `main` is the only long-lived branch. It cannot be deleted or force-pushed.

@@ -1,0 +1,45 @@
+name: Infra prod
+
+# The production apply (#8, ADR-001): on a v* tag, behind the prod
+# environment's reviewer, with kuutti-ci-apply. Kept apart from infra.yml so
+# nothing that runs at release time shares a cache with pull-request runs.
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: infra-prod
+  cancel-in-progress: false
+
+env:
+  TOFU_VERSION: "1.12.6"
+  TF_IN_AUTOMATION: "true"
+  AWS_REGION: ${{ vars.AWS_REGION }}
+
+jobs:
+  apply-prod:
+    name: apply prod
+    runs-on: ubuntu-24.04-arm
+    environment: prod
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      AWS_ROLE_ARN: ${{ vars.AWS_APPLY_ROLE_ARN }}
+      AWS_ROLE_SESSION_NAME: gha-apply-${{ github.run_id }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: .github/scripts/install-tofu.sh
+      - run: .github/scripts/aws-oidc.sh
+      - name: plan and apply envs/prod
+        working-directory: infra/envs/prod
+        run: |
+          tofu init -input=false -no-color
+          tofu plan -input=false -no-color -out=plan.bin
+          tofu apply -input=false -no-color plan.bin

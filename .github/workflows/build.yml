@@ -1,0 +1,203 @@
+name: Build
+
+# The API image (#8, TD-2): built once per commit on arm64, never under QEMU,
+# smoke-tested, and on main or a v* tag pushed to GHCR. A tag whose commit was
+# already built on main reuses that exact image, so production runs the bytes
+# staging ran. Deploys and the release draft are the reusable workflows this
+# one calls.
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  IMAGE: ghcr.io/kuutti-fi/kuutti-api
+
+jobs:
+  image:
+    name: image
+    runs-on: ubuntu-24.04-arm
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      short_sha: ${{ steps.identity.outputs.short_sha }}
+      digest: ${{ steps.digest.outputs.digest }}
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: kuutti
+          POSTGRES_PASSWORD: kuutti
+          POSTGRES_DB: kuutti
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U kuutti"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Build identity
+        id: identity
+        env:
+          REF_NAME: ${{ github.ref_name }}
+          IS_TAG: ${{ startsWith(github.ref, 'refs/tags/v') }}
+        run: |
+          short="${GITHUB_SHA::7}"
+          if [ "$IS_TAG" = "true" ]; then version="${REF_NAME#v}"; else version="0.0.0-$short"; fi
+          {
+            echo "short_sha=$short"
+            echo "version=$version"
+            echo "built_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          } >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
+
+      - name: Log in to GHCR
+        if: github.event_name == 'push'
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # A release tag on a commit that main already built: retag, do not rebuild.
+      - name: Reuse the image main built for this commit
+        id: reuse
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          if docker buildx imagetools inspect "$IMAGE:$GITHUB_SHA" >/dev/null 2>&1; then
+            docker buildx imagetools create -t "$IMAGE:$TAG" "$IMAGE:$GITHUB_SHA"
+            echo "reused=true" >> "$GITHUB_OUTPUT"
+            echo "retagged $IMAGE:$GITHUB_SHA as $TAG"
+          else
+            echo "reused=false" >> "$GITHUB_OUTPUT"
+            echo "no image for $GITHUB_SHA (a tag off main, e.g. a hotfix): building"
+          fi
+
+      - name: Image tags
+        id: meta
+        if: steps.reuse.outputs.reused != 'true'
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+        with:
+          images: ${{ env.IMAGE }}
+          tags: |
+            type=sha,prefix=,format=long
+            type=ref,event=branch
+            type=ref,event=tag
+
+      - name: Build for the smoke test
+        if: steps.reuse.outputs.reused != 'true'
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        with:
+          context: .
+          file: apps/api/Dockerfile
+          platforms: linux/arm64
+          load: true
+          tags: kuutti-api:ci
+          provenance: false
+          build-args: |
+            APP_VERSION=${{ steps.identity.outputs.version }}
+            GIT_COMMIT=${{ steps.identity.outputs.short_sha }}
+            BUILT_AT=${{ steps.identity.outputs.built_at }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Image starts, migrates, and answers /health with db ok
+        if: steps.reuse.outputs.reused != 'true'
+        run: |
+          docker run -d --name api --network host \
+            -e APP_ENV=test \
+            -e DATABASE_URL=postgres://kuutti:kuutti@127.0.0.1:5432/kuutti \
+            kuutti-api:ci
+          for _ in $(seq 1 30); do
+            if out=$(curl -fsS http://127.0.0.1:3000/health); then echo "$out"; echo "$out" | grep -q '"db":"ok"' && echo "$out" | grep -q '"migrations":"current"' && exit 0; fi
+            sleep 1
+          done
+          echo "no healthy answer"; docker logs api; exit 1
+
+      - name: Push with provenance and SBOM
+        id: push
+        if: github.event_name == 'push' && steps.reuse.outputs.reused != 'true'
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        with:
+          context: .
+          file: apps/api/Dockerfile
+          platforms: linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          provenance: true
+          sbom: true
+          build-args: |
+            APP_VERSION=${{ steps.identity.outputs.version }}
+            GIT_COMMIT=${{ steps.identity.outputs.short_sha }}
+            BUILT_AT=${{ steps.identity.outputs.built_at }}
+          cache-from: type=gha
+
+      - name: Digest of what was pushed
+        id: digest
+        if: github.event_name == 'push'
+        env:
+          REF: ${{ github.ref_name }}
+          PUSHED: ${{ steps.push.outputs.digest }}
+        run: |
+          if [ -n "$PUSHED" ]; then digest="$PUSHED"; else
+            digest=$(docker buildx imagetools inspect "$IMAGE:$REF" --format '{{json .Manifest}}' | jq -r .digest)
+          fi
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+          echo "$IMAGE@$digest"
+
+  deploy-staging:
+    name: deploy staging
+    needs: image
+    # STAGING_ENABLED: set by the maintainer once staging is applied and its
+    # Dokploy is configured (infra/README.md).
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.STAGING_ENABLED == 'true'
+    uses: ./.github/workflows/deploy.yml
+    with:
+      environment: staging
+      image: ghcr.io/kuutti-fi/kuutti-api:${{ github.sha }}
+      commit: ${{ needs.image.outputs.short_sha }}
+    # Environment-scoped secrets (DOKPLOY_TOKEN) only reach the called job
+    # through inherit; an explicit pass would resolve at the caller, which
+    # has no environment.
+    secrets: inherit # zizmor: ignore[secrets-inherit]
+
+  deploy-prod:
+    name: deploy prod
+    needs: image
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    uses: ./.github/workflows/deploy.yml
+    with:
+      environment: prod
+      image: ghcr.io/kuutti-fi/kuutti-api:${{ github.ref_name }}
+      commit: ${{ needs.image.outputs.short_sha }}
+    secrets: inherit # zizmor: ignore[secrets-inherit]
+
+  release:
+    name: release
+    needs: image
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    uses: ./.github/workflows/release.yml
+    permissions:
+      contents: write
+    with:
+      tag: ${{ github.ref_name }}
+      image: ghcr.io/kuutti-fi/kuutti-api@${{ needs.image.outputs.digest }}

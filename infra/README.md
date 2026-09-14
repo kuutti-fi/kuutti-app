@@ -125,6 +125,25 @@ for e in staging prod; do gh api "$R/environments/$e/deployment-branch-policies"
 
 `9991098` is the maintainer's user id (`gh api users/superseacat --jq .id`). `prevent_self_review` stays off while the maintainer is the only reviewer.
 
+### Ruleset switch (#8, last)
+
+Once the checks exist on `main`, the ruleset `23053522` gains a pull-request rule and required checks, and direct pushes end. Code-owner review stays off: the only code owner is the maintainer, and an author cannot approve their own pull request, so requiring it would block every merge.
+
+```sh
+gh api -X PUT repos/kuutti-fi/kuutti-app/rulesets/23053522 --input - <<'JSON'
+{"name":"Protect main","target":"branch","enforcement":"active","bypass_actors":[],
+ "conditions":{"ref_name":{"include":["~DEFAULT_BRANCH"],"exclude":[]}},
+ "rules":[
+  {"type":"deletion"},{"type":"non_fast_forward"},{"type":"required_linear_history"},
+  {"type":"pull_request","parameters":{"required_approving_review_count":0,"dismiss_stale_reviews_on_push":false,"require_code_owner_review":false,"require_last_push_approval":false,"required_review_thread_resolution":true,"allowed_merge_methods":["squash","rebase"]}},
+  {"type":"required_status_checks","parameters":{"strict_required_status_checks_policy":true,"required_status_checks":[
+   {"context":"DCO sign-off"},{"context":"TruffleHog"},{"context":"typecheck"},{"context":"lint"},{"context":"test-api-packages"},{"context":"test-mobile"},{"context":"scenarios"},{"context":"schema-drift"},{"context":"workflows"}]}}
+ ]}
+JSON
+```
+
+`i18n` joins the list when #13 lands. Then update `CLAUDE.md` (Git) and `CONTRIBUTING.md` through the first pull request.
+
 ## Verify
 
 `.github/workflows/infra-oidc.yml` keeps the two properties of the plan role proven on every infrastructure change: it is assumable from a pull request and from `main`, and it cannot decrypt a SecureString even though `ReadOnlyAccess` would allow it. It needs one throwaway parameter:
@@ -146,6 +165,19 @@ tofu plan
 ```
 
 The same in `infra/envs/prod`. Applies run through CI (#8): plans on every pull request, staging on merge to `main`, production only after approval on the `prod` GitHub environment. A local plan needs the SSO session; a local apply is not the path.
+
+### CI
+
+| workflow | trigger | role | does |
+|---|---|---|---|
+| `infra.yml` | pull requests and `main` touching `infra/**` | `kuutti-ci-plan` | `fmt`, `validate`, `plan` for `bootstrap`, `envs/staging` and `envs/prod`; each plan is a sticky comment on the pull request; on `main` it then applies `envs/staging` behind the `staging` environment with `kuutti-ci-apply` |
+| `infra-prod.yml` | `v*` tags | `kuutti-ci-apply` | applies `envs/prod` after the `prod` reviewer approves |
+| `infra-oidc.yml` | changes under `infra/**` | `kuutti-ci-plan` | proves the plan role still cannot decrypt a SecureString |
+| `build.yml` | every push and pull request | none | builds the API image on arm64 and smoke-tests it; on `main` pushes `ghcr.io/kuutti-fi/kuutti-api:<sha>` and `:main`, on a tag retags that same image as `:vX.Y.Z`, then calls `deploy.yml` and, for tags, `release.yml` |
+
+OpenTofu and the OIDC exchange are installed by `.github/scripts/install-tofu.sh` and `aws-oidc.sh`; no third-party action touches credentials. The bootstrap is only ever planned by CI.
+
+The staging apply and the staging deploy run only while the repository variable `STAGING_ENABLED` is `true` (`gh variable set STAGING_ENABLED --body true`). Until the maintainer sets it, every merge plans and builds but applies and deploys nothing: staging starts when there is something to deploy, prod at the first release tag.
 
 Until the media module puts CloudFront in front (M3), TLS terminates at Traefik on the box and the API answers on the Elastic IP directly (#7).
 
@@ -181,7 +213,18 @@ TD-4 budgets 50 EUR a month. One environment is roughly 30 EUR (instance, databa
 
    Then at `http://localhost:3000`: one project named after the environment, one application `api` deployed from the GHCR image (#8), domain `api.staging.<domain>` or `api.<domain>` with Let's Encrypt through Traefik, container port 3000. Application environment is exactly `NODE_ENV=production`, `APP_ENV=staging` (or `production`), `PORT=3000`; everything else comes from SSM through the instance role, never from Dokploy. DNS is not in this repository: an A record per API host name to `tofu output -raw public_ip`.
 
-3. **Checks.** From the box (`aws ssm start-session --target <instance-id>`, shell `ssm-user`, `sudo -i` for root). Everything typed and printed in a session is streamed to `/kuutti/ssm-sessions`, so a secret must never be printed there; the forms below keep the value inside the shell:
+3. **Deploy path.** `deploy.yml` calls Dokploy's API from GitHub, so the control plane must be reachable over HTTPS: in Dokploy, Web Server, set its own domain (`dokploy.staging.<domain>` or `dokploy.<domain>`) with Let's Encrypt; port 3000 stays closed, Traefik serves the UI and API on 443. Turn on two-factor authentication for the admin. In Settings, Profile, generate an API key for CI. Then, for each GitHub environment, three variables and one secret (`gh secret set` prompts for the value; never paste it into a command line):
+
+   ```sh
+   gh variable set DOKPLOY_URL --env staging --body https://dokploy.staging.<domain>
+   gh variable set DOKPLOY_APPLICATION_ID --env staging --body <id from the application's URL in Dokploy>
+   gh variable set API_URL --env staging --body https://api.staging.<domain>
+   gh secret set DOKPLOY_TOKEN --env staging
+   ```
+
+   After the first image push, make the GHCR package public once (package settings, Danger zone, Change visibility) so the box pulls without a credential.
+
+4. **Checks.** From the box (`aws ssm start-session --target <instance-id>`, shell `ssm-user`, `sudo -i` for root). Everything typed and printed in a session is streamed to `/kuutti/ssm-sessions`, so a secret must never be printed there; the forms below keep the value inside the shell:
 
    ```sh
    aws ssm get-parameter --name /kuutti/<other env>/db-host                     # must be refused

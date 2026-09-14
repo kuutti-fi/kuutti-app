@@ -10,19 +10,28 @@ updates:
       github-actions:
         patterns: ["*"]
 
-  # Provider version bumps for the infrastructure code.
-  - package-ecosystem: "terraform"
-    directory: "/infra/bootstrap"
+  # The pnpm workspace. Minor and patch bumps arrive as one pull request a
+  # week; majors come alone so they get read.
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    groups:
+      minor-and-patch:
+        update-types: ["minor", "patch"]
+
+  # The API image's base image (apps/api/Dockerfile).
+  - package-ecosystem: "docker"
+    directory: "/apps/api"
     schedule:
       interval: "weekly"
 
-  # When a package manifest lands (package.json, go.mod, pyproject.toml, ...),
-  # add its ecosystem here so dependency updates are proposed automatically:
-  #
-  # - package-ecosystem: "npm"
-  #   directory: "/"
-  #   schedule:
-  #     interval: "weekly"
-  #   groups:
-  #     minor-and-patch:
-  #       update-types: ["minor", "patch"]
+  # Provider version bumps for the infrastructure code, one per root with a
+  # lockfile.
+  - package-ecosystem: "terraform"
+    directories: ["/infra/bootstrap", "/infra/envs/staging", "/infra/envs/prod"]
+    schedule:
+      interval: "weekly"
+    groups:
+      providers:
+        patterns: ["*"]

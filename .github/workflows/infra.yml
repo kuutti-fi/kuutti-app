@@ -1,0 +1,133 @@
+name: Infra
+
+# OpenTofu through the bootstrap roles (ADR-001, #8): plans for every root on
+# pull requests and on main with kuutti-ci-plan, the staging apply with
+# kuutti-ci-apply behind the staging environment. The bootstrap is planned for
+# drift but only ever applied by the maintainer, since it owns these roles.
+# The prod apply lives in infra-prod.yml: it runs on release tags, and a
+# release-time workflow must not share a cache with pull-request runs.
+
+on:
+  pull_request:
+    paths: ["infra/**", ".github/workflows/infra.yml", ".github/scripts/**"]
+  push:
+    branches: [main]
+    paths: ["infra/**", ".github/workflows/infra.yml", ".github/scripts/**"]
+
+permissions:
+  contents: read
+
+# Applies are never cancelled; a superseded plan is only wasted minutes.
+concurrency:
+  group: infra-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  TOFU_VERSION: "1.12.6"
+  TF_PLUGIN_CACHE_DIR: /home/runner/.terraform.d/plugin-cache
+  TF_IN_AUTOMATION: "true"
+  AWS_REGION: ${{ vars.AWS_REGION }}
+
+jobs:
+  fmt:
+    name: fmt
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: .github/scripts/install-tofu.sh
+      - run: tofu fmt -check -recursive -diff infra
+
+  plan:
+    name: plan ${{ matrix.dir }}
+    # The plan role trusts pull requests of this repository and main; a fork
+    # gets no token and a tag is applied, not planned.
+    if: >-
+      (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)
+      || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+    runs-on: ubuntu-24.04-arm
+    permissions:
+      contents: read
+      id-token: write
+      pull-requests: write
+    strategy:
+      fail-fast: false
+      matrix:
+        dir: [bootstrap, envs/staging, envs/prod]
+    env:
+      AWS_ROLE_ARN: ${{ vars.AWS_PLAN_ROLE_ARN }}
+      AWS_ROLE_SESSION_NAME: gha-plan-${{ github.run_id }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: .github/scripts/install-tofu.sh
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: /home/runner/.terraform.d/plugin-cache
+          key: tofu-${{ runner.arch }}-${{ hashFiles('infra/**/.terraform.lock.hcl') }}
+      - run: mkdir -p "$TF_PLUGIN_CACHE_DIR" && .github/scripts/aws-oidc.sh
+
+      - name: init and validate
+        working-directory: infra/${{ matrix.dir }}
+        run: |
+          tofu init -input=false -no-color
+          tofu validate -no-color
+
+      - name: plan
+        id: plan
+        working-directory: infra/${{ matrix.dir }}
+        run: |
+          set +e
+          tofu plan -input=false -no-color -out=plan.bin -detailed-exitcode
+          rc=$?
+          set -e
+          case "$rc" in
+            0) echo "title=No changes" >> "$GITHUB_OUTPUT" ;;
+            2) echo "title=Changes" >> "$GITHUB_OUTPUT" ;;
+            *) exit "$rc" ;;
+          esac
+          tofu show -no-color plan.bin > plan.txt
+          rm -f plan.bin
+
+      - name: Plan as a sticky pull-request comment
+        if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          MARKER: tofu-plan-${{ matrix.dir }}
+          TITLE: "tofu plan · infra/${{ matrix.dir }} · ${{ steps.plan.outputs.title }}"
+          BODY_FILE: infra/${{ matrix.dir }}/plan.txt
+        run: .github/scripts/plan-comment.sh
+
+  apply-staging:
+    name: apply staging
+    needs: [fmt, plan]
+    # STAGING_ENABLED is the repository variable the maintainer sets once there
+    # is something to deploy; until then CI plans and never applies.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.STAGING_ENABLED == 'true'
+    runs-on: ubuntu-24.04-arm
+    environment: staging
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      AWS_ROLE_ARN: ${{ vars.AWS_APPLY_ROLE_ARN }}
+      AWS_ROLE_SESSION_NAME: gha-apply-${{ github.run_id }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: .github/scripts/install-tofu.sh
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: /home/runner/.terraform.d/plugin-cache
+          key: tofu-${{ runner.arch }}-${{ hashFiles('infra/**/.terraform.lock.hcl') }}
+      - run: mkdir -p "$TF_PLUGIN_CACHE_DIR" && .github/scripts/aws-oidc.sh
+      - name: plan and apply envs/staging
+        working-directory: infra/envs/staging
+        run: |
+          tofu init -input=false -no-color
+          tofu plan -input=false -no-color -out=plan.bin
+          tofu apply -input=false -no-color plan.bin

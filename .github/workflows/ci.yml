@@ -1,5 +1,8 @@
 name: CI
 
+# The checks the main ruleset requires (#8): job names are the check names and
+# stay stable. Everything runs on arm64, the architecture of the t4g box.
+
 on:
   push:
     branches: [main]
@@ -13,34 +16,28 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  checks:
-    name: ${{ matrix.task }}
-    # arm64 runners: free for public repositories, and the same architecture as the t4g box.
+  typecheck:
+    name: typecheck
     runs-on: ubuntu-24.04-arm
-    strategy:
-      fail-fast: false
-      matrix:
-        task: [typecheck, lint]
     steps:
-      - name: Check out repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - name: Set up Node
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          node-version: 22
+          persist-credentials: false
+      - uses: ./.github/actions/pnpm
+      - run: pnpm typecheck
 
-      - name: Enable pnpm
-        run: corepack enable
+  lint:
+    name: lint
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/pnpm
+      - run: pnpm lint
 
-      - name: Install
-        run: pnpm install --frozen-lockfile
-
-      - name: ${{ matrix.task }}
-        run: pnpm ${{ matrix.task }}
-
-  test:
-    name: test
+  test-api-packages:
+    name: test-api-packages
     runs-on: ubuntu-24.04-arm
     services:
       postgres:
@@ -59,42 +56,61 @@ jobs:
     env:
       DATABASE_URL: postgres://kuutti:kuutti@127.0.0.1:5432/kuutti_test
     steps:
-      - name: Check out repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - name: Set up Node
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          node-version: 22
+          persist-credentials: false
+      - uses: ./.github/actions/pnpm
+      - name: Vitest for the API, the admin panel and every package
+        run: pnpm -r --filter '!@kuutti/mobile' run test
 
-      - name: Enable pnpm
-        run: corepack enable
-
-      - name: Install
-        run: pnpm install --frozen-lockfile
-
-      - name: test
-        run: pnpm test
-
-  contracts:
-    name: contracts
+  test-mobile:
+    name: test-mobile
     runs-on: ubuntu-24.04-arm
     steps:
-      - name: Check out repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - name: Set up Node
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          node-version: 22
+          persist-credentials: false
+      - uses: ./.github/actions/pnpm
+      - name: jest-expo
+        run: pnpm --filter @kuutti/mobile test
 
-      - name: Enable pnpm
-        run: corepack enable
+  audit:
+    name: audit
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/pnpm
+        with:
+          install: "false"
+      - name: No known high or critical vulnerability in the lockfile
+        run: pnpm audit --audit-level high
 
-      - name: Install
-        run: pnpm install --frozen-lockfile
+  scenarios:
+    name: scenarios
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # The checker has no dependencies, so there is nothing to install.
+      - uses: ./.github/actions/pnpm
+        with:
+          install: "false"
+      - name: Every non-pending scenario has a same-named test (ADR-002)
+        run: pnpm check:scenarios --list
 
-      - name: OpenAPI document and generated types are committed and current
+  schema-drift:
+    name: schema-drift
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/pnpm
+
+      - name: OpenAPI document and generated types are committed and current (ADR-003)
         run: |
           pnpm openapi
           git diff --exit-code -- apps/api/openapi.json packages/schema/src/api.generated.ts
@@ -114,19 +130,10 @@ jobs:
     # The local stack as a developer runs it: Postgres, MinIO, the mock bank IdP.
     runs-on: ubuntu-latest
     steps:
-      - name: Check out repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - name: Set up Node
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          node-version: 22
-
-      - name: Enable pnpm
-        run: corepack enable
-
-      - name: Install
-        run: pnpm install --frozen-lockfile
+          persist-credentials: false
+      - uses: ./.github/actions/pnpm
 
       - name: Every published port binds to loopback
         run: |
@@ -166,43 +173,20 @@ jobs:
         if: failure()
         run: docker compose logs --no-color | tail -100
 
-  docker-build:
-    name: docker-build
-    runs-on: ubuntu-24.04-arm
-    services:
-      postgres:
-        image: postgres:17
-        env:
-          POSTGRES_USER: kuutti
-          POSTGRES_PASSWORD: kuutti
-          POSTGRES_DB: kuutti
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U kuutti"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 10
+  workflows:
+    name: workflows
+    # Static checks of the workflows themselves: zizmor for injection,
+    # permissions and pinning, and the #8 invariants script.
+    runs-on: ubuntu-latest
     steps:
-      - name: Check out repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - name: Build the API image for linux/arm64
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.13"
+      - name: zizmor and the permission invariants
         run: |
-          docker build --platform linux/arm64 \
-            --build-arg APP_VERSION=0.0.0-ci \
-            --build-arg GIT_COMMIT=${GITHUB_SHA::7} \
-            --build-arg BUILT_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-            -f apps/api/Dockerfile -t kuutti-api:ci .
-
-      - name: Image starts, migrates, and answers /health with db ok
-        run: |
-          docker run -d --name api --network host \
-            -e APP_ENV=test \
-            -e DATABASE_URL=postgres://kuutti:kuutti@127.0.0.1:5432/kuutti \
-            kuutti-api:ci
-          for i in $(seq 1 30); do
-            if out=$(curl -fsS http://127.0.0.1:3000/health); then echo "$out"; echo "$out" | grep -q '"db":"ok"' && echo "$out" | grep -q '"migrations":"current"' && exit 0; fi
-            sleep 1
-          done
-          echo "no healthy answer"; docker logs api; exit 1
+          pip install --quiet zizmor==1.30.1 pyyaml==6.0.2
+          zizmor --no-progress --min-severity medium --min-confidence medium .github/workflows
+          python .github/scripts/check-workflow-permissions.py
