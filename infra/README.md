@@ -139,10 +139,12 @@ Done when: `aws iam get-account-summary` shows MFA on and no access keys; the te
 ## Environments
 
 ```sh
-cd infra/envs/staging   # or prod
+cd infra/envs/staging
 tofu init
 tofu plan
 ```
+
+The same in `infra/envs/prod`.
 
 Applies run through CI. Plans run on every pull request and are posted to it. Staging applies on merge to `main`. Production applies only after approval on the `prod` GitHub environment.
 
