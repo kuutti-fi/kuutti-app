@@ -78,6 +78,25 @@ resource "aws_s3_bucket_lifecycle_configuration" "state" {
       days_after_initiation = 7
     }
   }
+
+  # Nightly Dokploy backups from the API boxes (#7) land under this prefix;
+  # ninety days is plenty for a rebuild and keeps the bucket bounded.
+  rule {
+    id     = "expire-dokploy-backups"
+    status = "Enabled"
+
+    filter {
+      prefix = "dokploy-backup/"
+    }
+
+    expiration {
+      days = 90
+    }
+
+    noncurrent_version_expiration {
+      noncurrent_days = 7
+    }
+  }
 }
 
 resource "aws_s3_bucket_policy" "state_tls_only" {
@@ -243,6 +262,8 @@ data "aws_iam_policy_document" "ci_plan_deny_data" {
       "logs:FilterLogEvents",
       "logs:StartQuery",
       "logs:GetQueryResults",
+      "rds:DownloadDBLogFilePortion",
+      "rds:DownloadCompleteDBLogFile",
     ]
     resources = ["*"]
   }
@@ -363,6 +384,8 @@ data "aws_iam_policy_document" "ci_apply_iam" {
       "iam:CreateInstanceProfile",
       "iam:DeleteInstanceProfile",
       "iam:GetInstanceProfile",
+      "iam:TagInstanceProfile",
+      "iam:UntagInstanceProfile",
       "iam:AddRoleToInstanceProfile",
       "iam:RemoveRoleFromInstanceProfile",
     ]

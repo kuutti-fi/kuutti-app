@@ -1,0 +1,55 @@
+variable "project" {
+  type    = string
+  default = "kuutti"
+}
+
+variable "environment" {
+  type = string
+
+  validation {
+    condition     = contains(["staging", "prod"], var.environment)
+    error_message = "environment must be staging or prod."
+  }
+}
+
+variable "instance_type" {
+  description = "arm64 only: images are built for linux/arm64 (rules/infra.md)."
+  type        = string
+  default     = "t4g.small"
+}
+
+variable "subnet_id" {
+  description = "The public subnet from modules/network."
+  type        = string
+}
+
+variable "security_group_id" {
+  description = "The api security group from modules/network."
+  type        = string
+}
+
+variable "permissions_boundary_arn" {
+  description = "Bootstrap output permissions_boundary_arn. The apply role refuses to create a role without it (ADR-001)."
+  type        = string
+}
+
+variable "backup_bucket" {
+  description = "Bucket that receives the nightly /etc/dokploy backup under dokploy-backup/<env>/ (#7: the state bucket)."
+  type        = string
+}
+
+variable "dokploy_version" {
+  description = "Git tag of the Dokploy release whose install script runs at first boot. Pinned so a rebuilt box gets the same version as the last one."
+  type        = string
+}
+
+variable "root_volume_gb" {
+  type    = number
+  default = 30
+}
+
+variable "manage_session_preferences" {
+  description = "Session Manager preferences (the SSM-SessionManagerRunShell document and the shared session log group) are account-wide, so exactly one environment declares them: staging, which always exists."
+  type        = bool
+  default     = false
+}

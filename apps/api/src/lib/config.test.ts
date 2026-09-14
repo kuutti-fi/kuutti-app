@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { describe, expect, it } from "vitest";
-import { ConfigError, parseConfig } from "./config.ts";
+import { ConfigError, parseConfig, ssmPrefix } from "./config.ts";
 
 describe("parseConfig", () => {
   it("fails without a database and names the key", () => {
@@ -73,5 +73,16 @@ describe("boot", () => {
     expect(code).toBe(1);
     expect(stderr).toContain("Configuration invalid");
     expect(stderr).toContain("DATABASE_URL");
+  });
+});
+
+describe("ssmPrefix", () => {
+  it("follows the infrastructure's environment names: production reads /kuutti/prod/", () => {
+    expect(ssmPrefix("staging")).toBe("/kuutti/staging/");
+    expect(ssmPrefix("production")).toBe("/kuutti/prod/");
+  });
+
+  it("points previews at the staging parameters", () => {
+    expect(ssmPrefix("preview")).toBe("/kuutti/staging/");
   });
 });

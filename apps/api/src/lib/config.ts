@@ -118,12 +118,17 @@ export async function loadConfig(
 ): Promise<Config> {
   const appEnv = raw.APP_ENV ?? "development";
   const deployed = appEnv === "staging" || appEnv === "production" || appEnv === "preview";
-  const prefix = raw.SSM_PARAMETER_PREFIX ?? (deployed ? `/kuutti/${ssmEnv(appEnv)}/` : undefined);
+  const prefix = raw.SSM_PARAMETER_PREFIX ?? (deployed ? ssmPrefix(appEnv) : undefined);
   const fromSsm = prefix ? await loadSsmParameters(prefix) : {};
   return parseConfig({ ...fromSsm, ...raw });
 }
 
-/** Previews run on the staging instance and read staging parameters (#9). */
-function ssmEnv(appEnv: string): string {
-  return appEnv === "preview" ? "staging" : appEnv;
+/**
+ * Parameter prefix for a deployed environment. The infrastructure names its
+ * environments staging and prod (#7), so production reads /kuutti/prod/;
+ * previews run on the staging instance and read staging parameters (#9).
+ */
+export function ssmPrefix(appEnv: string): string {
+  const env = appEnv === "preview" ? "staging" : appEnv === "production" ? "prod" : appEnv;
+  return `/kuutti/${env}/`;
 }

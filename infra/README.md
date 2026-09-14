@@ -9,11 +9,11 @@ Commands below use `tofu`. Terraform is command-compatible if you have it instea
 | path | contents | when |
 |---|---|---|
 | `bootstrap/` | state bucket, GitHub OIDC provider, CI roles, budget and billing alarm | once, before anything else |
-| `modules/` | reusable resource groups | as milestones need them |
-| `envs/staging`, `envs/prod` | one composition per environment | M1 |
+| `modules/` | `network`, `compute`, `data` (#7); media and email later | as milestones need them |
+| `envs/staging`, `envs/prod` | one composition per environment: the three modules plus the non-secret parameters | M1 (#7) |
 | `github/` | repository settings, branch protection, environments | not adopted; `gh api` below until the GitHub provider question is settled |
 
-Modules arrive with the milestone that needs them: network, compute, data and IAM in M1; media and delivery in M3; email in M5.
+Modules arrive with the milestone that needs them: network, compute and data in M1 (#7); media and delivery in M3; email in M5. `scripts/` holds the one-time procedures that are deliberately not resources.
 
 ## Account, once (console, maintainer only)
 
@@ -75,6 +75,8 @@ tofu plan
 The plan must report no changes.
 
 Commit `versions.tf` and `.terraform.lock.hcl`. The lockfile carries hashes for every platform the provider ships, so developer machines and both runner architectures init from it unchanged.
+
+Later changes to `bootstrap/` are applied the same way, by the maintainer: it owns the CI roles, so CI cannot apply it.
 
 `terraform.tfvars` and any `*.tfstate` are gitignored. The state bucket holds secrets: it is versioned, encrypted, public access is blocked, and only the CI roles and the maintainer can read it.
 
@@ -144,11 +146,68 @@ tofu init
 tofu plan
 ```
 
-The same in `infra/envs/prod`.
+The same in `infra/envs/prod`. Applies run through CI (#8): plans on every pull request, staging on merge to `main`, production only after approval on the `prod` GitHub environment. A local plan needs the SSO session; a local apply is not the path.
 
-Applies run through CI. Plans run on every pull request and are posted to it. Staging applies on merge to `main`. Production applies only after approval on the `prod` GitHub environment.
+Until the media module puts CloudFront in front (M3), TLS terminates at Traefik on the box and the API answers on the Elastic IP directly (#7).
+
+Each environment composes the three modules (#7, TD-19):
+
+| module | creates | notes |
+|---|---|---|
+| `network` | VPC /16, one public subnet, two private subnets, DB subnet group, `api` and `db` security groups | no NAT; `db` admits 5432 from the `api` group only; port 22 only for `ssh_cidrs`, empty by default |
+| `data` | RDS PostgreSQL 17 single-AZ, gp3 20→100 GB, 35-day PITR, `rds.force_ssl=1`, Extended Support declined, master password held by AWS | staging `db.t4g.micro`, prod `db.t4g.small` with deletion protection and a final snapshot |
+| `compute` | t4g.small Ubuntu 24.04 arm64, Elastic IP, IMDSv2, instance role `kuutti-api-<env>` under the boundary, log group `/kuutti/<env>/api`, first-boot script installing Dokploy | staging also owns the account-wide Session Manager preferences and `/kuutti/ssm-sessions` |
+
+The composition then writes the non-secret parameters `app-env`, `log-level`, `db-host`, `db-port`, `db-name`, `db-user` under `/kuutti/<env>/`; the API turns them into `APP_ENV`, `DB_HOST` and so on at boot and composes `DATABASE_URL` with `sslmode=require`.
 
 Every IAM role declared in an environment or module sets `permissions_boundary` to the bootstrap output `permissions_boundary_arn`; the apply role refuses to create a role without it. The plan role cannot read secrets, logs, or object data, only resource metadata and state.
+
+### Cost
+
+TD-4 budgets 50 EUR a month. One environment is roughly 30 EUR (instance, database, address, storage); both together are around 65 EUR, above the budget alert. Apply staging first and prod when there is something to release, or raise `monthly_budget_usd` in the bootstrap knowingly.
+
+### After the first apply, once per environment
+
+1. **Application role.** RDS is private, so the script tunnels through the box with Session Manager (`brew install --cask session-manager-plugin` once). It creates `kuutti_app`, makes it the owner of the `kuutti` database so migrations can run, and stores its password as `/kuutti/<env>/db-app-password`. The master password stays inside the script's process.
+
+   ```sh
+   infra/scripts/db-app-role.sh staging
+   ```
+
+2. **Dokploy.** The first boot installs Docker and Dokploy `v0.30.6` (variable `dokploy_version`) with the installer vendored at `modules/compute/vendor/`, verified by hash on the box. Port 3000 is never opened; reach the UI through a port forward, create the admin account, and keep its credentials in the password manager:
+
+   ```sh
+   aws ssm start-session --target "$(tofu output -raw instance_id)" --document-name AWS-StartPortForwardingSession --parameters portNumber=3000,localPortNumber=3000
+   ```
+
+   Then at `http://localhost:3000`: one project named after the environment, one application `api` deployed from the GHCR image (#8), domain `api.staging.<domain>` or `api.<domain>` with Let's Encrypt through Traefik, container port 3000. Application environment is exactly `NODE_ENV=production`, `APP_ENV=staging` (or `production`), `PORT=3000`; everything else comes from SSM through the instance role, never from Dokploy. DNS is not in this repository: an A record per API host name to `tofu output -raw public_ip`.
+
+3. **Checks.** From the box (`aws ssm start-session --target <instance-id>`, shell `ssm-user`, `sudo -i` for root). Everything typed and printed in a session is streamed to `/kuutti/ssm-sessions`, so a secret must never be printed there; the forms below keep the value inside the shell:
+
+   ```sh
+   aws ssm get-parameter --name /kuutti/<other env>/db-host                     # must be refused
+   PGPASSWORD="$(aws ssm get-parameter --name /kuutti/<env>/db-app-password --with-decryption --query Parameter.Value --output text)" \
+     psql "host=$(aws ssm get-parameter --name /kuutti/<env>/db-host --query Parameter.Value --output text) dbname=kuutti user=kuutti_app sslmode=require" -c 'select 1'
+   ```
+
+   From your machine: `aws iam get-role --role-name kuutti-api-<env> --query Role.PermissionsBoundary` shows the boundary.
+
+### Backups and rebuilding the box
+
+The box is stateless except for Dokploy's own configuration, the one manual island of ADR-001. A cron job at 02:17 UTC tars `/etc/dokploy` (Traefik configuration and certificates, application definitions) together with a dump of Dokploy's database and uploads it with SSE-KMS to `s3://kuutti-tfstate-<account>/dokploy-backup/<env>/`. The plan role can list the bucket but is denied `kms:Decrypt`, so it cannot read these objects.
+
+```sh
+aws s3 ls s3://kuutti-tfstate-438298963814/dokploy-backup/staging/
+```
+
+Rebuild from scratch, tested once per the #7 checklist:
+
+1. `tofu apply -replace=module.compute.aws_instance.api` in the environment. The Elastic IP moves with it; wait for `cloud-init status --wait` on the new box to report done (Dokploy is installed fresh).
+2. On the new box (`aws ssm start-session`, then `sudo -i`) fetch the latest backup; the instance role may read its own prefix: `aws s3 cp s3://kuutti-tfstate-<account>/dokploy-backup/<env>/dokploy-<stamp>.tgz /root/backup.tgz`.
+3. Still on the box: `docker service scale dokploy=0`, `tar -C / -xzf /root/backup.tgz etc/dokploy`, then the database into the fresh container (the dump holds only the `dokploy` database, so the container's generated password survives): `tar -C /root -xzf /root/backup.tgz dokploy-db.sql`, `c=$(docker ps -q --filter name=dokploy-postgres)`, `docker exec -i "$c" psql -U dokploy -d dokploy < /root/dokploy-db.sql`, finally `docker service scale dokploy=1`.
+4. Redeploy the application from Dokploy; certificates come back with `/etc/dokploy/traefik`.
+
+A newer AMI or an edited first-boot script never replaces a running box on its own (`ignore_changes`); rebuilding is always the explicit `-replace` above.
 
 ## Secrets
 
@@ -174,8 +233,8 @@ aws ssm put-parameter --name /kuutti/prod/hetu-hmac-key --type SecureString \
 
 `<offline-medium>` is an encrypted volume whose passphrase the association holds separately. Eject it afterwards; the association keeps it, not the maintainer's desk drawer.
 
-`db-app-password` is generated the same way without the offline copy, and rotated with `--overwrite`. The two signing keys are not random bytes: the CloudFront key is an RSA key pair whose public half becomes a CloudFront public-key resource (M3), and the Telia key is whatever the broker contract specifies (M2); their creation steps land with those milestones. The RDS master password is not managed here at all: `manage_master_user_password = true` leaves it with AWS so it never enters state.
+`db-app-password` is created by `scripts/db-app-role.sh`; rotating it is `ALTER ROLE kuutti_app PASSWORD '…'` through the same tunnel, `put-parameter --overwrite`, and a restart of the API. The two signing keys are not random bytes: the CloudFront key is an RSA key pair whose public half becomes a CloudFront public-key resource (M3), and the Telia key is whatever the broker contract specifies (M2); their creation steps land with those milestones. The RDS master password is not managed here at all: `manage_master_user_password = true` leaves it with AWS so it never enters state.
 
 ## What is not here
 
-Dokploy's own configuration (no provider exists; `user_data` installs it, its contents are backed up from `/etc/dokploy`), secret values, EAS and Expo configuration, store setup, the Telia contract, and creation of the AWS account.
+Dokploy's own configuration (no provider exists; `user_data` installs it, its contents are backed up from `/etc/dokploy`), DNS for the API host names, secret values, EAS and Expo configuration, store setup, the Telia contract, and creation of the AWS account.
