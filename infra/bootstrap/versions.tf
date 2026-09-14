@@ -8,17 +8,15 @@ terraform {
     }
   }
 
-  # Left commented on the first run: this configuration creates the bucket that
-  # holds the state. After the first apply, uncomment, run
-  # `tofu init -migrate-state`, and delete the local state files.
-  #
-  # backend "s3" {
-  #   bucket       = "kuutti-tfstate-<account-id>"
-  #   key          = "bootstrap/terraform.tfstate"
-  #   region       = "eu-central-1"
-  #   encrypt      = true
-  #   use_lockfile = true   # native S3 locking; DynamoDB locking is deprecated
-  # }
+  # This configuration created the bucket that holds its own state: the first
+  # apply ran with local state, then `tofu init -migrate-state` moved it here.
+  backend "s3" {
+    bucket       = "kuutti-tfstate-438298963814"
+    key          = "bootstrap/terraform.tfstate"
+    region       = "eu-central-1"
+    encrypt      = true
+    use_lockfile = true # native S3 locking; DynamoDB locking is deprecated
+  }
 }
 
 provider "aws" {
