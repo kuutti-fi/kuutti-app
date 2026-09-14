@@ -51,7 +51,12 @@ if ! aws sts get-caller-identity --profile "$profile" >/dev/null 2>&1; then
   aws sso login --sso-session "$session"
 fi
 arn=$(aws sts get-caller-identity --profile "$profile" --query Arn --output text)
+echo "signed in as $arn"
+
+# The root checks of the runbook, silent while they hold.
 summary=$(aws iam get-account-summary --profile "$profile" \
   --query 'SummaryMap.[AccountMFAEnabled,AccountAccessKeysPresent]' --output text | tr '\t' ' ')
-echo "signed in as $arn"
-echo "root MFA enabled, root access keys present: $summary (want: 1 0)"
+case "$summary" in
+  "1 0") ;;
+  *) echo "warning: root MFA enabled / root access keys present = $summary, expected 1 0 (docs/runbooks/aws-account-setup.md, section 2)" >&2 ;;
+esac

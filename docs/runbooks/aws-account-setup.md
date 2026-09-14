@@ -88,8 +88,9 @@ The first run writes the SSO profile (`[sso-session kuutti]`, `[profile kuutti]`
 
 ```
 signed in as arn:aws:sts::438298963814:assumed-role/AWSReservedSSO_AdministratorAccess_.../maintainer
-root MFA enabled, root access keys present: 1 0 (want: 1 0)
 ```
+
+It also runs the root checks of section 2 and warns only if root has no MFA or has an access key.
 
 Later runs only sign in again when the eight-hour session has expired. Because `[default]` is the SSO profile, `aws` and `tofu` need no `AWS_PROFILE` in any shell. For a bare `aws-login` on the PATH: `ln -s ~/WebstormProjects/kuutti/infra/scripts/aws-login /opt/homebrew/bin/aws-login`. No file under `~/.aws` ever contains a long-lived credential.
 
