@@ -1,0 +1,57 @@
+#!/usr/bin/env bash
+# aws-login: the terminal steps of docs/runbooks/aws-account-setup.md, section
+# 6, as one command. Configures the SSO profile once, signs in only when the
+# session has expired, and prints who you are plus the root-account check.
+# Writes nothing but the AWS CLI's own config; credentials stay in the CLI's
+# cache under ~/.aws/sso where the CLI puts them itself.
+#
+#   pnpm aws:login                # or symlink infra/scripts/aws-login into PATH
+#   aws-login --configure-only    # write the profile, do not sign in
+#
+# Override the access portal with KUUTTI_SSO_START_URL if it is ever renamed.
+set -euo pipefail
+
+account_id=438298963814
+role=AdministratorAccess
+region=eu-central-1
+session=kuutti
+start_url="${KUUTTI_SSO_START_URL:-https://d-99674f16c9.awsapps.com/start}"
+config="${AWS_CONFIG_FILE:-$HOME/.aws/config}"
+configure_only=false
+[ "${1:-}" = "--configure-only" ] && configure_only=true
+
+command -v aws >/dev/null || { echo "aws is missing: brew install awscli" >&2; exit 1; }
+command -v session-manager-plugin >/dev/null \
+  || echo "note: session-manager-plugin is missing; port forwards and db-app-role.sh need it: brew install --cask session-manager-plugin" >&2
+
+# One sso-session, and two profiles that use it: "kuutti", the name the
+# runbook uses, and "default", so aws and tofu need no AWS_PROFILE in any
+# shell. Existing sections are never rewritten.
+mkdir -p "$(dirname "$config")"
+touch "$config"
+if ! grep -q "^\[sso-session $session\]" "$config"; then
+  printf '\n[sso-session %s]\nsso_start_url = %s\nsso_region = %s\nsso_registration_scopes = sso:account:access\n' \
+    "$session" "$start_url" "$region" >> "$config"
+  echo "added [sso-session $session] to $config"
+fi
+for section in "profile $session" "default"; do
+  if ! grep -q "^\[$section\]" "$config"; then
+    printf '\n[%s]\nsso_session = %s\nsso_account_id = %s\nsso_role_name = %s\nregion = %s\noutput = json\n' \
+      "$section" "$session" "$account_id" "$role" "$region" >> "$config"
+    echo "added [$section] to $config"
+  fi
+done
+if $configure_only; then
+  echo "configured; run aws-login to sign in"
+  exit 0
+fi
+
+profile="${AWS_PROFILE:-default}"
+if ! aws sts get-caller-identity --profile "$profile" >/dev/null 2>&1; then
+  aws sso login --sso-session "$session"
+fi
+arn=$(aws sts get-caller-identity --profile "$profile" --query Arn --output text)
+summary=$(aws iam get-account-summary --profile "$profile" \
+  --query 'SummaryMap.[AccountMFAEnabled,AccountAccessKeysPresent]' --output text | tr '\t' ' ')
+echo "signed in as $arn"
+echo "root MFA enabled, root access keys present: $summary (want: 1 0)"

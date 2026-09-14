@@ -77,44 +77,21 @@ This is the only human login from here on. Root is used again only for billing, 
 
 ## 6. The terminal
 
-In your own terminal, never in an agent session:
+In your own terminal, never in an agent session. One command does the whole section:
 
 ```sh
-brew install opentofu awscli
-aws configure sso
+brew install awscli opentofu && brew install --cask session-manager-plugin
+pnpm aws:login
 ```
 
-The install is already done on the maintainer's machine.
-
-Answer the prompts:
+The first run writes the SSO profile (`[sso-session kuutti]`, `[profile kuutti]` and `[default]` in `~/.aws/config`, start URL `https://d-99674f16c9.awsapps.com/start`, account `438298963814`, role `AdministratorAccess`, region `eu-central-1`), opens the browser for the access-portal sign-in, then prints the identity and the root check:
 
 ```
-SSO session name (Recommended): kuutti
-SSO start URL [None]: https://<id>.awsapps.com/start
-SSO region [None]: eu-central-1
-SSO registration scopes [None]: sso:account:access
+signed in as arn:aws:sts::438298963814:assumed-role/AWSReservedSSO_AdministratorAccess_.../maintainer
+root MFA enabled, root access keys present: 1 0 (want: 1 0)
 ```
 
-The browser opens the access portal; approve the CLI. The wizard then picks the only account and the only role by itself and asks:
-
-```
-Default client Region [None]: eu-central-1
-CLI default output format [None]: json
-Profile name [<account-id>_AdministratorAccess]: kuutti
-```
-
-Then:
-
-```sh
-export AWS_PROFILE=kuutti
-aws sso login
-aws sts get-caller-identity
-aws iam get-account-summary --query 'SummaryMap.[AccountMFAEnabled,AccountAccessKeysPresent]'
-```
-
-Put the `export` in the shell profile you use for this project. The caller identity's Arn ends in `AWSReservedSSO_AdministratorAccess_<id>/maintainer`; the account summary prints `[1, 0]`, MFA on and no access keys.
-
-The session lasts eight hours; `aws sso login` again when it expires. No file under `~/.aws` ever contains a long-lived credential.
+Later runs only sign in again when the eight-hour session has expired. Because `[default]` is the SSO profile, `aws` and `tofu` need no `AWS_PROFILE` in any shell. For a bare `aws-login` on the PATH: `ln -s ~/WebstormProjects/kuutti/infra/scripts/aws-login /opt/homebrew/bin/aws-login`. No file under `~/.aws` ever contains a long-lived credential.
 
 ## 7. Hand over to the code
 

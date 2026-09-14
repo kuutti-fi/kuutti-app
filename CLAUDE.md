@@ -32,6 +32,7 @@ Root `package.json` is the source of truth; keep this list in sync with it.
 - `pnpm openapi` regenerates `apps/api/openapi.json` and the typed client paths in `packages/schema` from the route contracts (ADR-003); CI fails on drift.
 - API tests need Postgres: `DATABASE_URL`, or the local default `postgres://kuutti:kuutti@127.0.0.1:5432/kuutti_test`.
 - `pnpm --filter @kuutti/db generate --name <what>` after a schema change; commit the SQL and `drizzle/meta`, never edit them. `pnpm --filter @kuutti/db migrate` and `seed -- --env development`; seed refuses production. `pnpm check:schema-words` rejects columns for hetu, sex, or date of birth. `pnpm i18n:translate` (#13).
+- `pnpm aws:login` (`infra/scripts/aws-login`) configures the Identity Center profile once and signs in when the session has expired; every `aws` and `tofu` command then works without `AWS_PROFILE`. The agent never runs it: signing in is the maintainer's.
 - `pnpm env:doctor` checks Node, pnpm, Docker, `.env` and ports and prints the fix for each failure (`pnpm doctor` is pnpm's own). `docker compose up -d --wait` alone starts Postgres, MinIO (S3 stand-in, http://127.0.0.1:9000) and the mock bank IdP (http://127.0.0.1:8080/ftn); `env:up` does that for you. `node services/mock-idp/verify.ts` runs a bank login against the mock.
 
 Before pushing: typecheck, lint, and tests pass locally. Do not push red.

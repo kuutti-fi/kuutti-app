@@ -30,11 +30,10 @@ Everything in this section is click-ops by design: it is the part ADR-001 allows
 
 ```sh
 brew install opentofu awscli
-aws configure sso
-aws sts get-caller-identity
+pnpm aws:login
 ```
 
-`aws configure sso` runs once; afterwards `aws sso login` renews the session.
+`aws:login` (`scripts/aws-login`) writes the Identity Center profile on first use and signs in whenever the session has expired; the runbook's section 6 describes what it configures.
 
 Sign in from your own terminal. An agent working in this repository never types, reads or prints credentials and never opens `~/.aws/*`; it only runs `tofu` and `aws` commands that use the session you already hold.
 
@@ -164,7 +163,7 @@ Every IAM role declared in an environment or module sets `permissions_boundary` 
 
 ### Cost
 
-TD-4 budgets 50 EUR a month. One environment is roughly 30 EUR (instance, database, address, storage); both together are around 65 EUR, above the budget alert. Apply staging first and prod when there is something to release, or raise `monthly_budget_usd` in the bootstrap knowingly.
+TD-4 budgets 50 EUR a month. One environment is roughly 30 EUR (instance, database, address, storage); both together are around 65 EUR, above the budget alert. Decision (2026-09-14): staging is applied now, prod when there is a first release; raising `monthly_budget_usd` in the bootstrap is the deliberate step that goes with it.
 
 ### After the first apply, once per environment
 
