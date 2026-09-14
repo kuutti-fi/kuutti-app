@@ -20,11 +20,16 @@ updates:
       minor-and-patch:
         update-types: ["minor", "patch"]
 
-  # The API image's base image (apps/api/Dockerfile).
+  # The API image's base image (apps/api/Dockerfile). Node 22 is the
+  # project's engine (package.json), and newer Node images drop Corepack, so
+  # major bumps are a deliberate change, never a Dependabot pull request.
   - package-ecosystem: "docker"
     directory: "/apps/api"
     schedule:
       interval: "weekly"
+    ignore:
+      - dependency-name: "node"
+        update-types: ["version-update:semver-major"]
 
   # Provider version bumps for the infrastructure code, one per root with a
   # lockfile.

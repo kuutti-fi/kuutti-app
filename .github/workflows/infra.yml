@@ -1,9 +1,10 @@
 name: Infra
 
-# OpenTofu through the bootstrap roles (ADR-001, #8): plans for every root on
-# pull requests and on main with kuutti-ci-plan, the staging apply with
-# kuutti-ci-apply behind the staging environment. The bootstrap is planned for
-# drift but only ever applied by the maintainer, since it owns these roles.
+# OpenTofu through the bootstrap roles (ADR-001, #8): plans for both
+# environments on pull requests and on main with kuutti-ci-plan, the staging
+# apply with kuutti-ci-apply behind the staging environment. The bootstrap is
+# not planned here: its inputs live in the maintainer's gitignored tfvars and
+# it is only ever applied by the maintainer, since it owns these roles.
 # The prod apply lives in infra-prod.yml: it runs on release tags, and a
 # release-time workflow must not share a cache with pull-request runs.
 
@@ -54,7 +55,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        dir: [bootstrap, envs/staging, envs/prod]
+        dir: [envs/staging, envs/prod]
     env:
       AWS_ROLE_ARN: ${{ vars.AWS_PLAN_ROLE_ARN }}
       AWS_ROLE_SESSION_NAME: gha-plan-${{ github.run_id }}
