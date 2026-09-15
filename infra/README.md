@@ -173,7 +173,9 @@ The same in `infra/envs/prod`. Applies run through CI (#8): plans on every pull 
 | `infra.yml` | pull requests and `main` touching `infra/**` | `kuutti-ci-plan` | `fmt` for everything, `validate` and `plan` for `envs/staging` and `envs/prod`; each plan is a sticky comment on the pull request; on `main` it then applies `envs/staging` behind the `staging` environment with `kuutti-ci-apply` |
 | `infra-prod.yml` | `v*` tags | `kuutti-ci-apply` | applies `envs/prod` after the `prod` reviewer approves |
 | `infra-oidc.yml` | changes under `infra/**` | `kuutti-ci-plan` | proves the plan role still cannot decrypt a SecureString |
-| `build.yml` | every push and pull request | none | builds the API image on arm64 and smoke-tests it; on `main` pushes `ghcr.io/kuutti-fi/kuutti-api:<sha>` and `:main`, on a tag retags that same image as `:vX.Y.Z`, then calls `deploy.yml` and, for tags, `release.yml` |
+| `build.yml` | every push and pull request | none | builds the API image on arm64 and smoke-tests it; on `main` pushes `ghcr.io/kuutti-fi/kuutti-api:<sha>` and `:main`, on a pull request from this repository `:pr-<n>-<sha7>` for its preview, on a tag retags that same image as `:vX.Y.Z`, then calls `deploy.yml` and, for tags, `release.yml` |
+| `preview.yml` | pull requests from this repository | none (GitHub environment `preview`) | the three previews of #9: the pull request's image as Dokploy application `api-pr-<n>` on the staging box with database `kuutti_pr_<n>`, the web export on EAS Hosting as alias `pr-<n>`, an EAS Update on branch `pr-<n>` when native code changed; one sticky comment |
+| `preview-cleanup.yml` | pull request closed, nightly, by hand from `main` | `kuutti-ci-plan` | removes the Dokploy application, the EAS alias and branch, and drops `kuutti_pr_<n>` through the `kuutti-staging-preview-database` Run Command document; the nightly run also retires previews older than 7 days |
 
 OpenTofu and the OIDC exchange are installed by `.github/scripts/install-tofu.sh` and `aws-oidc.sh`; no third-party action touches credentials. The bootstrap is neither planned nor applied by CI: its inputs are in the maintainer's tfvars, and its plan is the maintainer's drift check.
 
@@ -187,7 +189,7 @@ Each environment composes the three modules (#7, TD-19):
 |---|---|---|
 | `network` | VPC /16, one public subnet, two private subnets, DB subnet group, `api` and `db` security groups | no NAT; `db` admits 5432 from the `api` group only; port 22 only for `ssh_cidrs`, empty by default |
 | `data` | RDS PostgreSQL 17 single-AZ, gp3 20→100 GB, 35-day PITR, `rds.force_ssl=1`, Extended Support declined, master password held by AWS | staging `db.t4g.micro`, prod `db.t4g.small` with deletion protection and a final snapshot |
-| `compute` | t4g.small Ubuntu 24.04 arm64, Elastic IP, IMDSv2, instance role `kuutti-api-<env>` under the boundary, log group `/kuutti/<env>/api`, first-boot script installing Dokploy | staging also owns the account-wide Session Manager preferences and `/kuutti/ssm-sessions` |
+| `compute` | t4g.small Ubuntu 24.04 arm64, Elastic IP, IMDSv2, instance role `kuutti-api-<env>` under the boundary, log group `/kuutti/<env>/api`, first-boot script installing Dokploy | staging also owns the account-wide Session Manager preferences, `/kuutti/ssm-sessions`, and the `kuutti-staging-preview-database` Run Command document (#9) |
 
 The composition then writes the non-secret parameters `app-env`, `log-level`, `db-host`, `db-port`, `db-name`, `db-user` under `/kuutti/<env>/`; the API turns them into `APP_ENV`, `DB_HOST` and so on at boot and composes `DATABASE_URL` with `sslmode=require`.
 
@@ -199,7 +201,7 @@ TD-4 budgets 50 EUR a month. One environment is roughly 30 EUR (instance, databa
 
 ### After the first apply, once per environment
 
-1. **Application role.** RDS is private, so the script tunnels through the box with Session Manager (`brew install --cask session-manager-plugin` once). It creates `kuutti_app`, makes it the owner of the `kuutti` database so migrations can run, and stores its password as `/kuutti/<env>/db-app-password`. The master password stays inside the script's process.
+1. **Application role.** RDS is private, so the script tunnels through the box with Session Manager (`brew install --cask session-manager-plugin` once). It creates `kuutti_app`, makes it the owner of the `kuutti` database so migrations can run, and stores its password as `/kuutti/<env>/db-app-password`. On staging it also creates `kuutti_preview` for the pull-request databases (#9): `CREATEDB`, owner of every `kuutti_pr_<n>`, and no `CONNECT` on `kuutti` (revoked from `PUBLIC`; the owner and the master keep theirs), password as `/kuutti/staging/db-preview-password`. The master password stays inside the script's process.
 
    ```sh
    infra/scripts/db-app-role.sh staging
@@ -234,6 +236,55 @@ TD-4 budgets 50 EUR a month. One environment is roughly 30 EUR (instance, databa
 
    From your machine: `aws iam get-role --role-name kuutti-api-<env> --query Role.PermissionsBoundary` shows the boundary.
 
+### Previews (#9)
+
+Every pull request from this repository gets three previews, deployed by `preview.yml` and removed by `preview-cleanup.yml` (TD-2, TD-19):
+
+| lane | what | where |
+|---|---|---|
+| API | the image `build.yml` pushed as `:pr-<n>-<sha7>`, run as Dokploy application `api-pr-<n>` in the `previews` project on the staging box; at boot the API creates `kuutti_pr_<n>` on the staging RDS instance, migrates and seeds it (never a copy of anything) | `https://pr-<n>.<PREVIEW_API_DOMAIN>` |
+| Web | `expo export --platform web` of the same commit with `EXPO_PUBLIC_API_URL` pointed at that API, on EAS Hosting | `https://<EAS_HOSTING_SUBDOMAIN>--pr-<n>.expo.app` |
+| Native | an EAS Update on branch `pr-<n>` when native code, auth, push, camera or the `@expo/fingerprint` hash changed against `main`; the QR code opens it in the dev client (#10). Dormant until `expo-updates` is configured | the comment's QR code |
+
+Dokploy's own GitHub-App preview deployments are not used. They exist only for applications built from a Git source, so they would build every pull request on the t4g.small (the rules say images are built in CI, not on the box), and the container receives nothing but `DOKPLOY_DEPLOY_URL`: no pull request number for `kuutti_pr_<n>`, no per-pull-request CORS origin. `preview.yml` instead creates a docker-source application per pull request through the same Dokploy API `deploy.yml` uses, with a member token that reaches only the `previews` project, and every address is a function of the pull request number, so the API allows exactly its own web origin.
+
+What a preview is: `APP_ENV=preview` and `PR_NUMBER=<n>` from Dokploy, everything else from `/kuutti/staging/*` through the instance role (the same role, unchanged; `/kuutti/prod/*` stays out of reach, as the cross-environment check under Checks proves). It connects as `kuutti_preview`, which owns the `kuutti_pr_*` databases and cannot open `kuutti`. Rate limit 30 requests a minute, `X-Robots-Tag: noindex`, pool of 3 connections. At most three previews at a time: a fourth pull request gets a comment and no deployment. The nightly sweep retires previews older than 7 days and those of pull requests that closed without a cleanup run. Forks and Dependabot get no secrets, so no preview.
+
+**Trust.** A preview runs a pull request's code on the staging box before anyone has reviewed it, with the staging instance role: it can read every `/kuutti/staging/*` parameter (from M2 that includes the staging hetu HMAC key and the Telia test-bed key), and its Dokploy token can attach any host name, the staging API's included, to a preview container. Opening a pull request from this repository therefore means staging-level trust, which today is the maintainer alone. Two things bound it: the separate database role above keeps preview code out of staging data by construction, and the `preview` environment can require the maintainer's approval before each deployment, which turns "every push" into "every push the maintainer clicked". Switch that on before adding collaborators who are not staging operators:
+
+```sh
+gh api -X PUT "$R/environments/preview" --input - <<'JSON'
+{"wait_timer":0,"reviewers":[{"type":"User","id":9991098}],"prevent_self_review":false,"deployment_branch_policy":null}
+JSON
+```
+
+Related, for the milestones that touch it: the Dokploy member never gets the volume or mount permissions (a bind mount of the Docker socket is root on the box); `EXPO_TOKEN` is project-scoped, so once #10 configures `expo-updates` the same token could publish to the `production` branch, which is why the update code-signing key lives only in the release path and never in `preview`; and at M2 previews must keep running against the mock IdP (rules/mobile.md), so `parseConfig` will refuse `APP_ENV=preview` with a real Telia issuer. The release path's own gap, that a pull request holding `packages: write` can push any tag of the API image and a later release tag would retag it, predates previews and is tracked separately (build provenance attestation, #8 follow-up).
+
+Once, after staging is applied and its Dokploy is configured:
+
+1. **Preview role.** `kuutti_preview` from step 1 above; on a staging instance whose role script ran before #9, re-run only that part by hand through the same tunnel.
+2. **DNS.** A wildcard record `*.preview.api.staging.<domain>` to `tofu output -raw public_ip`. Traefik issues one Let's Encrypt certificate per preview host.
+3. **Dokploy.** A project `previews`; its default environment holds the applications, and its id (from the environment's URL in Dokploy) is `DOKPLOY_ENVIRONMENT_ID`. A member user `ci-preview` (Settings, Users) with access to the `previews` project and that environment only, permissions to create and delete services and to create domains, nothing else (no volumes, no Traefik files, no Docker access); sign in as that member and generate its API key. The staging `api` application stays out of the member's reach. Check as the member that `application.one` on the staging application's id is refused before enabling previews.
+4. **EAS.** Once in `apps/mobile`: `eas init` writes `extra.eas.projectId` into `app.json`, commit it. The first hosting deploy picks the subdomain that every preview alias hangs off: `npx expo export --platform web && eas deploy --dev-domain kuutti`; that name is `EAS_HOSTING_SUBDOMAIN`. On expo.dev, a robot user with the Hosting and Update permissions provides `EXPO_TOKEN`. The native lane starts publishing when #10 adds `expo-updates` (`updates.url` in `app.json`); nothing here changes then.
+5. **Bootstrap.** `tofu apply` in `infra/bootstrap` for the plan role's `preview-cleanup` policy (it may send exactly the document below to exactly the staging box). The next staging apply lands the document `kuutti-staging-preview-database`.
+6. **GitHub.** The environment `preview` with no deployment branch restriction (pull requests deploy from any branch of this repository), four variables and two secrets, then the switch:
+
+   ```sh
+   R=repos/kuutti-fi/kuutti-app
+   gh api -X PUT "$R/environments/preview" --input - <<'JSON'
+   {"wait_timer":0,"reviewers":[],"deployment_branch_policy":null}
+   JSON
+   gh variable set DOKPLOY_URL --env preview --body https://dokploy.staging.<domain>
+   gh variable set DOKPLOY_ENVIRONMENT_ID --env preview --body <id>
+   gh variable set PREVIEW_API_DOMAIN --env preview --body preview.api.staging.<domain>
+   gh variable set EAS_HOSTING_SUBDOMAIN --env preview --body kuutti
+   gh secret set DOKPLOY_TOKEN --env preview     # the ci-preview member's key
+   gh secret set EXPO_TOKEN --env preview        # the robot user's token
+   gh variable set PREVIEWS_ENABLED --body true
+   ```
+
+Done when (the issue's list): a pull request that changes a screen gets its comment within 10 minutes and the page shows the version and commit of its own API; `/health` of the preview reports the pull request's commit; `psql -l` through the tunnel lists `kuutti_pr_<n>` while the pull request is open and not after it closes; a row written through one preview is absent from another; the fourth concurrent pull request gets the limit comment; the workflow's CORS step refuses the staging web origin and another pull request's; the preview reads only `/kuutti/staging/*`.
+
 ### Backups and rebuilding the box
 
 The box is stateless except for Dokploy's own configuration, the one manual island of ADR-001. A cron job at 02:17 UTC tars `/etc/dokploy` (Traefik configuration and certificates, application definitions) together with a dump of Dokploy's database and uploads it with SSE-KMS to `s3://kuutti-tfstate-<account>/dokploy-backup/<env>/`. The plan role can list the bucket but is denied `kms:Decrypt`, so it cannot read these objects.
@@ -261,6 +312,7 @@ Secret parameters are not resources in this code: the AWS provider would store t
 | `/kuutti/<env>/telia-signing-key` | API; the Telia OIDC exchange | M2 |
 | `/kuutti/<env>/cloudfront-signing-key` | API; signed media URLs | M3 |
 | `/kuutti/<env>/db-app-password` | API; its own database role | #7 |
+| `/kuutti/staging/db-preview-password` | a preview API as `kuutti_preview` (creates, owns and serves `kuutti_pr_<n>`); the `preview-database` Run Command document that drops it | #9 |
 | `/kuutti/ci-check/secret` | nothing; proves the plan role cannot decrypt | #6 |
 
 All are `SecureString` under the default `aws/ssm` key. The plan role is denied `kms:Decrypt`, so it can list them but never read them.
@@ -279,4 +331,4 @@ aws ssm put-parameter --name /kuutti/prod/hetu-hmac-key --type SecureString \
 
 ## What is not here
 
-Dokploy's own configuration (no provider exists; `user_data` installs it, its contents are backed up from `/etc/dokploy`), DNS for the API host names, secret values, EAS and Expo configuration, store setup, the Telia contract, and creation of the AWS account.
+Dokploy's own configuration (no provider exists; `user_data` installs it, its contents are backed up from `/etc/dokploy`), DNS for the API host names (the preview wildcard included), secret values, EAS and Expo configuration (the project id in `app.json`, the hosting subdomain, the robot token), store setup, the Telia contract, and creation of the AWS account.

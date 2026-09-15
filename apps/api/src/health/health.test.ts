@@ -45,10 +45,11 @@ describe("GET /health", () => {
     expect(refused.headers.get("access-control-allow-origin")).toBeNull();
   });
 
-  test("sets security headers", async ({ ctx }) => {
+  test("sets security headers and asks crawlers to stay away", async ({ ctx }) => {
     const res = await ctx.app.request("/health");
     expect(res.headers.get("x-content-type-options")).toBe("nosniff");
     expect(res.headers.get("x-frame-options")).toBe("SAMEORIGIN");
+    expect(res.headers.get("x-robots-tag")).toBe("noindex, nofollow");
   });
 });
 

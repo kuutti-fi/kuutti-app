@@ -13,7 +13,7 @@ The four surfaces that matter most, in order: the OIDC exchange with Telia, the 
 
 ## Security misconfiguration
 
-- [ ] CORS: product API routes refuse browser origins; only the admin SPA and waitlist site are allowlisted.
+- [ ] CORS: product API routes refuse browser origins; only the admin SPA, the waitlist site, and a pull-request preview's own web origin are allowlisted.
 - [ ] No debug or introspection routes outside `NODE_ENV=development`.
 - [ ] Deployed configuration comes only from SSM Parameter Store via the instance role; `.env` is local-only.
 - [ ] CloudFront is the only public entry; nothing listens on plain HTTP.

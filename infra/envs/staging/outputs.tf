@@ -27,3 +27,8 @@ output "log_group_name" {
 output "backup_prefix" {
   value = module.compute.backup_prefix
 }
+
+output "preview_database_document" {
+  description = "Run Command document preview-cleanup.yml sends to drop a pull request's database (#9)."
+  value       = module.compute.preview_database_document
+}

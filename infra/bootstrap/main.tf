@@ -299,6 +299,41 @@ resource "aws_iam_role_policy" "ci_plan_deny_data" {
   policy = data.aws_iam_policy_document.ci_plan_deny_data.json
 }
 
+# Pull-request previews (#9): preview-cleanup.yml drops kuutti_pr_<n> on the
+# staging box through the one Run Command document envs/staging declares
+# (modules/compute). The plan role, assumable from any pull request, may send
+# exactly that document to exactly that box and nothing else; the document
+# validates its one parameter, so the most a pull request can do is drop
+# another pull request's preview database. Both halves are needed: SendCommand
+# is authorised against the document and against the instance.
+data "aws_iam_policy_document" "ci_plan_preview_cleanup" {
+  statement {
+    sid       = "PreviewDatabaseDocument"
+    effect    = "Allow"
+    actions   = ["ssm:SendCommand"]
+    resources = ["arn:aws:ssm:${var.region}:${local.account_id}:document/${var.project}-staging-preview-database"]
+  }
+
+  statement {
+    sid       = "StagingBoxOnly"
+    effect    = "Allow"
+    actions   = ["ssm:SendCommand"]
+    resources = ["arn:aws:ec2:${var.region}:${local.account_id}:instance/*"]
+
+    condition {
+      test     = "StringEquals"
+      variable = "ssm:resourceTag/Name"
+      values   = ["${var.project}-staging"]
+    }
+  }
+}
+
+resource "aws_iam_role_policy" "ci_plan_preview_cleanup" {
+  name   = "preview-cleanup"
+  role   = aws_iam_role.ci_plan.id
+  policy = data.aws_iam_policy_document.ci_plan_preview_cleanup.json
+}
+
 resource "aws_iam_role" "ci_apply" {
   name                 = "${var.project}-ci-apply"
   path                 = local.iam_path

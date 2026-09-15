@@ -226,6 +226,57 @@ resource "aws_ssm_document" "session_preferences" {
 }
 
 # ---------------------------------------------------------------------------
+# Pull-request preview databases (#9, TD-19), staging only. The preview API
+# creates kuutti_pr_<n> itself at boot; dropping it when the pull request
+# closes is this Run Command document, sent by preview-cleanup.yml through the
+# plan role, which the bootstrap allows to send exactly this document to
+# exactly this box. The one parameter is validated here, so the most a pull
+# request can do is drop another pull request's preview database. Runs as root
+# on the box with the instance role, which reads only its own SSM prefix, and
+# connects as the preview role, which owns every kuutti_pr_<n> and nothing else.
+# ---------------------------------------------------------------------------
+
+resource "aws_ssm_document" "preview_database" {
+  count = var.preview_databases ? 1 : 0
+
+  name            = "${local.name}-preview-database"
+  document_type   = "Command"
+  document_format = "JSON"
+
+  content = jsonencode({
+    schemaVersion = "2.2"
+    description   = "Drops the pull-request preview database ${var.project}_pr_<prNumber> on ${local.name} (#9). Sent by preview-cleanup.yml."
+    parameters = {
+      prNumber = {
+        type           = "String"
+        description    = "Pull request number"
+        allowedPattern = "^[0-9]{1,7}$"
+      }
+    }
+    mainSteps = [{
+      action = "aws:runShellScript"
+      name   = "dropPreviewDatabase"
+      inputs = {
+        timeoutSeconds = "120"
+        # The password stays in the shell: nothing here echoes it, and the
+        # invocation output that CI prints is psql's one line.
+        runCommand = [
+          "set -euo pipefail",
+          "export PATH=\"$PATH:/snap/bin\"",
+          "n='{{ prNumber }}'",
+          "host=$(aws ssm get-parameter --region ${local.region} --name ${local.ssm_prefix}db-host --query Parameter.Value --output text)",
+          # Two lines: `export X=$(cmd)` returns export's status and would hide a failed fetch from set -e.
+          "PGPASSWORD=$(aws ssm get-parameter --region ${local.region} --name ${local.ssm_prefix}db-preview-password --with-decryption --query Parameter.Value --output text)",
+          "export PGPASSWORD",
+          "psql \"host=$host dbname=postgres user=${var.project}_preview sslmode=require\" -v ON_ERROR_STOP=1 -c \"DROP DATABASE IF EXISTS ${var.project}_pr_$n WITH (FORCE)\"",
+          "echo \"dropped ${var.project}_pr_$n\"",
+        ]
+      }
+    }]
+  })
+}
+
+# ---------------------------------------------------------------------------
 # The box.
 # ---------------------------------------------------------------------------
 

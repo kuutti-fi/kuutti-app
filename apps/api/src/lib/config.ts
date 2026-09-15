@@ -25,6 +25,10 @@ const Env = z.object({
   DB_NAME: z.string().min(1).optional(),
   DB_USER: z.string().min(1).optional(),
   DB_APP_PASSWORD: z.string().min(1).optional(),
+  // The preview role (#9): CREATEDB, owner of every kuutti_pr_<n>, no
+  // CONNECT on the environment's own database. Staging parameters only.
+  DB_PREVIEW_USER: z.string().min(1).optional(),
+  DB_PREVIEW_PASSWORD: z.string().min(1).optional(),
   DB_POOL_MAX: z.coerce.number().int().min(1).max(50).default(10),
   MIGRATIONS_DIR: z.string().min(1).default("../../packages/db/drizzle"),
 
@@ -46,15 +50,36 @@ const Env = z.object({
   OIDC_CLIENT_ID: z.string().min(1).optional(),
   OIDC_REDIRECT_URI: z.string().min(1).optional(),
   BODY_LIMIT_BYTES: z.coerce.number().int().min(1024).default(1_048_576),
-  RATE_LIMIT_PER_MINUTE: z.coerce.number().int().min(1).default(120),
+  RATE_LIMIT_PER_MINUTE: z.coerce.number().int().min(1).optional(),
   SSM_PARAMETER_PREFIX: z.string().min(1).optional(),
+
+  // Pull-request preview (#9): the process creates and seeds kuutti_pr_<n>
+  // on the staging instance and serves from it. Set only by the preview
+  // deployment; refused outside APP_ENV=preview.
+  PR_NUMBER: z
+    .string()
+    .regex(/^[0-9]{1,7}$/, "a pull request number")
+    .optional(),
 });
+
+/** Previews throttle harder than staging: nothing real runs there (#9). */
+const RATE_LIMIT_DEFAULT = { preview: 30, other: 120 } as const;
 
 export type AppEnv = z.infer<typeof AppEnv>;
 
-export type Config = z.infer<typeof Env> & {
+export type PreviewConfig = {
+  prNumber: string;
+  /** kuutti_pr_<n>: the database this process serves from, created on first boot. */
+  database: string;
+  /** The instance's maintenance database (postgres), used only to CREATE DATABASE. */
+  adminDatabaseUrl: string;
+};
+
+export type Config = Omit<z.infer<typeof Env>, "RATE_LIMIT_PER_MINUTE"> & {
+  RATE_LIMIT_PER_MINUTE: number;
   databaseUrl: string;
   corsAllowedOrigins: ReadonlySet<string>;
+  preview?: PreviewConfig;
 };
 
 export class ConfigError extends Error {
@@ -77,21 +102,74 @@ export function parseConfig(raw: Record<string, string | undefined>): Config {
     throw new ConfigError(missing, issues);
   }
   const env = result.data;
-  const databaseUrl = env.DATABASE_URL ?? composeDatabaseUrl(env);
-  if (!databaseUrl) {
+  const preview = previewConfig(env);
+  const baseUrl = env.DATABASE_URL ?? composeDatabaseUrl(env, preview !== undefined);
+  if (!baseUrl) {
     throw new ConfigError(
       ["DATABASE_URL"],
-      ["DATABASE_URL: set it, or set DB_HOST, DB_NAME, DB_USER and DB_APP_PASSWORD"],
+      [
+        preview
+          ? "DATABASE_URL: set it, or set DB_HOST, DB_NAME, DB_PREVIEW_USER and DB_PREVIEW_PASSWORD"
+          : "DATABASE_URL: set it, or set DB_HOST, DB_NAME, DB_USER and DB_APP_PASSWORD",
+      ],
     );
   }
-  return { ...env, databaseUrl, corsAllowedOrigins: allowedOrigins(env) };
+  const rateLimit =
+    env.RATE_LIMIT_PER_MINUTE ??
+    (env.APP_ENV === "preview" ? RATE_LIMIT_DEFAULT.preview : RATE_LIMIT_DEFAULT.other);
+  return {
+    ...env,
+    RATE_LIMIT_PER_MINUTE: rateLimit,
+    databaseUrl: preview ? withDatabase(baseUrl, preview.database) : baseUrl,
+    corsAllowedOrigins: allowedOrigins(env),
+    ...(preview
+      ? { preview: { ...preview, adminDatabaseUrl: withDatabase(baseUrl, "postgres") } }
+      : {}),
+  };
 }
 
-function composeDatabaseUrl(env: z.infer<typeof Env>): string | undefined {
-  if (!env.DB_HOST || !env.DB_NAME || !env.DB_USER || !env.DB_APP_PASSWORD) return undefined;
-  const user = encodeURIComponent(env.DB_USER);
-  const password = encodeURIComponent(env.DB_APP_PASSWORD);
-  return `postgres://${user}:${password}@${env.DB_HOST}:${env.DB_PORT}/${env.DB_NAME}?sslmode=require`;
+/**
+ * A preview is a pull request number on APP_ENV=preview, nothing else: the
+ * number names the database, and a staging or production process that
+ * received one by mistake must not start against kuutti_pr_<n>.
+ */
+function previewConfig(
+  env: z.infer<typeof Env>,
+): Omit<PreviewConfig, "adminDatabaseUrl"> | undefined {
+  if (env.PR_NUMBER === undefined) {
+    if (env.APP_ENV === "preview") {
+      throw new ConfigError(["PR_NUMBER"], ["PR_NUMBER: required when APP_ENV is preview"]);
+    }
+    return undefined;
+  }
+  if (env.APP_ENV !== "preview") {
+    throw new ConfigError([], [`PR_NUMBER: only valid with APP_ENV=preview, not ${env.APP_ENV}`]);
+  }
+  return { prNumber: env.PR_NUMBER, database: `kuutti_pr_${env.PR_NUMBER}` };
+}
+
+/** Same host and options, another database; a URL that does not parse never reaches a log line. */
+function withDatabase(url: string, database: string): string {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    throw new ConfigError(["DATABASE_URL"], ["DATABASE_URL: not a URL"]);
+  }
+  parsed.pathname = `/${database}`;
+  return parsed.toString();
+}
+
+/**
+ * From the SSM-shaped parts. A preview connects as the preview role, never as
+ * the environment's application role: the preview role owns kuutti_pr_<n> and
+ * cannot connect to the environment's own database (#9).
+ */
+function composeDatabaseUrl(env: z.infer<typeof Env>, preview: boolean): string | undefined {
+  const user = preview ? env.DB_PREVIEW_USER : env.DB_USER;
+  const password = preview ? env.DB_PREVIEW_PASSWORD : env.DB_APP_PASSWORD;
+  if (!env.DB_HOST || !env.DB_NAME || !user || !password) return undefined;
+  return `postgres://${encodeURIComponent(user)}:${encodeURIComponent(password)}@${env.DB_HOST}:${env.DB_PORT}/${env.DB_NAME}?sslmode=require`;
 }
 
 /**

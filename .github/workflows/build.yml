@@ -4,7 +4,9 @@ name: Build
 # smoke-tested, and on main or a v* tag pushed to GHCR. A tag whose commit was
 # already built on main reuses that exact image, so production runs the bytes
 # staging ran. Deploys and the release draft are the reusable workflows this
-# one calls.
+# one calls. A pull request from this repository also gets its image pushed
+# as :pr-<n>-<sha7>, which preview.yml deploys to the staging box (#9); forks
+# and Dependabot have no token that can push, so they get none.
 
 on:
   push:
@@ -56,19 +58,35 @@ jobs:
         env:
           REF_NAME: ${{ github.ref_name }}
           IS_TAG: ${{ startsWith(github.ref, 'refs/tags/v') }}
+          # A pull request builds its merge with main but identifies as the
+          # commit the reviewer sees; /health of its preview reports that.
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_FROM_THIS_REPO: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]' }}
         run: |
-          short="${GITHUB_SHA::7}"
-          if [ "$IS_TAG" = "true" ]; then version="${REF_NAME#v}"; else version="0.0.0-$short"; fi
+          if [ -n "$PR_NUMBER" ]; then
+            short="${PR_HEAD_SHA::7}"
+            version="0.0.0-pr$PR_NUMBER-$short"
+            preview_tags="$IMAGE:pr-$PR_NUMBER-$short"$'\n'"$IMAGE:pr-$PR_NUMBER"
+          else
+            short="${GITHUB_SHA::7}"
+            if [ "$IS_TAG" = "true" ]; then version="${REF_NAME#v}"; else version="0.0.0-$short"; fi
+            preview_tags=""
+          fi
           {
             echo "short_sha=$short"
             echo "version=$version"
             echo "built_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            echo "push_preview=$PR_FROM_THIS_REPO"
+            echo "preview_tags<<EOF"
+            echo "$preview_tags"
+            echo "EOF"
           } >> "$GITHUB_OUTPUT"
 
       - uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
 
       - name: Log in to GHCR
-        if: github.event_name == 'push'
+        if: github.event_name == 'push' || steps.identity.outputs.push_preview == 'true'
         uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
           registry: ghcr.io
@@ -131,6 +149,24 @@ jobs:
             sleep 1
           done
           echo "no healthy answer"; docker logs api; exit 1
+
+      # Same layers as the smoke-test build (the cache hits), pushed under the
+      # pull request's tags for preview.yml. No provenance: nothing ships from it.
+      - name: Push the pull request's image for its preview
+        if: steps.identity.outputs.push_preview == 'true'
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        with:
+          context: .
+          file: apps/api/Dockerfile
+          platforms: linux/arm64
+          push: true
+          tags: ${{ steps.identity.outputs.preview_tags }}
+          provenance: false
+          build-args: |
+            APP_VERSION=${{ steps.identity.outputs.version }}
+            GIT_COMMIT=${{ steps.identity.outputs.short_sha }}
+            BUILT_AT=${{ steps.identity.outputs.built_at }}
+          cache-from: type=gha
 
       - name: Push with provenance and SBOM
         id: push

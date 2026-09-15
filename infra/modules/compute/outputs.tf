@@ -26,3 +26,8 @@ output "ssm_prefix" {
 output "backup_prefix" {
   value = "s3://${var.backup_bucket}/${local.backup_prefix}"
 }
+
+output "preview_database_document" {
+  description = "Name of the Run Command document preview-cleanup.yml sends to drop kuutti_pr_<n>; null where previews do not run."
+  value       = var.preview_databases ? aws_ssm_document.preview_database[0].name : null
+}

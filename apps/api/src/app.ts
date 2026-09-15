@@ -31,6 +31,12 @@ export function createApp(deps: Deps) {
   app.use("*", requestId());
   app.use("*", requestLogger(deps.logger));
   app.use("*", secureHeaders());
+  // No environment of this API is a web surface (rule 8); previews have public
+  // URLs that a crawler may still find (#9).
+  app.use("*", async (c, next) => {
+    await next();
+    c.header("X-Robots-Tag", "noindex, nofollow");
+  });
   app.use("*", corsAllowlist(deps.config.corsAllowedOrigins));
   app.use(
     "*",

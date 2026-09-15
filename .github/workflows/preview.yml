@@ -1,0 +1,365 @@
+name: Preview
+
+# Three preview lanes per pull request (#9, TD-2, TD-19), one sticky comment.
+#   api     the image build.yml pushed for this pull request runs on the
+#           staging box as its own Dokploy application with its own
+#           kuutti_pr_<n> database, at https://pr-<n>.<PREVIEW_API_DOMAIN>
+#   web     the Expo web export of the same commit on EAS Hosting, pointed at
+#           that API, at https://<EAS_HOSTING_SUBDOMAIN>--pr-<n>.expo.app
+#   native  when native code, auth, push, camera or the fingerprint changed
+#           against main: an EAS Update on branch pr-<n> for the dev client
+#           (#10), with a QR code; dormant until expo-updates is configured
+# Everything a lane needs lives in the GitHub environment "preview" and the
+# repository variable PREVIEWS_ENABLED switches the lanes on (infra/README.md,
+# Previews). Forks and Dependabot get no secrets, so they get no preview.
+# Removal is preview-cleanup.yml.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  push:
+    branches: [main]
+    paths: ["apps/mobile/**", "pnpm-lock.yaml", ".github/workflows/preview.yml"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: preview-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  IMAGE: ghcr.io/kuutti-fi/kuutti-api
+  EAS_CLI_VERSION: "24.3.0"
+  PREVIEW_LIMIT: "3"
+
+jobs:
+  api:
+    name: api preview
+    if: >-
+      github.event_name == 'pull_request'
+      && vars.PREVIEWS_ENABLED == 'true'
+      && github.event.pull_request.head.repo.full_name == github.repository
+      && github.actor != 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+      pull-requests: write
+    environment:
+      name: preview
+      url: ${{ steps.names.outputs.api_url }}
+    outputs:
+      deployed: ${{ steps.deploy.outputs.deployed }}
+      api_url: ${{ steps.names.outputs.api_url }}
+      web_origin: ${{ steps.names.outputs.web_origin }}
+      short_sha: ${{ steps.names.outputs.short_sha }}
+      database: ${{ steps.names.outputs.database }}
+    env:
+      PR_NUMBER: ${{ github.event.pull_request.number }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: .github/scripts
+
+      # Every preview address is a function of the pull request number, so the
+      # API can allow exactly its own web origin before that origin exists.
+      - name: Names
+        id: names
+        env:
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PREVIEW_API_DOMAIN: ${{ vars.PREVIEW_API_DOMAIN }}
+          EAS_HOSTING_SUBDOMAIN: ${{ vars.EAS_HOSTING_SUBDOMAIN }}
+        run: |
+          : "${PREVIEW_API_DOMAIN:?set the preview environment variable PREVIEW_API_DOMAIN}"
+          : "${EAS_HOSTING_SUBDOMAIN:?set the preview environment variable EAS_HOSTING_SUBDOMAIN}"
+          short="${HEAD_SHA::7}"
+          {
+            echo "short_sha=$short"
+            echo "image=$IMAGE:pr-$PR_NUMBER-$short"
+            echo "api_url=https://pr-$PR_NUMBER.$PREVIEW_API_DOMAIN"
+            echo "web_origin=https://$EAS_HOSTING_SUBDOMAIN--pr-$PR_NUMBER.expo.app"
+            echo "database=kuutti_pr_$PR_NUMBER"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Wait for the image build.yml pushes for this commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          IMAGE_REF: ${{ steps.names.outputs.image }}
+        run: |
+          echo "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+          for _ in $(seq 1 72); do
+            if docker manifest inspect "$IMAGE_REF" >/dev/null 2>&1; then echo "found $IMAGE_REF"; exit 0; fi
+            sleep 10
+          done
+          echo "::error::$IMAGE_REF did not appear within 12 minutes; is the Build workflow green?"
+          exit 1
+
+      # At most PREVIEW_LIMIT previews on the box (TD-2). A pull request that
+      # already holds one keeps it; a new one beyond the limit gets the comment
+      # and nothing else.
+      - name: Deploy the preview API, or refuse at the limit
+        id: deploy
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DOKPLOY_URL: ${{ vars.DOKPLOY_URL }}
+          DOKPLOY_TOKEN: ${{ secrets.DOKPLOY_TOKEN }}
+          DOKPLOY_ENVIRONMENT_ID: ${{ vars.DOKPLOY_ENVIRONMENT_ID }}
+          PREVIEW_API_DOMAIN: ${{ vars.PREVIEW_API_DOMAIN }}
+          IMAGE_REF: ${{ steps.names.outputs.image }}
+          WEB_ORIGIN: ${{ steps.names.outputs.web_origin }}
+          SHORT_SHA: ${{ steps.names.outputs.short_sha }}
+        run: |
+          previews=$(.github/scripts/dokploy-preview.sh list)
+          mine=$(jq --arg pr "$PR_NUMBER" '[.[] | select(.pr == $pr)] | length' <<< "$previews")
+          others=$(jq -r --arg pr "$PR_NUMBER" '[.[] | select(.pr != $pr) | "#" + .pr] | join(", ")' <<< "$previews")
+          count=$(jq --arg pr "$PR_NUMBER" '[.[] | select(.pr != $pr)] | length' <<< "$previews")
+          if [ "$mine" = 0 ] && [ "$count" -ge "$PREVIEW_LIMIT" ]; then
+            NOTICE="No preview: the box holds its $PREVIEW_LIMIT previews ($others). Close one of those pull requests, or wait for the nightly sweep to retire previews older than 7 days, then push again." \
+              .github/scripts/preview-comment.sh
+            echo "::notice::preview limit reached ($others); nothing deployed"
+            echo "deployed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          .github/scripts/dokploy-preview.sh deploy "$PR_NUMBER" "$IMAGE_REF" "$WEB_ORIGIN"
+          echo "deployed=true" >> "$GITHUB_OUTPUT"
+
+      - name: /health reports this pull request's commit with its database migrated
+        if: steps.deploy.outputs.deployed == 'true'
+        env:
+          API_URL: ${{ steps.names.outputs.api_url }}
+          COMMIT: ${{ steps.names.outputs.short_sha }}
+        run: .github/scripts/wait-healthy.sh
+
+      # Rule 8: the preview answers its own web origin and refuses every other
+      # browser origin, the staging web app and another pull request's included.
+      - name: Only this pull request's web origin passes CORS
+        if: steps.deploy.outputs.deployed == 'true'
+        env:
+          API_URL: ${{ steps.names.outputs.api_url }}
+          WEB_ORIGIN: ${{ steps.names.outputs.web_origin }}
+          EAS_HOSTING_SUBDOMAIN: ${{ vars.EAS_HOSTING_SUBDOMAIN }}
+        run: |
+          allowed() {
+            curl -fsS -o /dev/null -D - -X OPTIONS -H "Origin: $1" -H 'Access-Control-Request-Method: GET' "$API_URL/health" \
+              | tr -d '\r' | grep -i '^access-control-allow-origin:' | cut -d' ' -f2-
+          }
+          own=$(allowed "$WEB_ORIGIN")
+          [ "$own" = "$WEB_ORIGIN" ] || { echo "::error::own origin $WEB_ORIGIN refused (got '$own')"; exit 1; }
+          for origin in "https://$EAS_HOSTING_SUBDOMAIN.expo.app" "https://$EAS_HOSTING_SUBDOMAIN--pr-0.expo.app" "https://example.com"; do
+            got=$(allowed "$origin" || true)
+            [ -z "$got" ] || { echo "::error::$origin was allowed"; exit 1; }
+            echo "refused $origin"
+          done
+          robots=$(curl -fsS -o /dev/null -D - "$API_URL/health" | tr -d '\r' | grep -i '^x-robots-tag:' || true)
+          grep -qi noindex <<< "$robots" || { echo "::error::no X-Robots-Tag: noindex"; exit 1; }
+          echo "allowed $own only; $robots"
+
+      - name: Comment
+        if: steps.deploy.outputs.deployed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHORT_SHA: ${{ steps.names.outputs.short_sha }}
+          API_URL: ${{ steps.names.outputs.api_url }}
+          DATABASE: ${{ steps.names.outputs.database }}
+        run: .github/scripts/preview-comment.sh
+
+  web:
+    name: web preview
+    needs: api
+    if: needs.api.outputs.deployed == 'true'
+    runs-on: ubuntu-24.04-arm
+    permissions:
+      contents: read
+      pull-requests: write
+    environment:
+      name: preview
+      url: ${{ needs.api.outputs.web_origin }}
+    outputs:
+      web_url: ${{ steps.deploy.outputs.url }}
+    env:
+      PR_NUMBER: ${{ github.event.pull_request.number }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/pnpm
+
+      # EXPO_PUBLIC_* is inlined at export time: this bundle can only ever talk
+      # to this pull request's API. The web target runs against seed data and
+      # the mock IdP only (rules/mobile.md); it is not a product surface.
+      - name: Export the web target against the preview API
+        working-directory: apps/mobile
+        env:
+          EXPO_PUBLIC_API_URL: ${{ needs.api.outputs.api_url }}
+        run: pnpm exec expo export --platform web
+
+      - name: Deploy to EAS Hosting as pr-${{ github.event.pull_request.number }}
+        id: deploy
+        working-directory: apps/mobile
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+          EXPECTED: ${{ needs.api.outputs.web_origin }}
+        run: |
+          out=$(npx --yes "eas-cli@$EAS_CLI_VERSION" deploy --alias "pr-$PR_NUMBER" --json --non-interactive)
+          url=$(jq -r '(.aliases // [])[0].url // .url' <<< "$out")
+          url="${url%/}"
+          [ "$url" = "$EXPECTED" ] || { echo "::error::EAS Hosting gave $url, the API allows $EXPECTED: check EAS_HOSTING_SUBDOMAIN"; exit 1; }
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+          echo "$url"
+
+      - name: The page is served and its bundle points at the preview API
+        env:
+          URL: ${{ steps.deploy.outputs.url }}
+          API_URL: ${{ needs.api.outputs.api_url }}
+        run: |
+          for _ in $(seq 1 30); do
+            if html=$(curl -fsS --max-time 10 "$URL/"); then break; fi
+            sleep 5
+          done
+          [ -n "${html:-}" ] || { echo "::error::$URL did not answer"; exit 1; }
+          scripts=$(grep -o '/_expo/static/js/web/[^"]*\.js' <<< "$html" | sort -u)
+          [ -n "$scripts" ] || { echo "::error::no bundle referenced by $URL"; exit 1; }
+          for s in $scripts; do
+            if curl -fsS --max-time 30 "$URL$s" | grep -q "$API_URL"; then echo "bundle $s targets $API_URL"; exit 0; fi
+          done
+          echo "::error::no bundle of $URL mentions $API_URL"; exit 1
+
+      - name: Comment
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHORT_SHA: ${{ needs.api.outputs.short_sha }}
+          API_URL: ${{ needs.api.outputs.api_url }}
+          DATABASE: ${{ needs.api.outputs.database }}
+          WEB_URL: ${{ steps.deploy.outputs.url }}
+        run: .github/scripts/preview-comment.sh
+
+  native:
+    name: native preview
+    needs: [api, web]
+    if: needs.api.outputs.deployed == 'true'
+    runs-on: ubuntu-24.04-arm
+    permissions:
+      contents: read
+      pull-requests: write
+    env:
+      PR_NUMBER: ${{ github.event.pull_request.number }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/pnpm
+
+      # The lane exists from #9 but publishes only once the dev client build
+      # (#10) has configured expo-updates: an EAS project id and updates.url.
+      - name: Is EAS Update configured?
+        id: configured
+        run: |
+          if jq -e '.expo.updates.url and .expo.extra.eas.projectId' apps/mobile/app.json >/dev/null 2>&1; then
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::expo-updates is not configured; the native lane stays dormant until #10"
+          fi
+
+      # Native code, auth, push or camera: the paths from #9. Everything else
+      # native is caught by the fingerprint below.
+      - name: Paths that need a native preview
+        id: paths
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          changed=$(gh pr diff "$PR_NUMBER" --name-only)
+          if grep -Eq '^apps/mobile/(app\.json|app\.config\.[^/]+|package\.json|plugins/|src/lib/auth/|src/features/(notifications|media)/)' <<< "$changed"; then
+            echo "matched=true" >> "$GITHUB_OUTPUT"
+            grep -E '^apps/mobile/' <<< "$changed"
+          else
+            echo "matched=false" >> "$GITHUB_OUTPUT"
+            echo "no native-relevant path changed"
+          fi
+
+      - name: Fingerprint of this pull request
+        working-directory: apps/mobile
+        run: node ../../node_modules/@expo/fingerprint/bin/cli.js fingerprint:generate > "$RUNNER_TEMP/fingerprint-pr.json"
+
+      - name: Fingerprint of main
+        id: base
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/fingerprint-main.json
+          key: fingerprint-main-${{ github.event.pull_request.base.sha }}
+          restore-keys: fingerprint-main-
+
+      - name: Native preview needed?
+        id: decide
+        env:
+          PATHS_MATCHED: ${{ steps.paths.outputs.matched }}
+          BASE_HIT: ${{ steps.base.outputs.cache-matched-key }}
+        run: |
+          pr=$(jq -r .hash "$RUNNER_TEMP/fingerprint-pr.json")
+          if [ -z "$BASE_HIT" ]; then
+            echo "no fingerprint of main cached yet: treating the fingerprint as changed"
+            fingerprint_changed=true
+          else
+            base=$(jq -r .hash "$RUNNER_TEMP/fingerprint-main.json")
+            if [ "$pr" = "$base" ]; then fingerprint_changed=false; else fingerprint_changed=true; fi
+            echo "fingerprint main=$base pr=$pr ($BASE_HIT)"
+          fi
+          if [ "$PATHS_MATCHED" = true ] || [ "$fingerprint_changed" = true ]; then
+            echo "needed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "needed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Publish the EAS Update on branch pr-${{ github.event.pull_request.number }}
+        id: update
+        if: steps.configured.outputs.configured == 'true' && steps.decide.outputs.needed == 'true'
+        working-directory: apps/mobile
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+          EXPO_PUBLIC_API_URL: ${{ needs.api.outputs.api_url }}
+          SHORT_SHA: ${{ needs.api.outputs.short_sha }}
+        run: |
+          out=$(npx --yes "eas-cli@$EAS_CLI_VERSION" update --branch "pr-$PR_NUMBER" --message "pr-$PR_NUMBER $SHORT_SHA" \
+            --environment preview --platform all --json --non-interactive)
+          group=$(jq -r '.[0].group' <<< "$out")
+          project=$(jq -r .expo.extra.eas.projectId app.json)
+          slug=$(jq -r .expo.slug app.json)
+          {
+            echo "qr=https://qr.expo.dev/eas-update?appScheme=$slug&projectId=$project&groupId=$group"
+            echo "link=https://expo.dev/projects/$project/updates/$group"
+          } >> "$GITHUB_OUTPUT"
+          jq -r '.[] | "\(.platform) \(.id) runtime \(.runtimeVersion)"' <<< "$out"
+
+      - name: Comment
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHORT_SHA: ${{ needs.api.outputs.short_sha }}
+          API_URL: ${{ needs.api.outputs.api_url }}
+          DATABASE: ${{ needs.api.outputs.database }}
+          WEB_URL: ${{ needs.web.outputs.web_url }}
+          NATIVE: ${{ steps.configured.outputs.configured != 'true' && 'not-configured' || (steps.decide.outputs.needed == 'true' && 'published' || 'not-needed') }}
+          NATIVE_QR: ${{ steps.update.outputs.qr }}
+          NATIVE_LINK: ${{ steps.update.outputs.link }}
+        run: .github/scripts/preview-comment.sh
+
+  # The fingerprint of main, cached for the native lane's comparison. Runs on
+  # every push to main that could change it.
+  fingerprint-main:
+    name: fingerprint of main
+    if: github.event_name == 'push'
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/pnpm
+      - working-directory: apps/mobile
+        run: |
+          node ../../node_modules/@expo/fingerprint/bin/cli.js fingerprint:generate > "$RUNNER_TEMP/fingerprint-main.json"
+          jq -r '"main fingerprint " + .hash' "$RUNNER_TEMP/fingerprint-main.json"
+      - uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/fingerprint-main.json
+          key: fingerprint-main-${{ github.sha }}

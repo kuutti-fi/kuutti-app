@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # Creates the application role on a fresh RDS instance and stores its password
-# as /kuutti/<env>/db-app-password (SecureString, TD-19). Run once per
-# environment from the maintainer's machine; RDS is private, so the connection
-# goes through a Session Manager port forward on the API box. Nothing is
-# printed except progress; the master password stays in this process.
+# as /kuutti/<env>/db-app-password (SecureString, TD-19); on staging also the
+# preview role kuutti_preview (#9) with /kuutti/staging/db-preview-password.
+# Run once per environment from the maintainer's machine; RDS is private, so
+# the connection goes through a Session Manager port forward on the API box.
+# Nothing is printed except progress; the master password stays in this process.
 #
 #   infra/scripts/db-app-role.sh staging
 #
@@ -59,4 +60,22 @@ SQL
 echo "storing $param"
 aws ssm put-parameter --name "$param" --type SecureString --value "$app_password" \
   --description "Password of the kuutti_app role; created by infra/scripts/db-app-role.sh" >/dev/null
+
+# Pull-request previews (#9, TD-19) run on staging as their own role: it may
+# create databases (every kuutti_pr_<n> is its own), and it cannot connect to
+# the kuutti database at all, so preview code never holds staging data. The
+# owner and the master keep their access when PUBLIC loses CONNECT.
+if [ "$env" = "staging" ]; then
+  preview_param="/kuutti/staging/db-preview-password"
+  preview_password=$(openssl rand -hex 24)
+  echo "creating role kuutti_preview with CREATEDB and no access to the kuutti database"
+  PGPASSWORD="$master_password" psql -v ON_ERROR_STOP=1 -q "$conn" <<SQL
+CREATE ROLE kuutti_preview LOGIN CREATEDB PASSWORD '$preview_password';
+GRANT kuutti_preview TO kuutti_admin;
+REVOKE CONNECT ON DATABASE kuutti FROM PUBLIC;
+SQL
+  echo "storing $preview_param"
+  aws ssm put-parameter --name "$preview_param" --type SecureString --value "$preview_password" \
+    --description "Password of the kuutti_preview role; created by infra/scripts/db-app-role.sh" >/dev/null
+fi
 echo "done: the API on $env composes DATABASE_URL from db-host, db-name, db-user and this parameter"

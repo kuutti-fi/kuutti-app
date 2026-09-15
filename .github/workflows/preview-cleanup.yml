@@ -1,0 +1,184 @@
+name: Preview cleanup
+
+# Removes a pull request's previews (#9, TD-19): the Dokploy application on
+# the staging box, the EAS Hosting alias, the EAS Update branch, and the
+# database kuutti_pr_<n>, which only the box can reach. The database is
+# dropped through one Run Command document (modules/compute) that the plan
+# role may send to the staging box and nothing else. Runs when a pull request
+# closes, nightly for pull requests that closed without it and for previews
+# older than 7 days, and by hand (from main) for a pull request number.
+
+on:
+  pull_request:
+    types: [closed]
+  schedule:
+    - cron: "30 3 * * *"
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: Pull request number whose previews to remove
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: preview-cleanup-${{ github.event.pull_request.number || github.event.inputs.pr || 'sweep' }}
+  cancel-in-progress: false
+
+env:
+  EAS_CLI_VERSION: "24.3.0"
+
+jobs:
+  # Which pull requests lose their previews, then everything that needs the
+  # preview environment's tokens: Dokploy and EAS.
+  previews:
+    name: remove previews
+    # A dispatch counts only from main: the plan role trusts main and pull
+    # requests, and a run that removed the application but could not drop the
+    # database would leave an orphan the sweep never sees.
+    if: >-
+      vars.PREVIEWS_ENABLED == 'true'
+      && (github.event_name != 'workflow_dispatch' || github.ref == 'refs/heads/main')
+      && (github.event_name != 'pull_request'
+          || (github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]'))
+    runs-on: ubuntu-24.04-arm
+    environment: preview
+    permissions:
+      contents: read
+      pull-requests: write
+    outputs:
+      numbers: ${{ steps.select.outputs.numbers }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/pnpm
+
+      - name: Pull requests to clean
+        id: select
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DOKPLOY_URL: ${{ vars.DOKPLOY_URL }}
+          DOKPLOY_TOKEN: ${{ secrets.DOKPLOY_TOKEN }}
+          DOKPLOY_ENVIRONMENT_ID: ${{ vars.DOKPLOY_ENVIRONMENT_ID }}
+          PREVIEW_API_DOMAIN: ${{ vars.PREVIEW_API_DOMAIN }}
+          EVENT: ${{ github.event_name }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          INPUT_PR: ${{ github.event.inputs.pr }}
+        run: |
+          case "$EVENT" in
+            pull_request) numbers=$(jq -cn --arg pr "$PR_NUMBER" '[$pr]') ;;
+            workflow_dispatch)
+              [[ "$INPUT_PR" =~ ^[0-9]{1,7}$ ]] || { echo "::error::not a pull request number: $INPUT_PR"; exit 1; }
+              numbers=$(jq -cn --arg pr "$INPUT_PR" '[$pr]') ;;
+            schedule)
+              numbers='[]'
+              now=$(date -u +%s)
+              for row in $(.github/scripts/dokploy-preview.sh list | jq -c '.[]'); do
+                pr=$(jq -r .pr <<< "$row")
+                created=$(jq -r .createdAt <<< "$row")
+                age=$(( (now - $(date -u -d "$created" +%s)) / 86400 ))
+                state=$(gh pr view "$pr" --json state --jq .state 2>/dev/null || echo UNKNOWN)
+                if [ "$state" != OPEN ]; then
+                  echo "#$pr is $state: removing its preview"
+                elif [ "$age" -ge 7 ]; then
+                  echo "#$pr preview is $age days old: retiring it"
+                  NOTICE="Preview retired after $age days to free the box; push again to recreate it." \
+                    PR_NUMBER="$pr" SHORT_SHA="sweep" .github/scripts/preview-comment.sh
+                else
+                  continue
+                fi
+                numbers=$(jq -c --arg pr "$pr" '. + [$pr]' <<< "$numbers")
+              done ;;
+          esac
+          echo "numbers=$numbers" >> "$GITHUB_OUTPUT"
+          echo "cleaning: $numbers"
+
+      - name: Remove the Dokploy applications
+        if: steps.select.outputs.numbers != '[]'
+        env:
+          DOKPLOY_URL: ${{ vars.DOKPLOY_URL }}
+          DOKPLOY_TOKEN: ${{ secrets.DOKPLOY_TOKEN }}
+          DOKPLOY_ENVIRONMENT_ID: ${{ vars.DOKPLOY_ENVIRONMENT_ID }}
+          PREVIEW_API_DOMAIN: ${{ vars.PREVIEW_API_DOMAIN }}
+          NUMBERS: ${{ steps.select.outputs.numbers }}
+        run: |
+          for pr in $(jq -r '.[]' <<< "$NUMBERS"); do
+            .github/scripts/dokploy-preview.sh delete "$pr"
+          done
+
+      # The alias is what the pull request linked to; the deployments behind
+      # it stay listed in the EAS dashboard. The update branch is pruned so the
+      # free tier's branch list does not grow with every pull request (TD-2).
+      - name: Remove the EAS Hosting alias and the EAS Update branch
+        if: steps.select.outputs.numbers != '[]'
+        working-directory: apps/mobile
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+          NUMBERS: ${{ steps.select.outputs.numbers }}
+        run: |
+          for pr in $(jq -r '.[]' <<< "$NUMBERS"); do
+            npx --yes "eas-cli@$EAS_CLI_VERSION" deploy:alias:delete "pr-$pr" --non-interactive \
+              || echo "no EAS Hosting alias pr-$pr"
+            if jq -e '.expo.updates.url' app.json >/dev/null 2>&1; then
+              npx --yes "eas-cli@$EAS_CLI_VERSION" branch:delete "pr-$pr" --non-interactive \
+                || echo "no EAS Update branch pr-$pr"
+            fi
+          done
+
+      - name: Comment on the closed pull request
+        if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHORT_SHA: closed
+          NOTICE: "Previews removed: the pull request closed."
+        run: .github/scripts/preview-comment.sh
+
+  # The database lives on the private RDS instance; only the box reaches it.
+  # No GitHub environment here: the plan role trusts pull requests and main,
+  # and a job with an environment presents a different OIDC subject.
+  databases:
+    name: drop kuutti_pr_<n>
+    needs: previews
+    if: needs.previews.outputs.numbers != '[]'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION }}
+      AWS_ROLE_ARN: ${{ vars.AWS_PLAN_ROLE_ARN }}
+      AWS_ROLE_SESSION_NAME: gha-preview-cleanup-${{ github.run_id }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: .github/scripts
+      - run: .github/scripts/aws-oidc.sh
+
+      - name: Send the drop document to the staging box
+        env:
+          NUMBERS: ${{ needs.previews.outputs.numbers }}
+        run: |
+          instance=$(aws ec2 describe-instances \
+            --filters Name=tag:Name,Values=kuutti-staging Name=instance-state-name,Values=running \
+            --query 'Reservations[].Instances[].InstanceId' --output text)
+          [ -n "$instance" ] || { echo "::error::no running kuutti-staging instance"; exit 1; }
+          failed=0
+          for pr in $(jq -r '.[]' <<< "$NUMBERS"); do
+            id=$(aws ssm send-command --document-name kuutti-staging-preview-database \
+              --instance-ids "$instance" --parameters "prNumber=$pr" \
+              --comment "preview-cleanup.yml: pull request $pr" --query Command.CommandId --output text)
+            for _ in $(seq 1 36); do
+              sleep 5
+              status=$(aws ssm get-command-invocation --command-id "$id" --instance-id "$instance" --query Status --output text 2>/dev/null || echo Pending)
+              case "$status" in Pending|InProgress|Delayed) continue ;; esac
+              break
+            done
+            aws ssm get-command-invocation --command-id "$id" --instance-id "$instance" \
+              --query '[StandardOutputContent, StandardErrorContent]' --output text
+            if [ "$status" != Success ]; then echo "::error::dropping kuutti_pr_$pr: $status"; failed=1; fi
+          done
+          exit "$failed"

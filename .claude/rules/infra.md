@@ -51,7 +51,7 @@ One AWS account, everything in eu-central-1. Vendor list: AWS, Expo/EAS, GitHub,
 ## Deploy
 
 - Every merge to `main` deploys staging. Production is a release tag `vX.Y.Z` deployed from the same image. EAS Update channels `staging` and `production` follow the same promotion.
-- PR previews: an Expo web build per PR, plus a Dokploy preview whose entrypoint creates `kuutti_pr_<n>` on the staging RDS instance, migrates, seeds, and drops it on close. Never production data in a preview.
+- PR previews (#9): `preview.yml` deploys the pull request's CI-built image as its own Dokploy application on the staging box (`api-pr-<n>`, created through the Dokploy API with a token scoped to the `previews` project), where the API creates `kuutti_pr_<n>` on the staging RDS instance, migrates and seeds it; the Expo web export goes to EAS Hosting as alias `pr-<n>`; an EAS Update on branch `pr-<n>` when native code changed. `preview-cleanup.yml` removes all three and drops the database through one Run Command document on close, nightly after 7 days. Dokploy's own GitHub-App previews are not used: they build on the box and cannot carry a per-pull-request database or CORS origin. Never production data in a preview.
 - Hotfix: branch from the last tag, PR, tag, merge back.
 - Dokploy versus Kamal is open; do not switch without an ADR.
 

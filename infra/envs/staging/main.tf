@@ -41,6 +41,7 @@ module "compute" {
   backup_bucket              = local.state_bucket
   dokploy_version            = var.dokploy_version
   manage_session_preferences = true
+  preview_databases          = true # pull-request previews run here (#9)
 }
 
 # Non-secret configuration the API reads at boot from /kuutti/staging/ (TD-19).
@@ -55,6 +56,9 @@ resource "aws_ssm_parameter" "config" {
     "db-port"   = tostring(module.data.port)
     "db-name"   = module.data.db_name
     "db-user"   = "kuutti_app"
+    # Pull-request previews connect as this role (#9); its password is
+    # db-preview-password from infra/scripts/db-app-role.sh.
+    "db-preview-user" = "kuutti_preview"
   }
 
   name  = "${module.compute.ssm_prefix}${each.key}"
