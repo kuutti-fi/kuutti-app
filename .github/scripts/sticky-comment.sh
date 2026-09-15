@@ -4,6 +4,7 @@
 # posted as given; plan-comment.sh wraps a plan in a code fence first.
 set -euo pipefail
 : "${GH_TOKEN:?}" "${GITHUB_REPOSITORY:?}" "${PR_NUMBER:?}" "${MARKER:?}" "${BODY_FILE:?}"
+[[ "$PR_NUMBER" =~ ^[0-9]+$ ]] || { echo "not an issue or pull request number: $PR_NUMBER" >&2; exit 2; }
 
 limit=60000
 body=$(head -c "$limit" "$BODY_FILE")

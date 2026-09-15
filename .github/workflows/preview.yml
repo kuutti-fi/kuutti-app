@@ -24,6 +24,11 @@ on:
 permissions:
   contents: read
 
+# bash -eo pipefail: a failed script behind a pipe must fail the step.
+defaults:
+  run:
+    shell: bash
+
 concurrency:
   group: preview-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
@@ -251,16 +256,25 @@ jobs:
           persist-credentials: false
       - uses: ./.github/actions/pnpm
 
-      # The lane exists from #9 but publishes only once the dev client build
-      # (#10) has configured expo-updates: an EAS project id and updates.url.
-      - name: Is EAS Update configured?
+      # The lane publishes only once #10 has configured expo-updates (an EAS
+      # project id and updates.url), and, since updates are code-signed
+      # (ADR-004), only when the maintainer has put the signing key into the
+      # preview environment: an unsigned update is refused by every dev
+      # client, and handing the key to pull-request jobs is a decision
+      # (infra/README.md, Previews, Trust). Without it the lane says so.
+      - name: Is EAS Update configured, and is there a key to sign with?
         id: configured
+        env:
+          HAS_KEY: ${{ secrets.EXPO_UPDATES_PRIVATE_KEY != '' }}
         run: |
-          if jq -e '.expo.updates.url and .expo.extra.eas.projectId' apps/mobile/app.json >/dev/null 2>&1; then
-            echo "configured=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "configured=false" >> "$GITHUB_OUTPUT"
+          if ! jq -e '.expo.updates.url and .expo.extra.eas.projectId' apps/mobile/app.json >/dev/null 2>&1; then
+            echo "configured=not-configured" >> "$GITHUB_OUTPUT"
             echo "::notice::expo-updates is not configured; the native lane stays dormant until #10"
+          elif jq -e '.expo.updates.codeSigningCertificate' apps/mobile/app.json >/dev/null 2>&1 && [ "$HAS_KEY" != true ]; then
+            echo "configured=unsigned" >> "$GITHUB_OUTPUT"
+            echo "::notice::updates are code-signed and the preview environment holds no signing key; nothing published"
+          else
+            echo "configured=true" >> "$GITHUB_OUTPUT"
           fi
 
       # Native code, auth, push or camera: the paths from #9. Everything else
@@ -312,6 +326,16 @@ jobs:
             echo "needed=false" >> "$GITHUB_OUTPUT"
           fi
 
+      # The key exists in this step's environment only (deploy.yml does the same).
+      - name: Write the update signing key
+        if: steps.configured.outputs.configured == 'true' && steps.decide.outputs.needed == 'true'
+        env:
+          UPDATE_SIGNING_KEY: ${{ secrets.EXPO_UPDATES_PRIVATE_KEY }}
+        run: |
+          if [ -n "$UPDATE_SIGNING_KEY" ]; then
+            (umask 077 && printf '%s\n' "$UPDATE_SIGNING_KEY" > "$RUNNER_TEMP/update-signing-key.pem")
+          fi
+
       - name: Publish the EAS Update on branch pr-${{ github.event.pull_request.number }}
         id: update
         if: steps.configured.outputs.configured == 'true' && steps.decide.outputs.needed == 'true'
@@ -321,8 +345,11 @@ jobs:
           EXPO_PUBLIC_API_URL: ${{ needs.api.outputs.api_url }}
           SHORT_SHA: ${{ needs.api.outputs.short_sha }}
         run: |
+          key=()
+          [ -f "$RUNNER_TEMP/update-signing-key.pem" ] && key=(--private-key-path "$RUNNER_TEMP/update-signing-key.pem")
           out=$(npx --yes "eas-cli@$EAS_CLI_VERSION" update --branch "pr-$PR_NUMBER" --message "pr-$PR_NUMBER $SHORT_SHA" \
-            --environment preview --platform all --json --non-interactive)
+            --environment preview --platform all "${key[@]}" --json --non-interactive)
+          rm -f "$RUNNER_TEMP/update-signing-key.pem"
           group=$(jq -r '.[0].group' <<< "$out")
           project=$(jq -r .expo.extra.eas.projectId app.json)
           slug=$(jq -r .expo.slug app.json)
@@ -339,7 +366,7 @@ jobs:
           API_URL: ${{ needs.api.outputs.api_url }}
           DATABASE: ${{ needs.api.outputs.database }}
           WEB_URL: ${{ needs.web.outputs.web_url }}
-          NATIVE: ${{ steps.configured.outputs.configured != 'true' && 'not-configured' || (steps.decide.outputs.needed == 'true' && 'published' || 'not-needed') }}
+          NATIVE: ${{ steps.configured.outputs.configured != 'true' && steps.configured.outputs.configured || (steps.decide.outputs.needed == 'true' && 'published' || 'not-needed') }}
           NATIVE_QR: ${{ steps.update.outputs.qr }}
           NATIVE_LINK: ${{ steps.update.outputs.link }}
         run: .github/scripts/preview-comment.sh

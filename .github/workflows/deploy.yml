@@ -1,10 +1,13 @@
 name: Deploy
 
 # Called by build.yml: deploys an already-pushed image to one environment's
-# Dokploy and waits until /health runs that commit (#8). The GitHub environment
-# supplies DOKPLOY_URL, DOKPLOY_APPLICATION_ID and API_URL as variables and
-# DOKPLOY_TOKEN as its one secret; prod's environment also carries the
-# reviewer gate, so a prod deploy waits for approval before this runs.
+# Dokploy, waits until /health runs that commit (#8), then publishes the same
+# commit's JavaScript as a signed EAS Update to the environment's channel
+# (#10: staging or production). The GitHub environment supplies DOKPLOY_URL,
+# DOKPLOY_APPLICATION_ID and API_URL as variables and DOKPLOY_TOKEN,
+# EXPO_TOKEN and EXPO_UPDATES_PRIVATE_KEY as secrets; prod's environment
+# also carries the reviewer gate, so a prod deploy waits for approval before
+# this runs. EAS_ENABLED (repository variable) switches the update on.
 
 on:
   workflow_call:
@@ -25,6 +28,14 @@ on:
 permissions:
   contents: read
 
+# bash -eo pipefail: a failed eas or curl behind a pipe must fail the step.
+defaults:
+  run:
+    shell: bash
+
+env:
+  EAS_CLI_VERSION: "24.3.0"
+
 jobs:
   deploy:
     name: deploy ${{ inputs.environment }}
@@ -36,7 +47,6 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-          sparse-checkout: .github/scripts
 
       - name: Point the Dokploy application at the image and deploy
         env:
@@ -51,3 +61,41 @@ jobs:
           API_URL: ${{ vars.API_URL }}
           COMMIT: ${{ inputs.commit }}
         run: .github/scripts/wait-healthy.sh
+
+      # The update follows the API (#10, ADR-004): staging gets channel
+      # staging, prod channel production, each bundle pointed at its own API.
+      # Signed with the key from the environment's secret; a client rejects
+      # anything not signed by the certificate it ships with. A native change
+      # is a build, not an update: eas-build.yml watches the fingerprint.
+      - uses: ./.github/actions/pnpm
+        if: vars.EAS_ENABLED == 'true'
+
+      # The key exists in exactly one step's environment, this one, which runs
+      # nothing but printf: the bundler and every dependency it loads run in
+      # the next step, where the key is a file path and nothing else.
+      - name: Write the update signing key
+        if: vars.EAS_ENABLED == 'true'
+        env:
+          UPDATE_SIGNING_KEY: ${{ secrets.EXPO_UPDATES_PRIVATE_KEY }}
+        run: |
+          : "${UPDATE_SIGNING_KEY:?set the secret EXPO_UPDATES_PRIVATE_KEY in this environment}"
+          (umask 077 && printf '%s\n' "$UPDATE_SIGNING_KEY" > "$RUNNER_TEMP/update-signing-key.pem")
+
+      - name: Publish the signed EAS Update to the ${{ inputs.environment == 'prod' && 'production' || 'staging' }} channel
+        if: vars.EAS_ENABLED == 'true'
+        working-directory: apps/mobile
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+          EXPO_PUBLIC_API_URL: ${{ vars.API_URL }}
+          CHANNEL: ${{ inputs.environment == 'prod' && 'production' || 'staging' }}
+          EAS_ENVIRONMENT: ${{ inputs.environment == 'prod' && 'production' || 'preview' }}
+          COMMIT: ${{ inputs.commit }}
+        run: |
+          npx --yes "eas-cli@$EAS_CLI_VERSION" update --channel "$CHANNEL" --environment "$EAS_ENVIRONMENT" \
+            --message "$COMMIT" --platform all --private-key-path "$RUNNER_TEMP/update-signing-key.pem" \
+            --json --non-interactive \
+            | jq -r '.[] | "\(.platform) \(.id) runtime \(.runtimeVersion) branch \(.branch)"'
+
+      - name: Remove the signing key file
+        if: always()
+        run: rm -f "$RUNNER_TEMP/update-signing-key.pem"

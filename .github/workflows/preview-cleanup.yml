@@ -23,6 +23,11 @@ on:
 permissions:
   contents: read
 
+# bash -eo pipefail: a failed script behind a pipe must fail the step.
+defaults:
+  run:
+    shell: bash
+
 concurrency:
   group: preview-cleanup-${{ github.event.pull_request.number || github.event.inputs.pr || 'sweep' }}
   cancel-in-progress: false

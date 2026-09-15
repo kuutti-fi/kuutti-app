@@ -27,6 +27,7 @@ body="$RUNNER_TEMP/preview-comment.md"
       "") echo "| Native | pending |" ;;
       not-needed) echo "| Native | not needed: no native code, auth, push or camera change and the fingerprint matches \`main\` |" ;;
       not-configured) echo "| Native | activates with the dev client build (#10): \`expo-updates\` is not configured yet |" ;;
+      unsigned) echo "| Native | not published: updates are code-signed and pull-request jobs hold no signing key (a maintainer decision, infra/README.md Previews) |" ;;
       published) echo "| Native | EAS Update branch \`pr-$PR_NUMBER\`, [details]($NATIVE_LINK); scan below with the dev client |" ;;
       *) echo "| Native | $NATIVE |" ;;
     esac

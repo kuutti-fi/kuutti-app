@@ -23,6 +23,7 @@
     "expo-router": "~57.0.21",
     "expo-secure-store": "~57.0.4",
     "expo-status-bar": "~57.0.1",
+    "expo-updates": "~57.0.22",
     "openapi-fetch": "^0.17.0",
     "react": "catalog:",
     "react-dom": "catalog:",

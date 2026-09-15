@@ -82,7 +82,7 @@ git tag -a v0.1.0 -m "v0.1.0"
 git push origin v0.1.0
 ```
 
-The tag retags the image `main` already built for that commit, so production runs the bytes staging ran; applies the production infrastructure and deploys behind the `prod` environment's approval; and drafts the release notes from the commits since the previous tag. Hotfix: branch from the last tag, pull request, tag, merge back (TD-2).
+The tag retags the image `main` already built for that commit, so production runs the bytes staging ran; applies the production infrastructure and deploys behind the `prod` environment's approval, then publishes the signed EAS Update to the `production` channel; starts the production builds on EAS, whose links land on the pinned builds issue; and drafts the release notes from the commits since the previous tag. Hotfix: branch from the last tag, pull request, tag, merge back (TD-2).
 
 ## Branch and history rules
 

@@ -65,3 +65,7 @@ expo-env.d.ts
 .metro-health-check*
 .kotlin/
 .claude/session-handoff.md
+
+# EAS Update code signing (#10): the certificate is public and ships in the binary; the private key never enters the repository.
+!apps/mobile/certs/certificate.pem
+apps/mobile/keys/

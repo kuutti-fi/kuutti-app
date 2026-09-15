@@ -1,0 +1,140 @@
+name: EAS build
+
+# Native builds on EAS (#10, TD-2). On a v* tag: the production profile for
+# both platforms, behind the prod environment (its reviewer approves the
+# release anyway). On main: the development and preview profiles, but only
+# when the project's fingerprint differs from the last finished development
+# build's, so a JS-only change never spends a build; those reach devices as
+# EAS Updates from deploy.yml. Never per pull request: the free tier is 15
+# builds per platform a month. Install links land on the pinned builds issue
+# (repository variable EAS_BUILDS_ISSUE); EAS_ENABLED switches this on.
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      profile:
+        description: Build profile from eas.json
+        type: choice
+        options: [development, preview, production]
+        default: development
+      platform:
+        type: choice
+        options: [all, android, ios]
+        default: all
+
+permissions:
+  contents: read
+
+# bash -eo pipefail: a failed eas behind a pipe must fail the step, never
+# read as "no build yet" and spend two builds.
+defaults:
+  run:
+    shell: bash
+
+concurrency:
+  group: eas-build-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  EAS_CLI_VERSION: "24.3.0"
+
+jobs:
+  build:
+    name: eas build
+    if: vars.EAS_ENABLED == 'true'
+    runs-on: ubuntu-24.04-arm
+    # A production build, from a tag or by hand, goes through the prod
+    # environment and its reviewer; everything else through staging.
+    environment: ${{ (startsWith(github.ref, 'refs/tags/v') || inputs.profile == 'production') && 'prod' || 'staging' }}
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/pnpm
+
+      - name: Profiles to build
+        id: plan
+        working-directory: apps/mobile
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+          EVENT: ${{ github.event_name }}
+          IS_TAG: ${{ startsWith(github.ref, 'refs/tags/v') }}
+          INPUT_PROFILE: ${{ inputs.profile }}
+          INPUT_PLATFORM: ${{ inputs.platform }}
+        run: |
+          profiles=""
+          platform=all
+          if [ "$EVENT" = workflow_dispatch ]; then
+            profiles="$INPUT_PROFILE"; platform="$INPUT_PLATFORM"
+          elif [ "$IS_TAG" = true ]; then
+            profiles="production"
+          else
+            # The fingerprint policy (rules/mobile.md): a native rebuild only
+            # when the fingerprint differs from the last development build's,
+            # per platform, or when there is no such build yet.
+            changed=false
+            for p in android ios; do
+              last=$(npx --yes "eas-cli@$EAS_CLI_VERSION" build:list --platform "$p" --build-profile development \
+                --status finished --limit 1 --json --non-interactive | jq -r '.[0].id // empty')
+              if [ -z "$last" ]; then echo "$p: no finished development build yet"; changed=true; continue; fi
+              cmp=$(npx --yes "eas-cli@$EAS_CLI_VERSION" fingerprint:compare --build-id "$last" --environment preview --json --non-interactive)
+              a=$(jq -r '.fingerprint1.hash' <<< "$cmp"); b=$(jq -r '.fingerprint2.hash' <<< "$cmp")
+              if [ "$a" = "$b" ]; then echo "$p: fingerprint $a matches build $last"; else echo "$p: fingerprint $a differs from build $last ($b)"; changed=true; fi
+            done
+            [ "$changed" = true ] && profiles="development preview"
+          fi
+          {
+            echo "profiles=$profiles"
+            echo "platform=$platform"
+          } >> "$GITHUB_OUTPUT"
+          echo "building: ${profiles:-nothing} ($platform)"
+
+      - name: Start the builds
+        id: build
+        if: steps.plan.outputs.profiles != ''
+        working-directory: apps/mobile
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+          PROFILES: ${{ steps.plan.outputs.profiles }}
+          PLATFORM: ${{ steps.plan.outputs.platform }}
+        run: |
+          : > "$RUNNER_TEMP/builds.json"
+          for profile in $PROFILES; do
+            npx --yes "eas-cli@$EAS_CLI_VERSION" build --profile "$profile" --platform "$PLATFORM" \
+              --message "${GITHUB_REF_NAME} ${GITHUB_SHA::7}" --no-wait --json --non-interactive \
+              | jq -c --arg profile "$profile" '.[] | {profile: $profile, id, platform, status}' >> "$RUNNER_TEMP/builds.json"
+          done
+          jq -r '"\(.profile) \(.platform) \(.id) \(.status)"' "$RUNNER_TEMP/builds.json"
+
+      # One sticky comment per profile on the pinned issue: the build pages
+      # carry the install link (APK) or the ad hoc install for registered iOS
+      # devices once the build finishes.
+      - name: Post the build links on the pinned builds issue
+        if: steps.plan.outputs.profiles != '' && vars.EAS_BUILDS_ISSUE != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ vars.EAS_BUILDS_ISSUE }}
+          PROFILES: ${{ steps.plan.outputs.profiles }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          project=$(jq -r '.expo.extra.eas.projectId' apps/mobile/app.json)
+          for profile in $PROFILES; do
+            body="$RUNNER_TEMP/builds-$profile.md"
+            {
+              echo "#### \`$profile\` builds · $REF_NAME · \`${GITHUB_SHA::7}\` · $(date -u +%Y-%m-%d)"
+              echo
+              echo "| platform | build |"
+              echo "|---|---|"
+              jq -r --arg profile "$profile" --arg project "$project" \
+                'select(.profile == $profile) | "| \(.platform | ascii_downcase) | https://expo.dev/projects/\($project)/builds/\(.id) |"' "$RUNNER_TEMP/builds.json"
+              echo
+              echo "<sub>Android: install the APK from the build page. iOS: registered devices only (apps/mobile/README.md). Started by [this run]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID).</sub>"
+            } > "$body"
+            MARKER="eas-builds-$profile" BODY_FILE="$body" .github/scripts/sticky-comment.sh
+          done
