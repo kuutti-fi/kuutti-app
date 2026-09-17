@@ -22,6 +22,7 @@ JavaScript reaches installed binaries as EAS Updates (#10): every merge to `main
 - The robot token (`EXPO_TOKEN`) alone can start builds and publish updates that no client accepts on `production` or `staging`; it can still re-point a channel at an older, validly signed update group. Channel edits are therefore a maintainer action, never a workflow's.
 - A leaked key is a full compromise of the update path until the next builds ship; the environments holding it are the two with the deploy tokens, no more.
 - The dev client refuses unsigned updates too, so every published branch, `pr-<n>` included, needs the key; that is the price of one client behaviour for every channel.
+- The same holds for Metro: the dev client asks the local dev server for a signed manifest and refuses to load without one, so `expo start` needs `--private-key-path` and local work in the dev client needs the key on the developer's machine. `pnpm env:up` and `pnpm dev:mobile` pass `apps/mobile/keys/private-key.pem`; the web target needs no key. While the maintainer is the only developer this costs nothing. Before a second developer uses the dev client the question has to be settled by amending this ADR (a development profile with its own certificate, or without one), not by handing out the production key.
 
 ## Alternatives considered
 

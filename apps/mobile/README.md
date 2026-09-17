@@ -25,7 +25,7 @@ Build links are posted as sticky comments on the pinned builds issue (repository
 - **Android.** Open the build page from the comment on the phone and install the APK. Allow installs from the browser when Android asks.
 - **iOS.** Ad hoc distribution installs only on registered devices. Ask the maintainer for the registration link (`eas device:create` prints a URL and a QR code), open it on the phone, install the profile; the next `development` build includes the device (Apple allows 100 per year). Then open the build page on the phone and install.
 
-In the dev client, connect to Metro on your machine for local work (the API URL is derived from the Metro host), or open a published update: the launcher's *Extensions* tab lists EAS Update branches (`staging`, `pr-<n>`), and a pull-request comment's QR code opens that branch directly. The smoke screen shows which API the JavaScript was built for.
+In the dev client, connect to Metro on your machine for local work (the API URL is derived from the Metro host). Metro has to sign its manifest, because the dev client carries the update certificate (ADR-004): `pnpm env:up` and `pnpm dev:mobile` start it with `--private-key-path keys/private-key.pem`, and without that file the dev client reports "Code signing private key cannot be read" while the web target keeps working. The flag lives in the root scripts and not in this package's `scripts`, which are part of the fingerprint. Or open a published update: the launcher's *Extensions* tab lists EAS Update branches (`staging`, `pr-<n>`), and a pull-request comment's QR code opens that branch directly. The smoke screen shows which API the JavaScript was built for.
 
 ### Apple account
 
