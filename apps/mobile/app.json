@@ -42,7 +42,15 @@
       "codeSigningMetadata": {
         "keyid": "main",
         "alg": "rsa-v1_5-sha256"
+      },
+      "url": "https://u.expo.dev/aaea145c-d019-4411-988a-52772edf1fa8"
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "aaea145c-d019-4411-988a-52772edf1fa8"
       }
-    }
+    },
+    "owner": "kuutti"
   }
 }
