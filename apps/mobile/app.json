@@ -7,7 +7,6 @@
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
     "runtimeVersion": {
       "policy": "fingerprint"
     },
@@ -30,7 +29,11 @@
       "output": "single",
       "favicon": "./assets/favicon.png"
     },
-    "plugins": ["expo-router", "expo-updates"],
+    "plugins": [
+      "expo-router",
+      "expo-updates",
+      ["expo-build-properties", { "ios": { "enableSceneSupport": true } }]
+    ],
     "experiments": {
       "typedRoutes": true
     },
