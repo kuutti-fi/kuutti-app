@@ -8,7 +8,7 @@ Commands below use `tofu`. Terraform is command-compatible if you have it instea
 
 | path | contents | when |
 |---|---|---|
-| `bootstrap/` | state bucket, GitHub OIDC provider, CI roles, budget and billing alarm | once, before anything else |
+| `bootstrap/` | state bucket, GitHub OIDC provider, CI roles, budget and billing alarm, the hosted zone of the project domain | once, before anything else |
 | `modules/` | `network`, `compute`, `data` (#7); media and email later | as milestones need them |
 | `envs/staging`, `envs/prod` | one composition per environment: the three modules plus the non-secret parameters | M1 (#7) |
 | `github/` | repository settings, branch protection, environments | not adopted; `gh api` below until the GitHub provider question is settled |
@@ -24,7 +24,8 @@ Everything in this section is click-ops by design: it is the part ADR-001 allows
 3. **Paid account plan**, chosen at sign-up. Free-plan accounts close after six months or when the credits run out (TD-19), and enabling Identity Center (step 5) creates an organisation, which force-upgrades a free-plan account anyway and expires the sign-up credits on either plan. Billing must show no free-plan banner.
 4. **Enable billing metrics.** Billing and Cost Management → Billing preferences → Alert preferences → *Receive CloudWatch Billing Alerts*. One-way switch; the metric appears about 15 minutes later. The bootstrap's billing alarm reads it.
 5. **Admin access for the bootstrap apply.** **IAM Identity Center** (ADR-001, admin access): one user for the maintainer, one permission set (`AdministratorAccess`), MFA required by the identity store, sessions issued by `aws configure sso`. No IAM user and no long-lived access key ever exist. Enabling Identity Center creates an organisation with this account as its management account; see step 6 for what that means at transfer time. A single IAM user with MFA and console-issued session credentials is the fallback only if Identity Center cannot be enabled.
-6. **Later, nothing to do now:** the account moves under an organisation owned by the association (TD-4). Because Identity Center made this account the management account of its own organisation, that move means deleting this one-account organisation and its Identity Center instance first, then accepting the association's invitation and re-creating admin access there (ADR-001). Root email and alternate contacts re-point; nothing under `infra/` changes.
+6. **The domain.** `kuutti.app`, registered 2026-09-17 through Route 53 in this account (Registered domains, Register domains) with the project mailbox as registrant contact; auto-renew, transfer lock and privacy protection on. A purchase with contact details cannot be code. The hosted zone Route 53 creates at registration is adopted by the bootstrap (`bootstrap/dns.tf`, an import block), and every record is declared by the environment that owns its target (`envs/<env>/dns.tf`). The domain moves with the account; it is one variable (`domain`) per root if it ever changes, which stays cheap until M2 binds universal links to it.
+7. **Later, nothing to do now:** the account moves under an organisation owned by the association (TD-4). Because Identity Center made this account the management account of its own organisation, that move means deleting this one-account organisation and its Identity Center instance first, then accepting the association's invitation and re-creating admin access there (ADR-001). Root email and alternate contacts re-point; nothing under `infra/` changes.
 
 ## Tools
 
@@ -214,14 +215,14 @@ TD-4 budgets 50 EUR a month. One environment is roughly 30 EUR (instance, databa
    aws ssm start-session --target "$(tofu output -raw instance_id)" --document-name AWS-StartPortForwardingSession --parameters portNumber=3000,localPortNumber=3000
    ```
 
-   Then at `http://localhost:3000`: one project named after the environment, one application `api` deployed from the GHCR image (#8), domain `api.staging.<domain>` or `api.<domain>` with Let's Encrypt through Traefik, container port 3000. Application environment is exactly `NODE_ENV=production`, `APP_ENV=staging` (or `production`), `PORT=3000`; everything else comes from SSM through the instance role, never from Dokploy. DNS is not in this repository: an A record per API host name to `tofu output -raw public_ip`.
+   Then at `http://localhost:3000`: one project named after the environment, one application `api` deployed from the GHCR image (#8), domain `api.staging.kuutti.app` or `api.kuutti.app` with Let's Encrypt through Traefik, container port 3000. Application environment is exactly `NODE_ENV=production`, `APP_ENV=staging` (or `production`), `PORT=3000`; everything else comes from SSM through the instance role, never from Dokploy. DNS is code: `envs/<env>/dns.tf` points `api` and `dokploy` (on staging also `*.preview.api`) at the Elastic IP, so the names resolve minutes after the apply and Traefik can obtain its certificates.
 
-3. **Deploy path.** `deploy.yml` calls Dokploy's API from GitHub, so the control plane must be reachable over HTTPS: in Dokploy, Web Server, set its own domain (`dokploy.staging.<domain>` or `dokploy.<domain>`) with Let's Encrypt; port 3000 stays closed, Traefik serves the UI and API on 443. Turn on two-factor authentication for the admin. In Settings, Profile, generate an API key for CI. Then, for each GitHub environment, three variables and one secret (`gh secret set` prompts for the value; never paste it into a command line):
+3. **Deploy path.** `deploy.yml` calls Dokploy's API from GitHub, so the control plane must be reachable over HTTPS: in Dokploy, Web Server, set its own domain (`dokploy.staging.kuutti.app` or `dokploy.kuutti.app`) with Let's Encrypt; port 3000 stays closed, Traefik serves the UI and API on 443. Turn on two-factor authentication for the admin. In Settings, Profile, generate an API key for CI. Then, for each GitHub environment, three variables and one secret (`gh secret set` prompts for the value; never paste it into a command line):
 
    ```sh
-   gh variable set DOKPLOY_URL --env staging --body https://dokploy.staging.<domain>
+   gh variable set DOKPLOY_URL --env staging --body https://dokploy.staging.kuutti.app
    gh variable set DOKPLOY_APPLICATION_ID --env staging --body <id from the application's URL in Dokploy>
-   gh variable set API_URL --env staging --body https://api.staging.<domain>
+   gh variable set API_URL --env staging --body https://api.staging.kuutti.app
    gh secret set DOKPLOY_TOKEN --env staging
    ```
 
@@ -264,7 +265,7 @@ Related, for the milestones that touch it: the Dokploy member never gets the vol
 Once, after staging is applied and its Dokploy is configured:
 
 1. **Preview role.** `kuutti_preview` from step 1 above; on a staging instance whose role script ran before #9, re-run only that part by hand through the same tunnel.
-2. **DNS.** A wildcard record `*.preview.api.staging.<domain>` to `tofu output -raw public_ip`. Traefik issues one Let's Encrypt certificate per preview host.
+2. **DNS.** Nothing to do: `*.preview.api.staging.kuutti.app` is declared in `envs/staging/dns.tf`. Traefik issues one Let's Encrypt certificate per preview host.
 3. **Dokploy.** A project `previews`; its default environment holds the applications, and its id (from the environment's URL in Dokploy) is `DOKPLOY_ENVIRONMENT_ID`. A member user `ci-preview` (Settings, Users) with access to the `previews` project and that environment only, permissions to create and delete services and to create domains, nothing else (no volumes, no Traefik files, no Docker access); sign in as that member and generate its API key. The staging `api` application stays out of the member's reach. Check as the member that `application.one` on the staging application's id is refused before enabling previews.
 4. **EAS.** Once in `apps/mobile`: `eas init` writes `extra.eas.projectId` into `app.json`, commit it. The first hosting deploy picks the subdomain that every preview alias hangs off: `npx expo export --platform web && eas deploy --dev-domain kuutti`; that name is `EAS_HOSTING_SUBDOMAIN`. On expo.dev, a robot user with the Hosting and Update permissions provides `EXPO_TOKEN`. The native lane starts publishing when #10 adds `expo-updates` (`updates.url` in `app.json`); nothing here changes then.
 5. **Bootstrap.** `tofu apply` in `infra/bootstrap` for the plan role's `preview-cleanup` policy (it may send exactly the document below to exactly the staging box). The next staging apply lands the document `kuutti-staging-preview-database`.
@@ -275,9 +276,9 @@ Once, after staging is applied and its Dokploy is configured:
    gh api -X PUT "$R/environments/preview" --input - <<'JSON'
    {"wait_timer":0,"reviewers":[],"deployment_branch_policy":null}
    JSON
-   gh variable set DOKPLOY_URL --env preview --body https://dokploy.staging.<domain>
+   gh variable set DOKPLOY_URL --env preview --body https://dokploy.staging.kuutti.app
    gh variable set DOKPLOY_ENVIRONMENT_ID --env preview --body <id>
-   gh variable set PREVIEW_API_DOMAIN --env preview --body preview.api.staging.<domain>
+   gh variable set PREVIEW_API_DOMAIN --env preview --body preview.api.staging.kuutti.app
    gh variable set EAS_HOSTING_SUBDOMAIN --env preview --body kuutti
    gh secret set DOKPLOY_TOKEN --env preview     # the ci-preview member's key
    gh secret set EXPO_TOKEN --env preview        # the robot user's token
@@ -332,4 +333,4 @@ aws ssm put-parameter --name /kuutti/prod/hetu-hmac-key --type SecureString \
 
 ## What is not here
 
-Dokploy's own configuration (no provider exists; `user_data` installs it, its contents are backed up from `/etc/dokploy`), DNS for the API host names (the preview wildcard included), secret values, the EAS account side (the organisation and project, credentials, the robot token, the update signing key; `apps/mobile/README.md`), store setup, the Telia contract, and creation of the AWS account.
+Dokploy's own configuration (no provider exists; `user_data` installs it, its contents are backed up from `/etc/dokploy`), the registration of the domain itself (its zone and records are code), secret values, the EAS account side (the organisation and project, credentials, the robot token, the update signing key; `apps/mobile/README.md`), store setup, the Telia contract, and creation of the AWS account.

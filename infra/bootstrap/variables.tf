@@ -4,6 +4,12 @@ variable "project" {
   default     = "kuutti"
 }
 
+variable "domain" {
+  description = "The project domain, registered through Route 53 in this account (README, Domain). One variable here and in each environment, so a later change of domain is one line per root."
+  type        = string
+  default     = "kuutti.app"
+}
+
 variable "region" {
   description = "AWS region. Everything lives in one region (TD-4)."
   type        = string

@@ -32,3 +32,18 @@ output "preview_database_document" {
   description = "Run Command document preview-cleanup.yml sends to drop a pull request's database (#9)."
   value       = module.compute.preview_database_document
 }
+
+output "api_url" {
+  description = "GitHub environment variable API_URL."
+  value       = "https://api.staging.${var.domain}"
+}
+
+output "dokploy_url" {
+  description = "GitHub environment variable DOKPLOY_URL."
+  value       = "https://dokploy.staging.${var.domain}"
+}
+
+output "preview_api_domain" {
+  description = "GitHub environment variable PREVIEW_API_DOMAIN (#9): previews answer on pr-<n>.<this>."
+  value       = "preview.api.staging.${var.domain}"
+}

@@ -39,3 +39,13 @@ output "billing_topic_arn" {
   description = "Budget and billing-alarm notifications go here. Test delivery: aws sns publish --region us-east-1 --topic-arn <arn> --subject 'kuutti billing test' --message test"
   value       = aws_sns_topic.billing.arn
 }
+
+output "dns_zone_id" {
+  description = "Hosted zone of the project domain; environments look it up by name."
+  value       = aws_route53_zone.main.zone_id
+}
+
+output "dns_name_servers" {
+  description = "Must equal the name servers on the domain registration (Route 53, Registered domains)."
+  value       = aws_route53_zone.main.name_servers
+}

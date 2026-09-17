@@ -29,3 +29,9 @@ variable "dokploy_version" {
   type        = string
   default     = "v0.30.6"
 }
+
+variable "domain" {
+  description = "The project domain; its hosted zone is declared in infra/bootstrap."
+  type        = string
+  default     = "kuutti.app"
+}

@@ -27,3 +27,13 @@ output "log_group_name" {
 output "backup_prefix" {
   value = module.compute.backup_prefix
 }
+
+output "api_url" {
+  description = "GitHub environment variable API_URL."
+  value       = "https://api.${var.domain}"
+}
+
+output "dokploy_url" {
+  description = "GitHub environment variable DOKPLOY_URL."
+  value       = "https://dokploy.${var.domain}"
+}
