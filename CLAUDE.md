@@ -17,6 +17,7 @@ Before touching matching, rounds, likes, notifications, rewards, profile present
 | `services/mock-idp` | navikt/mock-oauth2-server with FTN-shaped claims for local dev | `.claude/rules/infra.md` |
 | `docs/` | security checklist, `adr/` | |
 | `features/` | Gherkin specs for the rules layer, one directory per slice | `.claude/rules/layout.md` |
+| `site/` | placeholder page for kuutti.app: static, no build, served by Amplify Hosting from this repository (`amplify.yml`); not a product surface, rule 8 stands | |
 
 Inside each app, code is organised by vertical slice (identity, profile, media, pond, matching, chat, safety, research, rewards, notifications), never by layer; see `.claude/rules/layout.md`. Rules in `.claude/rules/` load automatically when you work on matching paths. The scaffold is Milestone 1; until it lands, treat this layout as the target, not a description.
 

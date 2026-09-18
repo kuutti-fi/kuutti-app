@@ -331,6 +331,12 @@ aws ssm put-parameter --name /kuutti/prod/hetu-hmac-key --type SecureString \
 
 `db-app-password` is created by `scripts/db-app-role.sh`; rotating it is `ALTER ROLE kuutti_app PASSWORD '…'` through the same tunnel, `put-parameter --overwrite`, and a restart of the API. The two signing keys are not random bytes: the CloudFront key is an RSA key pair whose public half becomes a CloudFront public-key resource (M3), and the Telia key is whatever the broker contract specifies (M2); their creation steps land with those milestones. The RDS master password is not managed here at all: `manage_master_user_password = true` leaves it with AWS so it never enters state.
 
+## Placeholder site
+
+`kuutti.app` serves `site/index.html` from Amplify Hosting until there is a product site (ADR-001, 2026-09-18). The app is connected to this repository as a monorepo with root `site`; `amplify.yml` at the repository root is its build spec, and a push to `main` that changes something under `site/` deploys within a minute. Nothing else in the repository triggers it.
+
+Setting it up, once, in the Amplify console (eu-central-1): *Create new app*, GitHub, install the Amplify GitHub App for `kuutti-fi/kuutti-app` only, branch `main`, tick *My app is a monorepo* and enter `site`; the build settings are read from `amplify.yml`. Then *Custom domains*, *Add domain*, pick `kuutti.app` from the Route 53 list, keep the `www` redirect: Amplify issues the certificate and writes the validation and alias records into the zone itself (10 to 30 minutes). Tag the app `Project=kuutti` so it appears under the cost allocation tag. To retire it: delete the app in the console, then the two records it left in the zone.
+
 ## What is not here
 
-Dokploy's own configuration (no provider exists; `user_data` installs it, its contents are backed up from `/etc/dokploy`), the registration of the domain itself (its zone and records are code), secret values, the EAS account side (the organisation and project, credentials, the robot token, the update signing key; `apps/mobile/README.md`), store setup, the Telia contract, and creation of the AWS account.
+Dokploy's own configuration (no provider exists; `user_data` installs it, its contents are backed up from `/etc/dokploy`), the registration of the domain itself (its zone and records are code), the Amplify Hosting app for the placeholder site (above), secret values, the EAS account side (the organisation and project, credentials, the robot token, the update signing key; `apps/mobile/README.md`), store setup, the Telia contract, and creation of the AWS account.
