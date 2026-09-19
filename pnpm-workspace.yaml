@@ -14,7 +14,7 @@ autoInstallPeers: false
 # One version of each shared tool across the workspace. Expo SDK 57 pins react,
 # react-native and typescript; everything else follows those.
 catalog:
-  typescript: ~6.0.3
+  typescript: ~7.0.2
   vitest: ^5.0.0
   react: 19.2.3
   react-dom: 19.2.3
