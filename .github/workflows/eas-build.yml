@@ -86,7 +86,11 @@ jobs:
               last=$(pnpm exec eas build:list --platform "$p" --build-profile development \
                 --status finished --limit 1 --json --non-interactive | jq -r '.[0].id // empty')
               if [ -z "$last" ]; then echo "$p: no finished development build yet"; changed="$changed $p"; continue; fi
-              cmp=$(pnpm exec eas fingerprint:compare --build-id "$last" --environment preview --json --non-interactive)
+              # With --environment, eas-cli prints "Environment variables ...
+              # loaded from the preview environment" on stdout ahead of the
+              # JSON; keep only the document (run 35454488799).
+              cmp=$(pnpm exec eas fingerprint:compare --build-id "$last" --environment preview --json --non-interactive \
+                | sed -n '/^[{[]/,$p')
               a=$(jq -r '.fingerprint1.hash' <<< "$cmp"); b=$(jq -r '.fingerprint2.hash' <<< "$cmp")
               if [ "$a" = "$b" ]; then echo "$p: fingerprint $a matches build $last"; else echo "$p: fingerprint $a differs from build $last ($b)"; changed="$changed $p"; fi
             done
