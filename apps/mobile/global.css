@@ -3,3 +3,17 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/*
+ * ThemeProvider's root view always carries this class. NativeWind remounts a
+ * view's children the first time its classes start to provide variables, which
+ * tears down the router under it; a root that provides one from the first
+ * render never changes kind when high contrast is switched on. The variable
+ * is used by the same rule because the compiler drops variables nothing reads.
+ */
+@layer base {
+  .theme-root {
+    --theme-root-opacity: 1;
+    opacity: var(--theme-root-opacity);
+  }
+}
