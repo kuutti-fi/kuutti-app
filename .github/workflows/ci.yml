@@ -35,9 +35,9 @@ jobs:
           persist-credentials: false
       - uses: ./.github/actions/pnpm
       - run: pnpm lint
-      # The update signing key (ADR-004) and every other PEM stay out of git;
-      # .gitignore un-ignores exactly one public certificate. TruffleHog
-      # filters unverifiable keys, so this is the backstop.
+      # Every PEM stays out of git; .gitignore un-ignores exactly one public
+      # certificate bundle. TruffleHog filters unverifiable keys, so this is
+      # the backstop.
       - name: No private key in tracked files
         run: |
           if git grep -lE 'BEGIN( RSA| EC| OPENSSH| ENCRYPTED)? PRIVATE KEY' -- . ':!*.md'; then

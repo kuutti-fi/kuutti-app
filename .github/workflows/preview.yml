@@ -250,8 +250,8 @@ jobs:
     needs: [api, web]
     if: needs.api.outputs.deployed == 'true'
     runs-on: ubuntu-24.04-arm
-    # The same environment as the other lanes: its secrets (EXPO_TOKEN, and
-    # the signing key once the maintainer grants it) exist nowhere else.
+    # The same environment as the other lanes: EXPO_TOKEN is not available
+    # to a pull-request job anywhere else.
     environment: preview
     permissions:
       contents: read
@@ -265,22 +265,16 @@ jobs:
       - uses: ./.github/actions/pnpm
 
       # The lane publishes only once #10 has configured expo-updates (an EAS
-      # project id and updates.url), and, since updates are code-signed
-      # (ADR-004), only when the maintainer has put the signing key into the
-      # preview environment: an unsigned update is refused by every dev
-      # client, and handing the key to pull-request jobs is a decision
-      # (infra/README.md, Previews, Trust). Without it the lane says so.
-      - name: Is EAS Update configured, and is there a key to sign with?
+      # project id and updates.url). Updates are not code-signed (ADR-004), so
+      # the preview environment's EXPO_TOKEN is all it takes; the environment's
+      # required reviewer is what stands between a pull request and that token
+      # (infra/README.md, Previews, Trust).
+      - name: Is EAS Update configured?
         id: configured
-        env:
-          HAS_KEY: ${{ secrets.EXPO_UPDATES_PRIVATE_KEY != '' }}
         run: |
           if ! jq -e '.expo.updates.url and .expo.extra.eas.projectId' apps/mobile/app.json >/dev/null 2>&1; then
             echo "configured=not-configured" >> "$GITHUB_OUTPUT"
             echo "::notice::expo-updates is not configured; the native lane stays dormant until #10"
-          elif jq -e '.expo.updates.codeSigningCertificate' apps/mobile/app.json >/dev/null 2>&1 && [ "$HAS_KEY" != true ]; then
-            echo "configured=unsigned" >> "$GITHUB_OUTPUT"
-            echo "::notice::updates are code-signed and the preview environment holds no signing key; nothing published"
           else
             echo "configured=true" >> "$GITHUB_OUTPUT"
           fi
@@ -334,15 +328,19 @@ jobs:
             echo "needed=false" >> "$GITHUB_OUTPUT"
           fi
 
-      # The key exists in this step's environment only (deploy.yml does the same).
-      - name: Write the update signing key
+      # Bundled without the token, as the web lane does: Metro, Babel and the
+      # pull request's own build configuration run here, and updates are not
+      # code-signed (ADR-004), so EXPO_TOKEN is the right to publish anywhere.
+      # The arguments are what eas update itself passes to expo export.
+      - name: Export the update bundle against the preview API
         if: steps.configured.outputs.configured == 'true' && steps.decide.outputs.needed == 'true'
+        working-directory: apps/mobile
         env:
-          UPDATE_SIGNING_KEY: ${{ secrets.EXPO_UPDATES_PRIVATE_KEY }}
+          EXPO_PUBLIC_API_URL: ${{ needs.api.outputs.api_url }}
         run: |
-          if [ -n "$UPDATE_SIGNING_KEY" ]; then
-            (umask 077 && printf '%s\n' "$UPDATE_SIGNING_KEY" > "$RUNNER_TEMP/update-signing-key.pem")
-          fi
+          : "${EXPO_PUBLIC_API_URL:?the preview API URL must be set}"
+          pnpm exec expo export --output-dir dist --source-maps --dump-assetmap \
+            --platform ios --platform android
 
       - name: Publish the EAS Update on branch pr-${{ github.event.pull_request.number }}
         id: update
@@ -350,27 +348,21 @@ jobs:
         working-directory: apps/mobile
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
-          EXPO_PUBLIC_API_URL: ${{ needs.api.outputs.api_url }}
           SHORT_SHA: ${{ needs.api.outputs.short_sha }}
         run: |
           # No --environment here: an EAS environment's variables override the
-          # runner's, and this bundle must point at the pull request's own API.
-          : "${EXPO_PUBLIC_API_URL:?the preview API URL must be set}"
-          key=()
-          [ -f "$RUNNER_TEMP/update-signing-key.pem" ] && key=(--private-key-path "$RUNNER_TEMP/update-signing-key.pem")
+          # runner's, and the bundle above points at the pull request's own API.
+          # Same filter as deploy.yml: only the JSON document reaches jq.
           out=$(pnpm exec eas update --branch "pr-$PR_NUMBER" --message "pr-$PR_NUMBER $SHORT_SHA" \
-            --platform all "${key[@]}" --json --non-interactive)
-          group=$(jq -r '.[0].group' <<< "$out")
+            --skip-bundler --input-dir dist --platform all --json --non-interactive \
+            | sed -n '/^[{[]/,$p')
+          group=$(jq -er '.[0].group' <<< "$out")
           project=$(jq -r .expo.extra.eas.projectId app.json)
           slug=$(jq -r .expo.slug app.json)
           {
             echo "qr=https://qr.expo.dev/eas-update?appScheme=$slug&projectId=$project&groupId=$group"
             echo "link=https://expo.dev/projects/$project/updates/$group"
           } >> "$GITHUB_OUTPUT"
-
-      - name: Remove the signing key file
-        if: always()
-        run: rm -f "$RUNNER_TEMP/update-signing-key.pem"
           jq -r '.[] | "\(.platform) \(.id) runtime \(.runtimeVersion)"' <<< "$out"
 
       - name: Comment

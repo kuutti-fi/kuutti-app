@@ -2,12 +2,12 @@ name: Deploy
 
 # Called by build.yml: deploys an already-pushed image to one environment's
 # Dokploy, waits until /health runs that commit (#8), then publishes the same
-# commit's JavaScript as a signed EAS Update to the environment's channel
-# (#10: staging or production). The GitHub environment supplies DOKPLOY_URL,
-# DOKPLOY_APPLICATION_ID and API_URL as variables and DOKPLOY_TOKEN,
-# EXPO_TOKEN and EXPO_UPDATES_PRIVATE_KEY as secrets; prod's environment
-# also carries the reviewer gate, so a prod deploy waits for approval before
-# this runs. EAS_ENABLED (repository variable) switches the update on.
+# commit's JavaScript as an EAS Update to the environment's channel (#10:
+# staging or production). The GitHub environment supplies DOKPLOY_URL,
+# DOKPLOY_APPLICATION_ID and API_URL as variables and DOKPLOY_TOKEN and
+# EXPO_TOKEN as secrets; prod's environment also carries the reviewer gate,
+# so a prod deploy waits for approval before this runs. EAS_ENABLED
+# (repository variable) switches the update on.
 
 on:
   workflow_call:
@@ -79,24 +79,14 @@ jobs:
 
       # The update follows the API (#10, ADR-004): staging gets channel
       # staging, prod channel production, each bundle pointed at its own API.
-      # Signed with the key from the environment's secret; a client rejects
-      # anything not signed by the certificate it ships with. A native change
-      # is a build, not an update: eas-build.yml watches the fingerprint.
+      # Not code-signed: Expo sells update signing with its paid plans only,
+      # so what may publish is whatever holds this environment's EXPO_TOKEN
+      # (ADR-004). A native change is a build, not an update: eas-build.yml
+      # watches the fingerprint.
       - uses: ./.github/actions/pnpm
         if: steps.ready.outputs.ready == 'true' && vars.EAS_ENABLED == 'true'
 
-      # The key exists in exactly one step's environment, this one, which runs
-      # nothing but printf: the bundler and every dependency it loads run in
-      # the next step, where the key is a file path and nothing else.
-      - name: Write the update signing key
-        if: steps.ready.outputs.ready == 'true' && vars.EAS_ENABLED == 'true'
-        env:
-          UPDATE_SIGNING_KEY: ${{ secrets.EXPO_UPDATES_PRIVATE_KEY }}
-        run: |
-          : "${UPDATE_SIGNING_KEY:?set the secret EXPO_UPDATES_PRIVATE_KEY in this environment}"
-          (umask 077 && printf '%s\n' "$UPDATE_SIGNING_KEY" > "$RUNNER_TEMP/update-signing-key.pem")
-
-      - name: Publish the signed EAS Update to the ${{ inputs.environment == 'prod' && 'production' || 'staging' }} channel
+      - name: Publish the EAS Update to the ${{ inputs.environment == 'prod' && 'production' || 'staging' }} channel
         if: steps.ready.outputs.ready == 'true' && vars.EAS_ENABLED == 'true'
         working-directory: apps/mobile
         env:
@@ -109,10 +99,12 @@ jobs:
           # --environment makes the EAS environment's EXPO_PUBLIC_API_URL win over
           # the runner's; both must exist and README keeps them equal.
           : "${EXPO_PUBLIC_API_URL:?API_URL must be set in the GitHub environment}"
+          # With --environment, eas-cli prints a plain line on stdout ahead of
+          # the JSON (eas-build.yml has the same filter); keep the document.
           pnpm exec eas update --channel "$CHANNEL" --environment "$EAS_ENVIRONMENT" \
-            --message "$COMMIT" --platform all --private-key-path "$RUNNER_TEMP/update-signing-key.pem" \
-            --json --non-interactive \
-            | jq -r '.[] | "\(.platform) \(.id) runtime \(.runtimeVersion) branch \(.branch)"'
+            --message "$COMMIT" --platform all --json --non-interactive \
+            | sed -n '/^[{[]/,$p' \
+            | jq -er '.[] | "\(.platform) \(.id) runtime \(.runtimeVersion) branch \(.branch)"'
 
       # The update's source maps, so Sentry symbolises the JavaScript it just
       # published (#11). dist is eas update's export directory. Skipped, not
@@ -128,7 +120,3 @@ jobs:
             exit 0
           fi
           pnpm exec sentry-expo-upload-sourcemaps dist
-
-      - name: Remove the signing key file
-        if: always()
-        run: rm -f "$RUNNER_TEMP/update-signing-key.pem"

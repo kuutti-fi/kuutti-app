@@ -16,7 +16,7 @@
     "env:status": "node --env-file-if-exists=.env scripts/dev-env.ts status",
     "env:doctor": "node scripts/doctor.ts",
     "aws:login": "infra/scripts/aws-login",
-    "dev:mobile": "pnpm --filter @kuutti/mobile start --private-key-path keys/private-key.pem",
+    "dev:mobile": "pnpm --filter @kuutti/mobile start",
     "dev:admin": "pnpm --filter @kuutti/admin dev",
     "typecheck": "pnpm -r run typecheck",
     "lint": "biome check .",

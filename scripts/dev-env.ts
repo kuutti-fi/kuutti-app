@@ -58,12 +58,7 @@ const SERVICES: Service[] = [
     readyUrl: "http://localhost:8081/",
     dir: "apps/mobile",
     script: "start",
-    // The dev client carries the update certificate (ADR-004) and asks Metro
-    // for a signed manifest, so Metro needs the key. Passed here and not in
-    // apps/mobile/package.json: its scripts are part of the fingerprint, and a
-    // changed fingerprint is a new build. Without the key file Metro still
-    // starts and serves the web target; only the dev client is refused.
-    extraArgs: ["--port", "8081", "--private-key-path", "keys/private-key.pem"],
+    extraArgs: ["--port", "8081"],
     env: { EXPO_NO_TELEMETRY: "1" },
   },
   {

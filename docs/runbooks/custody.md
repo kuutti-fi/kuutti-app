@@ -12,9 +12,8 @@ Fill the *holder*, *MFA*, *backup factor* and *second custodian* columns from th
 | AWS root (`kuutti`, 438298963814) | account ownership, billing, closing the account | maintainer | *unverified*: one virtual device `phone` seen 2026-09-18; runbook 2.3 wants two hardware keys | second MFA device `root-backup` (*unverified*) | `Kuutti / AWS root` | none yet | root sign-in with MFA; lost MFA → AWS phone/email recovery, ends in the mailbox above |
 | AWS Identity Center user `maintainer` | day-to-day admin (`pnpm aws:login`) | maintainer | MFA required by the identity store | none | `Kuutti / AWS Identity Center` | none yet | root creates a new user; nothing under `infra/` depends on this user |
 | GitHub organisation `kuutti-fi` | code, CI, secrets, environments | three owners (`superseacat`, `juusohe`, `OlliKiljunen`) | 2FA required org-wide | each owner's own recovery codes | personal | the other two owners | any owner; billing email is still a personal Gmail (org Settings → Billing → move it to `MAILBOX`) |
-| Expo organisation `kuutti` | native builds, updates, credentials | owner `kuutti.expo` (the mailbox identity); `superseacat` Admin | *unverified* on both | recovery codes (*unverified*) | `Kuutti / Expo owner` | none yet | owner login through the mailbox; an Admin cannot delete the org or change the owner |
+| Expo organisation `kuutti` | native builds, credentials, and the whole update path: updates are not code-signed (ADR-004), so this account and its robot token decide what installed builds run | owner `kuutti.expo` (the mailbox identity); `superseacat` Admin | *unverified* on both | recovery codes (*unverified*) | `Kuutti / Expo owner` | none yet | owner login through the mailbox; an Admin cannot delete the org or change the owner |
 | Domain `kuutti.app` (Route 53 Domains) | DNS, certificates, App/Universal Links later | the AWS account | (AWS) | auto-renew and transfer lock on | – | – | moves with the account; registrant verification must read `DONE` (`aws route53domains get-contact-reachability-status`) |
-| EAS update signing key (ADR-004) | signs every update phones accept | `apps/mobile/keys/private-key.pem` on the maintainer's Mac | – | password-manager copy (*confirm it matches*: `openssl x509 -in apps/mobile/certs/certificate.pem -pubkey -noout \| openssl sha256` equals `openssl rsa -in <stored copy> -pubout \| openssl sha256`) | `Kuutti / EAS update signing key` | GitHub environments `staging` and `prod` hold it write-only | if every copy is lost: regenerate and rebuild every device (ADR-004, done once on 2026-09-17) |
 | hetu HMAC key (rule 2) | identity derivation, M2 | does not exist yet | – | one offline copy at creation (infra/README, Secrets) | – | – | never rotated; loss is unrecoverable by design, so the offline copy is the whole plan |
 | Dokploy admin (staging, prod) | deploy control plane, M1 #7 | not created yet | 2FA in Dokploy (infra/README step 3) | – | `Kuutti / Dokploy <env>` | – | rebuild the box from code; Dokploy config restored from the `/etc/dokploy` backup |
 
@@ -29,8 +28,7 @@ Fill the *holder*, *MFA*, *backup factor* and *second custodian* columns from th
 
 - [ ] Mailbox: second factor registered, backup codes in the entry, recovery phone/email noted
 - [ ] AWS root: two MFA devices, no virtual device, zero access keys (`aws iam get-account-summary`: MFA 1, keys 0)
-- [ ] Expo owner: 2FA on, recovery codes in the entry
-- [ ] Signing key: password-manager copy verified against the certificate
+- [ ] Expo owner and the maintainer's Admin login: 2FA on, recovery codes in the entry (they guard the unsigned update path, ADR-004)
 - [ ] GitHub org billing email moved to the project mailbox
 - [ ] Second custodian named above and holding a backup factor
 - [ ] Reminder set for 2027-08: domain renewal, card validity, this review

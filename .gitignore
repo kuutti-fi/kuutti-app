@@ -66,8 +66,7 @@ expo-env.d.ts
 .kotlin/
 .claude/session-handoff.md
 
-# EAS Update code signing (#10): the certificate is public and ships in the binary; the private key never enters the repository.
-!apps/mobile/certs/certificate.pem
 # RDS root certificates for TLS verification (public, from the AWS truststore).
 !apps/api/certs/rds-eu-central-1-bundle.pem
+# Where a withdrawn update signing key (ADR-004) may still sit on a developer's machine.
 apps/mobile/keys/
