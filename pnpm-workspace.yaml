@@ -36,3 +36,12 @@ allowBuilds:
 # Supply chain: a version must be at least one day old before pnpm installs it
 # (pnpm's default, stated explicitly). Exclusions are a decision, not a convenience.
 minimumReleaseAge: 1440
+
+# Patched transitive versions the audit gate requires. All three sit under
+# eas-cli (a CLI run only in CI), which still ships older ranges; the majors
+# are unchanged, so nothing else in the tree moves. Remove an entry once
+# eas-cli's own range is at or above it.
+overrides:
+  "minimatch@5": ">=5.1.8 <6"
+  "nanoid@3": ">=3.3.18 <4"
+  "tar@7": ">=7.5.21 <8"

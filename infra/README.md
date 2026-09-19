@@ -277,12 +277,12 @@ Once, after staging is applied and its Dokploy is configured:
 3. **Dokploy.** A project `previews`; its default environment holds the applications, and its id (from the environment's URL in Dokploy) is `DOKPLOY_ENVIRONMENT_ID`. A member user `ci-preview` (Settings, Users) with access to the `previews` project and that environment only, permissions to create and delete services and to create domains, nothing else (no volumes, no Traefik files, no Docker access); sign in as that member and generate its API key. The staging `api` application stays out of the member's reach. Check as the member that `application.one` on the staging application's id is refused before enabling previews.
 4. **EAS.** Once in `apps/mobile`: `eas init` writes `extra.eas.projectId` into `app.json`, commit it. The first hosting deploy picks the subdomain that every preview alias hangs off: `npx expo export --platform web && eas deploy --dev-domain kuutti`; that name is `EAS_HOSTING_SUBDOMAIN`. On expo.dev, a robot user with the Hosting and Update permissions provides `EXPO_TOKEN`. The native lane starts publishing when #10 adds `expo-updates` (`updates.url` in `app.json`); nothing here changes then.
 5. **Bootstrap.** `tofu apply` in `infra/bootstrap` for the plan role's `preview-cleanup` policy (it may send exactly the document below to exactly the staging box). The next staging apply lands the document `kuutti-staging-preview-database`.
-6. **GitHub.** The environment `preview` with no deployment branch restriction (pull requests deploy from any branch of this repository), four variables and two secrets, then the switch:
+6. **GitHub.** The environment `preview` with the maintainer as required reviewer (Trust, above: every preview deployment is a click while the maintainer is the only staging operator) and no deployment branch restriction (pull requests deploy from any branch of this repository), four variables and two secrets, then the switch:
 
    ```sh
    R=repos/kuutti-fi/kuutti-app
    gh api -X PUT "$R/environments/preview" --input - <<'JSON'
-   {"wait_timer":0,"reviewers":[],"deployment_branch_policy":null}
+   {"wait_timer":0,"reviewers":[{"type":"User","id":9991098}],"deployment_branch_policy":null}
    JSON
    gh variable set DOKPLOY_URL --env preview --body https://dokploy.staging.kuutti.app
    gh variable set DOKPLOY_ENVIRONMENT_ID --env preview --body <id>
