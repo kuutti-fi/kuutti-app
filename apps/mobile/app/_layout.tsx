@@ -1,8 +1,10 @@
+import "../global.css";
 import * as Sentry from "@sentry/react-native";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import * as Updates from "expo-updates";
 import { sentryOptions } from "@/lib/sentry";
+import { ThemeProvider } from "@/theme/ThemeProvider";
 
 // Error reporting (#11): on exactly when EXPO_PUBLIC_SENTRY_DSN is set for the
 // build or update; options in src/lib/sentry.ts, asserted by its test.
@@ -11,10 +13,12 @@ Sentry.init(sentryOptions({ dsn: process.env.EXPO_PUBLIC_SENTRY_DSN, channel: Up
 // Routes stay thin and delegate to src/features/<slice>/ (rules/layout.md).
 function RootLayout() {
   return (
-    <>
-      <Stack screenOptions={{ headerShown: false }} />
+    <ThemeProvider>
+      <Stack
+        screenOptions={{ headerShown: false, contentStyle: { backgroundColor: "transparent" } }}
+      />
       <StatusBar style="auto" />
-    </>
+    </ThemeProvider>
   );
 }
 

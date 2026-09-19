@@ -1,0 +1,43 @@
+import * as LabelPrimitive from "@rn-primitives/label";
+import type * as React from "react";
+import { Platform } from "react-native";
+import { cn } from "@/lib/utils";
+import { MAX_FONT_SCALE } from "@/theme/a11y";
+
+// From React Native Reusables (#12), adapted: scales with the OS font size.
+function Label({
+  className,
+  onPress,
+  onLongPress,
+  onPressIn,
+  onPressOut,
+  disabled,
+  ...props
+}: React.ComponentProps<typeof LabelPrimitive.Text>) {
+  return (
+    <LabelPrimitive.Root
+      // A press on the label is a convenience for sighted users; the control it
+      // names carries the role and the label, so this wrapper is not an
+      // accessibility element of its own and its text is read as text.
+      accessible={false}
+      className={cn(
+        "flex select-none flex-row items-center gap-2",
+        Platform.select({ web: "cursor-default" }),
+        disabled && "opacity-50",
+      )}
+      onPress={onPress}
+      onLongPress={onLongPress}
+      onPressIn={onPressIn}
+      onPressOut={onPressOut}
+      disabled={disabled}
+    >
+      <LabelPrimitive.Text
+        className={cn("text-sm font-medium text-foreground", className)}
+        maxFontSizeMultiplier={MAX_FONT_SCALE}
+        {...props}
+      />
+    </LabelPrimitive.Root>
+  );
+}
+
+export { Label };

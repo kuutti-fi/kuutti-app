@@ -47,6 +47,16 @@
   },
   "overrides": [
     {
+      "includes": ["apps/mobile/global.css"],
+      "linter": {
+        "rules": {
+          "suspicious": {
+            "noUnknownAtRules": { "level": "error", "options": { "ignore": ["tailwind"] } }
+          }
+        }
+      }
+    },
+    {
       "includes": [
         "apps/api/src/**",
         "apps/mobile/src/**",

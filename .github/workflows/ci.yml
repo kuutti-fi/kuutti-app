@@ -82,6 +82,9 @@ jobs:
       - uses: ./.github/actions/pnpm
       - name: jest-expo
         run: pnpm --filter @kuutti/mobile test
+      # WCAG contrast of every token pair in every theme (#12).
+      - name: Token contrast
+        run: pnpm --filter @kuutti/mobile check:contrast
 
   audit:
     name: audit

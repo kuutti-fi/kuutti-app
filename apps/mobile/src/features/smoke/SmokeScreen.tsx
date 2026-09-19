@@ -1,20 +1,35 @@
 import type { HealthResponse } from "@kuutti/schema";
+import * as Updates from "expo-updates";
+import RotateCw from "lucide-react-native/icons/rotate-cw";
 import { useCallback, useEffect, useState } from "react";
-import { Pressable, StyleSheet, Text, useColorScheme, View } from "react-native";
+import { ScrollView, View } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Icon } from "@/components/ui/icon";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Text } from "@/components/ui/text";
 import { apiBaseUrl, fetchHealth } from "@/lib/api";
+import { useHapticTap } from "@/theme/haptics";
+import { DevSettings } from "./DevSettings";
 
 type State =
   | { kind: "loading" }
   | { kind: "ok"; health: HealthResponse }
   | { kind: "error"; message: string };
 
+// The appearance sheet is for the team: every build except the store's.
+const SHOW_DEV_SETTINGS = Updates.channel !== "production";
+
 /**
- * M1 smoke screen: proves the app boots and reaches the API. Rebuilt on the UI
- * primitives in #12 and localised in #13; strings are inline until then.
+ * M1 smoke screen: proves the app boots and reaches the API, and is the first
+ * screen built on the UI primitives and tokens (#12). Localised in #13;
+ * strings are inline until then. It scrolls, so the largest OS font size
+ * never clips anything.
  */
 export function SmokeScreen() {
   const [state, setState] = useState<State>({ kind: "loading" });
-  const dark = useColorScheme() === "dark";
+  const tap = useHapticTap();
 
   const load = useCallback(async () => {
     setState({ kind: "loading" });
@@ -30,82 +45,64 @@ export function SmokeScreen() {
     void load();
   }, [load]);
 
-  const colors = dark ? palette.dark : palette.light;
-
   return (
-    <View style={[styles.screen, { backgroundColor: colors.background }]}>
-      <Text accessibilityRole="header" style={[styles.title, { color: colors.foreground }]}>
-        Kuutti
-      </Text>
-      <Text style={[styles.muted, { color: colors.muted }]}>{apiBaseUrl()}</Text>
-
-      {state.kind === "loading" && (
-        <Text style={[styles.body, { color: colors.foreground }]}>Reaching the API…</Text>
-      )}
-
-      {state.kind === "ok" && (
-        <View accessibilityLabel="API status">
-          <Text style={[styles.body, { color: colors.foreground }]}>
-            API {state.health.version}
-          </Text>
-          <Text style={[styles.muted, { color: colors.muted }]}>commit {state.health.commit}</Text>
-          <Text style={[styles.muted, { color: colors.muted }]}>
-            db {state.health.db} · migrations {state.health.migrations}
-          </Text>
+    <SafeAreaView className="flex-1 bg-background">
+      {SHOW_DEV_SETTINGS && (
+        <View className="flex-row justify-end px-2">
+          <DevSettings />
         </View>
       )}
+      <ScrollView contentContainerClassName="flex-grow items-center justify-center gap-4 p-6">
+        <Text variant="h1" accessibilityRole="header">
+          Kuutti
+        </Text>
+        <Text variant="muted">{apiBaseUrl()}</Text>
 
-      {state.kind === "error" && (
-        <View accessibilityLabel="API unreachable">
-          <Text style={[styles.body, { color: colors.destructive }]}>API unreachable</Text>
-          <Text style={[styles.muted, { color: colors.muted }]}>{state.message}</Text>
-        </View>
-      )}
+        <Card className="w-full max-w-md">
+          {state.kind === "loading" && (
+            <CardContent accessibilityLabel="Reaching the API" className="gap-3">
+              <Text>Reaching the API…</Text>
+              <Skeleton className="h-4 w-2/3" />
+              <Skeleton className="h-4 w-1/2" />
+            </CardContent>
+          )}
 
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel="Retry"
-        onPress={load}
-        style={({ pressed }) => [
-          styles.button,
-          { backgroundColor: colors.primary, opacity: pressed ? 0.8 : 1 },
-        ]}
-      >
-        <Text style={[styles.buttonText, { color: colors.background }]}>Retry</Text>
-      </Pressable>
-    </View>
+          {state.kind === "ok" && (
+            <View accessibilityLabel="API status" className="gap-6">
+              <CardHeader>
+                <CardTitle>API {state.health.version}</CardTitle>
+                <CardDescription>commit {state.health.commit}</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Text variant="muted">
+                  db {state.health.db} · migrations {state.health.migrations}
+                </Text>
+              </CardContent>
+            </View>
+          )}
+
+          {state.kind === "error" && (
+            <View accessibilityLabel="API unreachable" className="gap-6">
+              <CardHeader>
+                {/* The words carry the state; the colour only repeats it. */}
+                <CardTitle className="text-destructive">API unreachable</CardTitle>
+                <CardDescription>{state.message}</CardDescription>
+              </CardHeader>
+            </View>
+          )}
+        </Card>
+
+        <Button
+          accessibilityLabel="Retry"
+          onPress={() => {
+            tap();
+            void load();
+          }}
+        >
+          <Icon as={RotateCw} />
+          <Text>Retry</Text>
+        </Button>
+      </ScrollView>
+    </SafeAreaView>
   );
 }
-
-const palette = {
-  light: {
-    background: "#FFFFFF",
-    foreground: "#111827",
-    muted: "#6B7280",
-    primary: "#1D4ED8",
-    destructive: "#B91C1C",
-  },
-  dark: {
-    background: "#0B1220",
-    foreground: "#F3F4F6",
-    muted: "#9CA3AF",
-    primary: "#93C5FD",
-    destructive: "#FCA5A5",
-  },
-} as const;
-
-const styles = StyleSheet.create({
-  screen: { flex: 1, alignItems: "center", justifyContent: "center", gap: 12, padding: 24 },
-  title: { fontSize: 32, fontWeight: "700" },
-  body: { fontSize: 18 },
-  muted: { fontSize: 14 },
-  button: {
-    minHeight: 44,
-    minWidth: 44,
-    paddingHorizontal: 20,
-    justifyContent: "center",
-    borderRadius: 8,
-    marginTop: 12,
-  },
-  buttonText: { fontSize: 16, fontWeight: "600" },
-});
