@@ -55,7 +55,7 @@ resource "aws_sns_topic_policy" "alerts" {
 # unset variable arrives as "", which must mean "no subscriber", not a
 # subscription with an empty endpoint (SNS refuses it and fails the apply).
 resource "aws_sns_topic_subscription" "email" {
-  count = trimspace(coalesce(var.alert_email, "")) == "" ? 0 : 1
+  count = var.alert_email == null || trimspace(var.alert_email) == "" ? 0 : 1
 
   topic_arn = aws_sns_topic.alerts.arn
   protocol  = "email"
