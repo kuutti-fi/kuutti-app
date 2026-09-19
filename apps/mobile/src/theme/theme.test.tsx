@@ -1,7 +1,8 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { act, renderHook } from "@testing-library/react-native";
-import { AccessibilityInfo } from "react-native";
+import { act, renderHook, screen } from "@testing-library/react-native";
+import { AccessibilityInfo, Text } from "react-native";
+import { renderWithTheme } from "@/test/render";
 import { hitSlopFor } from "./a11y";
 import { parseTokenSets } from "./contrast";
 import { useMotionDuration, useReducedMotion } from "./useReducedMotion";
@@ -69,5 +70,16 @@ describe("tokens", () => {
     for (const set of [".dark:root", ".high-contrast", ".high-contrast-dark"]) {
       expect(names(set)).toEqual(names(":root"));
     }
+  });
+});
+
+describe("ThemeProvider", () => {
+  it("keeps theme-root on its root view, so switching high contrast on never remounts the app", async () => {
+    // global.css explains why: without a variable from the first render,
+    // NativeWind remounts the children, and the router with them, the moment
+    // the high-contrast class arrives (seen on the simulator, 2026-09-19).
+    await renderWithTheme(<Text>child</Text>);
+    const tree = JSON.stringify(screen.toJSON());
+    expect(tree).toContain("theme-root");
   });
 });

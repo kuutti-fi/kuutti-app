@@ -48,7 +48,7 @@ export function SmokeScreen() {
   return (
     <SafeAreaView className="flex-1 bg-background">
       {SHOW_DEV_SETTINGS && (
-        <View className="flex-row justify-end px-2">
+        <View className="flex-row justify-start px-2">
           <DevSettings />
         </View>
       )}

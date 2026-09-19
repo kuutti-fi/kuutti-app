@@ -124,7 +124,10 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <ThemeContext.Provider value={theme}>
-      <Animated.View style={{ flex: 1, opacity }} className={cn("bg-background", contrastClass)}>
+      <Animated.View
+        style={{ flex: 1, opacity }}
+        className={cn("theme-root bg-background", contrastClass)}
+      >
         {children}
         <PortalHost />
       </Animated.View>
