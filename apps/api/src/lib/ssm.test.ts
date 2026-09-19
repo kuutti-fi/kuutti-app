@@ -1,6 +1,15 @@
 import type { GetParametersByPathCommand } from "@aws-sdk/client-ssm";
 import { describe, expect, it } from "vitest";
-import { loadSsmParameters, parameterNameToEnvKey } from "./ssm.ts";
+import { DEFAULT_REGION, loadSsmParameters, parameterNameToEnvKey, ssmRegion } from "./ssm.ts";
+
+describe("ssmRegion", () => {
+  it("takes AWS_REGION, then AWS_DEFAULT_REGION, then the project region", () => {
+    expect(ssmRegion({ AWS_REGION: "eu-north-1" })).toBe("eu-north-1");
+    expect(ssmRegion({ AWS_DEFAULT_REGION: "eu-west-1" })).toBe("eu-west-1");
+    expect(ssmRegion({})).toBe(DEFAULT_REGION);
+    expect(DEFAULT_REGION).toBe("eu-central-1");
+  });
+});
 
 describe("parameterNameToEnvKey", () => {
   it("maps a parameter path under the prefix to an upper snake key", () => {

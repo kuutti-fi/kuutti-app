@@ -161,4 +161,18 @@ describe("ssmPrefix", () => {
   it("points previews at the staging parameters", () => {
     expect(ssmPrefix("preview")).toBe("/kuutti/staging/");
   });
+
+  it("verifies the RDS certificate and host name when the bundle path is set", () => {
+    const config = parseConfig({
+      APP_ENV: "staging",
+      DB_HOST: "rds.internal",
+      DB_NAME: "kuutti",
+      DB_USER: "kuutti_app",
+      DB_APP_PASSWORD: "s3cret",
+      DB_SSL_ROOT_CERT: "/app/certs/rds-eu-central-1-bundle.pem",
+    });
+    const url = new URL(config.databaseUrl);
+    expect(url.searchParams.get("sslmode")).toBe("verify-full");
+    expect(url.searchParams.get("sslrootcert")).toBe("/app/certs/rds-eu-central-1-bundle.pem");
+  });
 });

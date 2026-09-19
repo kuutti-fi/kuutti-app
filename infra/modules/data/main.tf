@@ -9,7 +9,8 @@ locals {
   db_name    = var.project
 }
 
-# TLS is mandatory on the wire; the API connects with sslmode=require.
+# TLS is mandatory on the wire; the API connects with sslmode=verify-full and
+# the regional RDS root bundle it ships (apps/api/certs).
 resource "aws_db_parameter_group" "this" {
   name_prefix = "${local.identifier}-postgres17-"
   family      = "postgres17"

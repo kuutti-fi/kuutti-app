@@ -50,9 +50,20 @@ JSON
 # installer brings Docker, initialises a one-node swarm, and starts Dokploy,
 # its Postgres and Traefik. The UI on port 3000 is never opened in the
 # security group: reach it through Session Manager port forwarding (README).
-curl -fsSL https://dokploy.com/install.sh -o /root/dokploy-install.sh
+echo "${dokploy_installer}" | base64 -d | gunzip > /root/dokploy-install.sh
 echo "${dokploy_installer_sha256}  /root/dokploy-install.sh" | sha256sum -c -
 DOKPLOY_VERSION="${dokploy_version}" sh /root/dokploy-install.sh
+
+# The RDS root certificates for this region, for the box's own psql (the
+# preview-database Run Command). Same bundle as apps/api/certs, same hash; a
+# mismatch is a warning here, never a failed boot: the API image carries its
+# own copy and only preview cleanup needs this one.
+mkdir -p /etc/kuutti
+if curl -fsSL --max-time 30 https://truststore.pki.rds.amazonaws.com/${region}/${region}-bundle.pem -o /etc/kuutti/rds-ca.pem; then
+  echo "${rds_ca_sha256}  /etc/kuutti/rds-ca.pem" | sha256sum -c - || echo "WARNING: RDS bundle differs from apps/api/certs; refresh the vendored copy"
+else
+  echo "WARNING: could not fetch the RDS bundle; preview cleanup psql will fail until /etc/kuutti/rds-ca.pem exists"
+fi
 
 # Nightly backup of Dokploy's state: /etc/dokploy (Traefik configuration and
 # certificates, application definitions) plus a dump of Dokploy's own

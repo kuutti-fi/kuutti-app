@@ -1,0 +1,3 @@
+# certs
+
+`rds-eu-central-1-bundle.pem`: the three Amazon RDS root certificates for eu-central-1 (RSA 2048, RSA 4096, ECC 384; valid to 2061), fetched from `https://truststore.pki.rds.amazonaws.com/eu-central-1/eu-central-1-bundle.pem` on 2026-09-19, sha256 `56a0cae044b6cc433971d964347401692a92ea0294e392753a3ebdaee54d8b84`. The runtime image copies it to `/app/certs/` and sets `DB_SSL_ROOT_CERT` to it, so a composed `DATABASE_URL` uses `sslmode=verify-full` (apps/api/src/lib/config.ts). Public material, not a key; `.gitignore` un-ignores exactly this file. Refresh it when AWS rotates the regional roots (announced years ahead) and update the hash here.

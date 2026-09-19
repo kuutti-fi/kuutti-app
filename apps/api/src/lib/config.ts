@@ -30,6 +30,11 @@ const Env = z.object({
   DB_PREVIEW_USER: z.string().min(1).optional(),
   DB_PREVIEW_PASSWORD: z.string().min(1).optional(),
   DB_POOL_MAX: z.coerce.number().int().min(1).max(50).default(10),
+  // RDS certificates chain to Amazon's private RDS roots, which no system
+  // store carries; the image ships the eu-central-1 bundle (certs/) and sets
+  // this path, so a composed URL verifies the server's certificate and name.
+  // Unset means a local Postgres: sslmode=require, no verification.
+  DB_SSL_ROOT_CERT: z.string().min(1).optional(),
   MIGRATIONS_DIR: z.string().min(1).default("../../packages/db/drizzle"),
 
   CORS_ALLOWED_ORIGINS: z.string().optional(),
@@ -172,7 +177,12 @@ function composeDatabaseUrl(env: z.infer<typeof Env>, preview: boolean): string 
   const user = preview ? env.DB_PREVIEW_USER : env.DB_USER;
   const password = preview ? env.DB_PREVIEW_PASSWORD : env.DB_APP_PASSWORD;
   if (!env.DB_HOST || !env.DB_NAME || !user || !password) return undefined;
-  return `postgres://${encodeURIComponent(user)}:${encodeURIComponent(password)}@${env.DB_HOST}:${env.DB_PORT}/${env.DB_NAME}?sslmode=require`;
+  // pg treats sslmode=require as encrypt-and-verify since 8.16; with the RDS
+  // bundle that verification can succeed, and verify-full also pins the host.
+  const ssl = env.DB_SSL_ROOT_CERT
+    ? `sslmode=verify-full&sslrootcert=${encodeURIComponent(env.DB_SSL_ROOT_CERT)}`
+    : "sslmode=require";
+  return `postgres://${encodeURIComponent(user)}:${encodeURIComponent(password)}@${env.DB_HOST}:${env.DB_PORT}/${env.DB_NAME}?${ssl}`;
 }
 
 /**

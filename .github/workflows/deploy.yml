@@ -48,7 +48,23 @@ jobs:
         with:
           persist-credentials: false
 
+      # Between the first infra apply and the Dokploy setup (infra/README.md,
+      # After the first apply) the environment has no DOKPLOY_URL yet: report
+      # it and stop green rather than fail every merge in the meantime.
+      - name: Is Dokploy configured for this environment?
+        id: ready
+        env:
+          DOKPLOY_URL: ${{ vars.DOKPLOY_URL }}
+        run: |
+          if [ -z "$DOKPLOY_URL" ]; then
+            echo "DOKPLOY_URL is not set for this environment; nothing deployed (infra/README.md, After the first apply)"
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Point the Dokploy application at the image and deploy
+        if: steps.ready.outputs.ready == 'true'
         env:
           DOKPLOY_URL: ${{ vars.DOKPLOY_URL }}
           DOKPLOY_TOKEN: ${{ secrets.DOKPLOY_TOKEN }}
@@ -57,6 +73,7 @@ jobs:
         run: .github/scripts/dokploy-deploy.sh
 
       - name: /health reports the commit with the database reachable
+        if: steps.ready.outputs.ready == 'true'
         env:
           API_URL: ${{ vars.API_URL }}
           COMMIT: ${{ inputs.commit }}
@@ -68,13 +85,13 @@ jobs:
       # anything not signed by the certificate it ships with. A native change
       # is a build, not an update: eas-build.yml watches the fingerprint.
       - uses: ./.github/actions/pnpm
-        if: vars.EAS_ENABLED == 'true'
+        if: steps.ready.outputs.ready == 'true' && vars.EAS_ENABLED == 'true'
 
       # The key exists in exactly one step's environment, this one, which runs
       # nothing but printf: the bundler and every dependency it loads run in
       # the next step, where the key is a file path and nothing else.
       - name: Write the update signing key
-        if: vars.EAS_ENABLED == 'true'
+        if: steps.ready.outputs.ready == 'true' && vars.EAS_ENABLED == 'true'
         env:
           UPDATE_SIGNING_KEY: ${{ secrets.EXPO_UPDATES_PRIVATE_KEY }}
         run: |
@@ -82,7 +99,7 @@ jobs:
           (umask 077 && printf '%s\n' "$UPDATE_SIGNING_KEY" > "$RUNNER_TEMP/update-signing-key.pem")
 
       - name: Publish the signed EAS Update to the ${{ inputs.environment == 'prod' && 'production' || 'staging' }} channel
-        if: vars.EAS_ENABLED == 'true'
+        if: steps.ready.outputs.ready == 'true' && vars.EAS_ENABLED == 'true'
         working-directory: apps/mobile
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
@@ -100,7 +117,7 @@ jobs:
       # published (#11). dist is eas update's export directory. Skipped, not
       # failed, while the environment has no token: the update is already out.
       - name: Upload the update's source maps to Sentry
-        if: vars.EAS_ENABLED == 'true'
+        if: steps.ready.outputs.ready == 'true' && vars.EAS_ENABLED == 'true'
         working-directory: apps/mobile
         env:
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}

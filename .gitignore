@@ -68,4 +68,6 @@ expo-env.d.ts
 
 # EAS Update code signing (#10): the certificate is public and ships in the binary; the private key never enters the repository.
 !apps/mobile/certs/certificate.pem
+# RDS root certificates for TLS verification (public, from the AWS truststore).
+!apps/api/certs/rds-eu-central-1-bundle.pem
 apps/mobile/keys/

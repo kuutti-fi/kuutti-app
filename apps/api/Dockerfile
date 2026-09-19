@@ -17,7 +17,10 @@ COPY apps/api apps/api
 RUN pnpm --filter @kuutti/api build
 
 FROM node:22-bookworm-slim AS runtime
-ENV NODE_ENV=production PORT=3000 MIGRATIONS_DIR=/app/drizzle
+# One region (TD-4); the SDK never reads it from instance metadata. The RDS
+# bundle (apps/api/certs, sha256 in its README) lets pg verify the database.
+ENV NODE_ENV=production PORT=3000 MIGRATIONS_DIR=/app/drizzle \
+    AWS_REGION=eu-central-1 DB_SSL_ROOT_CERT=/app/certs/rds-eu-central-1-bundle.pem
 ARG APP_VERSION=0.0.0
 ARG GIT_COMMIT=unknown
 ARG BUILT_AT=unknown
@@ -25,6 +28,7 @@ ENV APP_VERSION=$APP_VERSION GIT_COMMIT=$GIT_COMMIT BUILT_AT=$BUILT_AT
 WORKDIR /app
 COPY --from=build --chown=node:node /repo/apps/api/dist ./dist
 COPY --from=build --chown=node:node /repo/packages/db/drizzle ./drizzle
+COPY --chown=node:node apps/api/certs ./certs
 USER node
 EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \

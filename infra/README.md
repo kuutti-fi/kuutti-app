@@ -223,7 +223,7 @@ TD-4 budgets 50 EUR a month. One environment is roughly 30 EUR (instance, databa
    aws ssm start-session --target "$(tofu output -raw instance_id)" --document-name AWS-StartPortForwardingSession --parameters portNumber=3000,localPortNumber=3000
    ```
 
-   Then at `http://localhost:3000`: one project named after the environment, one application `api` deployed from the GHCR image (#8), domain `api.staging.kuutti.app` or `api.kuutti.app` with Let's Encrypt through Traefik, container port 3000. Application environment is exactly `NODE_ENV=production`, `APP_ENV=staging` (or `production`), `PORT=3000`; everything else comes from SSM through the instance role, never from Dokploy. DNS is code: `envs/<env>/dns.tf` points `api` and `dokploy` (on staging also `*.preview.api`) at the Elastic IP, so the names resolve minutes after the apply and Traefik can obtain its certificates.
+   Then at `http://localhost:3000`: one project named after the environment, one application `api` deployed from the GHCR image (#8), domain `api.staging.kuutti.app` or `api.kuutti.app` with Let's Encrypt through Traefik, container port 3000. Application environment is exactly `NODE_ENV=production`, `APP_ENV=staging` (or `production`), `PORT=3000`; everything else comes from SSM through the instance role, never from Dokploy (the image itself sets `AWS_REGION` and `DB_SSL_ROOT_CERT`, so the SDK finds the region and pg verifies RDS with the bundled root certificates). DNS is code: `envs/<env>/dns.tf` points `api` and `dokploy` (on staging also `*.preview.api`) at the Elastic IP, so the names resolve minutes after the apply and Traefik can obtain its certificates.
 
 3. **Deploy path.** `deploy.yml` calls Dokploy's API from GitHub, so the control plane must be reachable over HTTPS: in Dokploy, Web Server, set its own domain (`dokploy.staging.kuutti.app` or `dokploy.kuutti.app`) with Let's Encrypt; port 3000 stays closed, Traefik serves the UI and API on 443. Turn on two-factor authentication for the admin. In Settings, Profile, generate an API key for CI. Then, for each GitHub environment, three variables and one secret (`gh secret set` prompts for the value; never paste it into a command line):
 
@@ -241,7 +241,7 @@ TD-4 budgets 50 EUR a month. One environment is roughly 30 EUR (instance, databa
    ```sh
    aws ssm get-parameter --name /kuutti/<other env>/db-host                     # must be refused
    PGPASSWORD="$(aws ssm get-parameter --name /kuutti/<env>/db-app-password --with-decryption --query Parameter.Value --output text)" \
-     psql "host=$(aws ssm get-parameter --name /kuutti/<env>/db-host --query Parameter.Value --output text) dbname=kuutti user=kuutti_app sslmode=require" -c 'select 1'
+     psql "host=$(aws ssm get-parameter --name /kuutti/<env>/db-host --query Parameter.Value --output text) dbname=kuutti user=kuutti_app sslmode=verify-full sslrootcert=/etc/kuutti/rds-ca.pem" -c 'select 1'
    ```
 
    From your machine: `aws iam get-role --role-name kuutti-api-<env> --query Role.PermissionsBoundary` shows the boundary.

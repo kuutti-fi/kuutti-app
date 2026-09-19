@@ -261,14 +261,15 @@ resource "aws_ssm_document" "preview_database" {
         # The password stays in the shell: nothing here echoes it, and the
         # invocation output that CI prints is psql's one line.
         runCommand = [
-          "set -euo pipefail",
+          # The agent runs these lines with sh (dash), which has no pipefail; nothing here pipes.
+          "set -eu",
           "export PATH=\"$PATH:/snap/bin\"",
           "n='{{ prNumber }}'",
           "host=$(aws ssm get-parameter --region ${local.region} --name ${local.ssm_prefix}db-host --query Parameter.Value --output text)",
           # Two lines: `export X=$(cmd)` returns export's status and would hide a failed fetch from set -e.
           "PGPASSWORD=$(aws ssm get-parameter --region ${local.region} --name ${local.ssm_prefix}db-preview-password --with-decryption --query Parameter.Value --output text)",
           "export PGPASSWORD",
-          "psql \"host=$host dbname=postgres user=${var.project}_preview sslmode=require\" -v ON_ERROR_STOP=1 -c \"DROP DATABASE IF EXISTS ${var.project}_pr_$n WITH (FORCE)\"",
+          "psql \"host=$host dbname=postgres user=${var.project}_preview sslmode=verify-full sslrootcert=/etc/kuutti/rds-ca.pem\" -v ON_ERROR_STOP=1 -c \"DROP DATABASE IF EXISTS ${var.project}_pr_$n WITH (FORCE)\"",
           "echo \"dropped ${var.project}_pr_$n\"",
         ]
       }
@@ -302,17 +303,27 @@ resource "aws_instance" "api" {
     delete_on_termination = true
   }
 
-  # The Dokploy installer is vendored (installer/) and the box verifies what it
-  # downloads against that copy's hash, so what runs as root at first boot is
-  # exactly what was reviewed here.
+  credit_specification {
+    cpu_credits = var.cpu_credits
+  }
+
+  # The Dokploy installer is vendored (installer/) and embedded in user_data,
+  # so what runs as root at first boot is exactly what was reviewed here.
   user_data = templatefile("${path.module}/templates/user_data.sh.tpl", {
-    hostname                 = local.name
-    region                   = local.region
-    log_group                = local.log_group_name
-    backup_bucket            = var.backup_bucket
-    backup_prefix            = local.backup_prefix
-    dokploy_version          = var.dokploy_version
+    hostname        = local.name
+    region          = local.region
+    log_group       = local.log_group_name
+    backup_bucket   = var.backup_bucket
+    backup_prefix   = local.backup_prefix
+    dokploy_version = var.dokploy_version
+    # The reviewed installer travels inside user_data (about 6 KB compressed),
+    # so a rebuild never depends on what dokploy.com serves that day; the
+    # hash is checked after decoding as a self-test of the transport.
+    dokploy_installer        = base64gzip(file("${path.module}/installer/dokploy-install.sh"))
     dokploy_installer_sha256 = filesha256("${path.module}/installer/dokploy-install.sh")
+    # The same RDS bundle the API image carries (apps/api/certs); the box's own
+    # psql (preview cleanup) verifies the database with it.
+    rds_ca_sha256 = filesha256("${path.module}/../../../apps/api/certs/rds-eu-central-1-bundle.pem")
   })
 
   # A newer AMI or an edited first-boot script must not replace the running

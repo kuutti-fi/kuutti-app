@@ -40,7 +40,9 @@ for _ in $(seq 1 30); do
 done
 
 master_password=$(aws secretsmanager get-secret-value --secret-id "$secret" --query SecretString --output text | jq -r .password)
-conn="host=127.0.0.1 port=$local_port dbname=kuutti user=kuutti_admin sslmode=require"
+# hostaddr sends the connection through the tunnel while host is what the
+# certificate is checked against; the bundle is the one the API image carries.
+conn="host=$host hostaddr=127.0.0.1 port=$local_port dbname=kuutti user=kuutti_admin sslmode=verify-full sslrootcert=$repo/apps/api/certs/rds-eu-central-1-bundle.pem"
 
 # A CREATE ROLE that fails is logged by Postgres with its statement, password
 # included, so make sure it cannot fail.

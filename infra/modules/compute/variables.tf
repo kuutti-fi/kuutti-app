@@ -59,3 +59,14 @@ variable "preview_databases" {
   type        = bool
   default     = false
 }
+
+variable "cpu_credits" {
+  description = "t4g burst mode: standard caps the bill at baseline performance, unlimited keeps performance and bills surplus credits (TD-19). Staging standard, prod unlimited with its credit alarms."
+  type        = string
+  default     = "unlimited"
+
+  validation {
+    condition     = contains(["standard", "unlimited"], var.cpu_credits)
+    error_message = "cpu_credits must be standard or unlimited."
+  }
+}
