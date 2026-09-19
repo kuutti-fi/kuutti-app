@@ -8,11 +8,25 @@
 #
 #   infra/scripts/db-app-role.sh staging
 #
-# Needs: aws (signed in with admin), tofu, psql, jq, and the Session Manager
-# plugin (brew install --cask session-manager-plugin).
+# Needs: aws (signed in with admin), tofu, psql (brew install libpq && brew link
+# --force libpq), jq, and the Session Manager plugin (brew install --cask
+# session-manager-plugin). Checked before anything runs.
 set -euo pipefail
 
 env="${1:?usage: db-app-role.sh <staging|prod>}"
+
+# Fail here, before the tunnel and before any statement runs half-way.
+for tool in aws tofu psql jq session-manager-plugin openssl; do
+  command -v "$tool" >/dev/null 2>&1 || {
+    case "$tool" in
+      psql) hint="brew install libpq && brew link --force libpq" ;;
+      session-manager-plugin) hint="brew install --cask session-manager-plugin" ;;
+      *) hint="brew install $tool" ;;
+    esac
+    echo "$tool is not installed ($hint)" >&2
+    exit 1
+  }
+done
 case "$env" in staging|prod) ;; *) echo "environment must be staging or prod" >&2; exit 2 ;; esac
 
 repo=$(cd "$(dirname "$0")/../.." && pwd)
