@@ -37,3 +37,8 @@ output "dokploy_url" {
   description = "GitHub environment variable DOKPLOY_URL."
   value       = "https://dokploy.${var.domain}"
 }
+
+output "alerts_topic_arn" {
+  description = "Alarm notifications (#11); the email subscription is confirmed from the mailbox."
+  value       = module.observability.alerts_topic_arn
+}

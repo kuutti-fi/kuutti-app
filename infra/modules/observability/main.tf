@@ -1,0 +1,193 @@
+# ---------------------------------------------------------------------------
+# Alarms and log queries for one environment (#11, TD-19). The box is a single
+# point of failure that degrades rather than fails when its CPU credits run
+# out, and RDS does the same with storage and credits; an alarm is the only way
+# to know. Everything notifies one SNS topic in this region (a CloudWatch alarm
+# can only publish to a topic in its own region; the billing topic sits in
+# us-east-1 for the same reason and is not reused). The email subscription is
+# confirmed by hand from the mailbox, like the billing one.
+#
+# Cost: five standard alarms at 0.10 USD and one custom metric at 0.30 USD, so
+# about 0.80 USD a month per environment; query definitions and the topic are
+# free. Not here: uptime probing from outside the box (issue #11 keeps it out
+# of scope), so a stopped container that logs nothing is caught only when the
+# instance itself fails its status check.
+# ---------------------------------------------------------------------------
+
+data "aws_caller_identity" "current" {}
+
+locals {
+  name      = "${var.project}-${var.environment}"
+  namespace = "Kuutti/${var.environment}"
+}
+
+resource "aws_sns_topic" "alerts" {
+  name = "${local.name}-alerts"
+}
+
+# CloudWatch may publish, this account's alarms only.
+data "aws_iam_policy_document" "alerts" {
+  statement {
+    sid       = "AllowCloudWatchAlarms"
+    effect    = "Allow"
+    actions   = ["sns:Publish"]
+    resources = [aws_sns_topic.alerts.arn]
+
+    principals {
+      type        = "Service"
+      identifiers = ["cloudwatch.amazonaws.com"]
+    }
+
+    condition {
+      test     = "StringEquals"
+      variable = "aws:SourceAccount"
+      values   = [data.aws_caller_identity.current.account_id]
+    }
+  }
+}
+
+resource "aws_sns_topic_policy" "alerts" {
+  arn    = aws_sns_topic.alerts.arn
+  policy = data.aws_iam_policy_document.alerts.json
+}
+
+resource "aws_sns_topic_subscription" "email" {
+  count = var.alert_email == null ? 0 : 1
+
+  topic_arn = aws_sns_topic.alerts.arn
+  protocol  = "email"
+  endpoint  = var.alert_email
+}
+
+# --- The box --------------------------------------------------------------
+
+resource "aws_cloudwatch_metric_alarm" "instance_status" {
+  alarm_name          = "${local.name}-instance-status-check-failed"
+  alarm_description   = "The API instance fails its EC2 status checks (hardware or OS). First steps: docs/runbooks/alerts.md."
+  namespace           = "AWS/EC2"
+  metric_name         = "StatusCheckFailed"
+  dimensions          = { InstanceId = var.instance_id }
+  statistic           = "Maximum"
+  period              = 60
+  evaluation_periods  = 3
+  threshold           = 0
+  comparison_operator = "GreaterThanThreshold"
+  treat_missing_data  = "breaching" # a stopped or terminated instance reports nothing
+  alarm_actions       = [aws_sns_topic.alerts.arn]
+  ok_actions          = [aws_sns_topic.alerts.arn]
+}
+
+# t4g burst credits: the box slows to baseline when they are gone (TD-19), and
+# in unlimited mode starts costing money instead.
+resource "aws_cloudwatch_metric_alarm" "instance_credits" {
+  alarm_name          = "${local.name}-instance-cpu-credits-low"
+  alarm_description   = "The API instance's CPU credit balance is nearly spent; it is about to slow down or, in unlimited mode, cost extra."
+  namespace           = "AWS/EC2"
+  metric_name         = "CPUCreditBalance"
+  dimensions          = { InstanceId = var.instance_id }
+  statistic           = "Minimum"
+  period              = 300
+  evaluation_periods  = 2
+  threshold           = 20
+  comparison_operator = "LessThanThreshold"
+  alarm_actions       = [aws_sns_topic.alerts.arn]
+  ok_actions          = [aws_sns_topic.alerts.arn]
+}
+
+# --- The database ---------------------------------------------------------
+
+resource "aws_cloudwatch_metric_alarm" "db_storage" {
+  alarm_name          = "${local.name}-db-free-storage-low"
+  alarm_description   = "RDS free storage is under 2 GB; autoscaling stops at max_allocated_storage and a full disk stops writes."
+  namespace           = "AWS/RDS"
+  metric_name         = "FreeStorageSpace"
+  dimensions          = { DBInstanceIdentifier = var.db_identifier }
+  statistic           = "Minimum"
+  period              = 300
+  evaluation_periods  = 2
+  threshold           = 2147483648 # 2 GiB in bytes
+  comparison_operator = "LessThanThreshold"
+  alarm_actions       = [aws_sns_topic.alerts.arn]
+  ok_actions          = [aws_sns_topic.alerts.arn]
+}
+
+resource "aws_cloudwatch_metric_alarm" "db_credits" {
+  alarm_name          = "${local.name}-db-cpu-credits-low"
+  alarm_description   = "The RDS instance's CPU credit balance is nearly spent; queries are about to slow down."
+  namespace           = "AWS/RDS"
+  metric_name         = "CPUCreditBalance"
+  dimensions          = { DBInstanceIdentifier = var.db_identifier }
+  statistic           = "Minimum"
+  period              = 300
+  evaluation_periods  = 2
+  threshold           = 20
+  comparison_operator = "LessThanThreshold"
+  alarm_actions       = [aws_sns_topic.alerts.arn]
+  ok_actions          = [aws_sns_topic.alerts.arn]
+}
+
+# --- The API's own log lines ---------------------------------------------
+
+# Every request is one JSON line from the request logger (apps/api/src/lib/
+# logger.ts): {"msg":"request","status":503,...}. Server errors become a metric.
+resource "aws_cloudwatch_log_metric_filter" "five_xx" {
+  name           = "${local.name}-api-5xx"
+  log_group_name = var.log_group_name
+  pattern        = "{ $.msg = \"request\" && $.status >= 500 }"
+
+  metric_transformation {
+    name          = "Api5xx"
+    namespace     = local.namespace
+    value         = "1"
+    default_value = "0"
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "five_xx" {
+  alarm_name          = "${local.name}-api-5xx"
+  alarm_description   = "The API answered ${var.five_xx_per_five_minutes} or more requests with a 5xx within five minutes."
+  namespace           = local.namespace
+  metric_name         = "Api5xx"
+  statistic           = "Sum"
+  period              = 300
+  evaluation_periods  = 1
+  threshold           = var.five_xx_per_five_minutes
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  treat_missing_data  = "notBreaching" # no requests is not an outage
+  alarm_actions       = [aws_sns_topic.alerts.arn]
+  ok_actions          = [aws_sns_topic.alerts.arn]
+}
+
+# Saved Logs Insights queries: the first three things to run when an alarm
+# fires. pino levels: 50 error, 60 fatal.
+resource "aws_cloudwatch_query_definition" "errors_by_route" {
+  name            = "${local.name}/errors-by-route"
+  log_group_names = [var.log_group_name]
+  query_string    = <<-EOT
+    fields @timestamp, requestId, route, status, msg
+    | filter status >= 500 or level >= 50
+    | stats count() as errors by route, status, msg
+    | sort errors desc
+  EOT
+}
+
+resource "aws_cloudwatch_query_definition" "latency_by_route" {
+  name            = "${local.name}/p95-duration-by-route"
+  log_group_names = [var.log_group_name]
+  query_string    = <<-EOT
+    filter msg = "request"
+    | stats pct(durationMs, 95) as p95ms, pct(durationMs, 50) as p50ms, count() as requests by route
+    | sort p95ms desc
+  EOT
+}
+
+resource "aws_cloudwatch_query_definition" "boot" {
+  name            = "${local.name}/boot-and-fatal"
+  log_group_names = [var.log_group_name]
+  query_string    = <<-EOT
+    filter level >= 60 or msg in ["API listening", "migrations", "shutting down", "server error"]
+    | fields @timestamp, level, msg, port, commit, version, applied, state
+    | sort @timestamp desc
+    | limit 50
+  EOT
+}

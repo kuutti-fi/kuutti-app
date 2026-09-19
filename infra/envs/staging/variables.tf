@@ -35,3 +35,9 @@ variable "domain" {
   type        = string
   default     = "kuutti.app"
 }
+
+variable "alert_email" {
+  description = "Subscriber of the alert topic (#11): CI passes the repository variable ALERT_EMAIL as TF_VAR_alert_email. Null leaves the topic without a subscriber."
+  type        = string
+  default     = null
+}

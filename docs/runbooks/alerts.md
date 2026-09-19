@@ -1,0 +1,22 @@
+# Alerts: what each one means and the first three commands
+
+Every alarm of `infra/modules/observability` (#11) publishes to the environment's SNS topic (`kuutti-<env>-alerts`, eu-central-1) and the billing guard rails to `kuutti-billing-alerts` (us-east-1). Both mail the subscribed address; OK transitions mail as well, so a single "ALARM" without an "OK" means it is still broken. Sign in first: `pnpm aws:login`. `<env>` is `staging` or `prod`, `<id>` the instance id from `tofu output instance_id` in `infra/envs/<env>`.
+
+| alarm | it means | first three commands |
+|---|---|---|
+| `kuutti-<env>-instance-status-check-failed` | The box fails EC2's hardware or OS check, or is stopped. Deploys and previews are down. | `aws ec2 describe-instance-status --instance-ids <id> --include-all-instances` · `aws ec2 get-console-output --instance-id <id> --latest --output text \| tail -50` · `aws ec2 reboot-instances --instance-ids <id>` (a stop/start moves it to new hardware if the reboot does not help; the Elastic IP follows) |
+| `kuutti-<env>-instance-cpu-credits-low` | The t4g box has burned its burst credits: it slows to baseline, or in unlimited mode starts billing per vCPU-hour. Usually a runaway process or a preview build loop. | `aws cloudwatch get-metric-statistics --namespace AWS/EC2 --metric-name CPUUtilization --dimensions Name=InstanceId,Value=<id> --statistics Average --period 300 --start-time $(date -u -v-3H +%FT%TZ) --end-time $(date -u +%FT%TZ)` · `aws ssm start-session --target <id>` then `top -o %CPU` · `docker stats --no-stream` on the box |
+| `kuutti-<env>-db-free-storage-low` | Under 2 GB free on RDS. Storage autoscaling stops at `max_allocated_storage_gb`; a full disk stops writes. | `aws rds describe-db-instances --db-instance-identifier kuutti-<env> --query 'DBInstances[0].[AllocatedStorage,MaxAllocatedStorage]'` · from the box: `psql ... -c "select pg_size_pretty(pg_database_size('kuutti'))"` and `select relname, pg_size_pretty(pg_total_relation_size(oid)) from pg_class order by 2 desc limit 10` · raise `max_allocated_storage_gb` in `infra/envs/<env>` and let CI apply |
+| `kuutti-<env>-db-cpu-credits-low` | The db.t4g instance is out of burst credits; every query slows. A missing index or a preview running a load test. | `aws rds describe-db-log-files --db-instance-identifier kuutti-<env>` · Performance Insights in the console (7 days free) · from the box: `select query, calls, mean_exec_time from pg_stat_statements order by total_exec_time desc limit 10` |
+| `kuutti-<env>-api-5xx` | Five or more 5xx answers in five minutes. The API is up (it logged them); something behind it is not, or a deploy shipped a bug. | Logs Insights saved query `kuutti-<env>/errors-by-route` · `aws logs tail /kuutti/<env>/api --since 30m --filter-pattern '{ $.status >= 500 }'` · Sentry, project `api`, filter by `requestId` from the log line |
+| `kuutti-estimated-charges`, budget 80 % / 100 % | Spend is past the budget (TD-4). | Cost Explorer by service · `aws ce get-cost-and-usage` for the month · check nothing runs outside eu-central-1 (`aws ec2 describe-instances --region <r>` per region) |
+
+Not covered (issue #11, out of scope): a stopped API container that logs nothing. The instance check catches a dead box, not a dead container; an outside probe of `/health` is the later, cheap addition.
+
+## Logs
+
+`aws logs tail /kuutti/<env>/api --follow` shows the JSON lines pino writes: `requestId`, `route`, `status`, `durationMs` per request, `err.type` and a redacted stack on errors. Saved Logs Insights queries in the console: `errors-by-route`, `p95-duration-by-route`, `boot-and-fatal`. Retention is 30 days.
+
+## Delivery test
+
+`aws sns publish --topic-arn "$(cd infra/envs/<env> && tofu output -raw alerts_topic_arn)" --subject 'kuutti alert test' --message 'delivery check'`. If nothing arrives, the subscription is still pending: `aws sns list-subscriptions-by-topic --topic-arn <arn>` shows `PendingConfirmation` until the link in AWS's mail is followed.

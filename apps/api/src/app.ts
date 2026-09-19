@@ -7,7 +7,7 @@ import { healthRoutes } from "./health/index.ts";
 import type { Config } from "./lib/config.ts";
 import { corsAllowlist } from "./lib/cors.ts";
 import type { AppEnv } from "./lib/env.ts";
-import { envelope, notFound, onError, validationHook } from "./lib/errors.ts";
+import { type ErrorReporter, envelope, notFound, onError, validationHook } from "./lib/errors.ts";
 import { type Logger, requestLogger } from "./lib/logger.ts";
 import { openApiDocument } from "./lib/openapi.ts";
 import { rateLimit } from "./lib/rate-limit.ts";
@@ -19,6 +19,8 @@ export type Deps = {
   config: Config;
   logger: Logger;
   db: Queryable;
+  /** Unhandled-error sink (#11); absent in tests and local runs. */
+  report?: ErrorReporter;
 };
 
 const UNLIMITED_PATHS = new Set(["/health", "/openapi.json"]);
@@ -55,7 +57,7 @@ export function createApp(deps: Deps) {
     }),
   );
 
-  app.onError(onError<AppEnv>(deps.logger));
+  app.onError(onError<AppEnv>(deps.logger, deps.report));
   app.notFound(notFound<AppEnv>());
 
   app.route("/", healthRoutes(deps));

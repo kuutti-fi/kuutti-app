@@ -47,3 +47,8 @@ output "preview_api_domain" {
   description = "GitHub environment variable PREVIEW_API_DOMAIN (#9): previews answer on pr-<n>.<this>."
   value       = "preview.api.staging.${var.domain}"
 }
+
+output "alerts_topic_arn" {
+  description = "Alarm notifications (#11); the email subscription is confirmed from the mailbox."
+  value       = module.observability.alerts_topic_arn
+}

@@ -29,4 +29,14 @@ describe("logger redaction", () => {
     expect(out).toContain("[redacted]");
     expect(out).toContain("acc-1");
   });
+
+  it("keeps stack frames but not the message on the stack's first line", async () => {
+    const { logger, lines } = await captureLogger();
+    logger.error({ err: new Error("duplicate key value (email)=(a@b.fi)") }, "unhandled error");
+    const [line] = lines();
+    const err = line?.err as { type?: string; message?: string; stack?: string };
+    expect(err.message).toBe("[redacted]");
+    expect(err.stack).toMatch(/^Error: \[redacted\]\n\s+at /);
+    expect(JSON.stringify(line)).not.toContain("a@b.fi");
+  });
 });

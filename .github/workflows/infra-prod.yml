@@ -39,6 +39,9 @@ jobs:
       - run: .github/scripts/aws-oidc.sh
       - name: plan and apply envs/prod
         working-directory: infra/envs/prod
+        env:
+          # The alert topic's subscriber (#11): a repository variable, never a secret.
+          TF_VAR_alert_email: ${{ vars.ALERT_EMAIL }}
         run: |
           tofu init -input=false -no-color
           tofu plan -input=false -no-color -out=plan.bin

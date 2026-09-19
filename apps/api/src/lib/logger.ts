@@ -35,10 +35,28 @@ export type LoggerOptions = {
   destination?: LogDestination;
 };
 
+/**
+ * pino's default error serializer copies the message into the first line of
+ * the stack, which the redaction of `*.message` does not reach: a database or
+ * validation error can quote user input there. The frames stay, the message
+ * goes; Sentry receives the unredacted error (#11).
+ */
+export function serializeError(error: unknown): ReturnType<typeof pino.stdSerializers.err> {
+  const serialized = pino.stdSerializers.err(error as Error);
+  if (typeof serialized.stack === "string") {
+    serialized.stack = serialized.stack.replace(
+      /^[^\n]*/,
+      `${serialized.type ?? "Error"}: [redacted]`,
+    );
+  }
+  return serialized;
+}
+
 export async function createLogger(options: LoggerOptions): Promise<Logger> {
   const base = {
     level: options.level,
     redact: { paths: REDACTED_PATHS, censor: "[redacted]" },
+    serializers: { err: serializeError, error: serializeError },
   };
   if (options.pretty) {
     // Development only. pino-pretty is external to the production bundle and

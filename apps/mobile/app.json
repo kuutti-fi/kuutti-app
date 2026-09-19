@@ -32,7 +32,22 @@
     "plugins": [
       "expo-router",
       "expo-updates",
-      ["expo-build-properties", { "ios": { "enableSceneSupport": true } }]
+      [
+        "expo-build-properties",
+        {
+          "ios": {
+            "enableSceneSupport": true
+          }
+        }
+      ],
+      [
+        "@sentry/react-native/expo",
+        {
+          "url": "https://de.sentry.io/",
+          "organization": "kuutti",
+          "project": "mobile"
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true

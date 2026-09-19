@@ -79,6 +79,9 @@ jobs:
       - name: plan
         id: plan
         working-directory: infra/${{ matrix.dir }}
+        env:
+          # The alert topic's subscriber (#11): a repository variable, never a secret.
+          TF_VAR_alert_email: ${{ vars.ALERT_EMAIL }}
         run: |
           set +e
           tofu plan -input=false -no-color -out=plan.bin -detailed-exitcode
@@ -128,6 +131,9 @@ jobs:
       - run: mkdir -p "$TF_PLUGIN_CACHE_DIR" && .github/scripts/aws-oidc.sh
       - name: plan and apply envs/staging
         working-directory: infra/envs/staging
+        env:
+          # The alert topic's subscriber (#11): a repository variable, never a secret.
+          TF_VAR_alert_email: ${{ vars.ALERT_EMAIL }}
         run: |
           tofu init -input=false -no-color
           tofu plan -input=false -no-color -out=plan.bin

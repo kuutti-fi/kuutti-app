@@ -1,0 +1,36 @@
+variable "project" {
+  type    = string
+  default = "kuutti"
+}
+
+variable "environment" {
+  description = "staging or prod; names every resource and the metric namespace."
+  type        = string
+}
+
+variable "instance_id" {
+  description = "The API box (modules/compute)."
+  type        = string
+}
+
+variable "db_identifier" {
+  description = "The RDS instance (modules/data)."
+  type        = string
+}
+
+variable "log_group_name" {
+  description = "The API container's log group (modules/compute); the 5xx metric filter reads it."
+  type        = string
+}
+
+variable "alert_email" {
+  description = "Mailbox subscribed to the alert topic. Null creates the topic without a subscriber; the address is a project alias, never a personal one (TD-4)."
+  type        = string
+  default     = null
+}
+
+variable "five_xx_per_five_minutes" {
+  description = "Server errors within five minutes that raise the 5xx alarm."
+  type        = number
+  default     = 5
+}

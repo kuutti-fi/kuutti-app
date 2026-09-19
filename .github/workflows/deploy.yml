@@ -96,6 +96,21 @@ jobs:
             --json --non-interactive \
             | jq -r '.[] | "\(.platform) \(.id) runtime \(.runtimeVersion) branch \(.branch)"'
 
+      # The update's source maps, so Sentry symbolises the JavaScript it just
+      # published (#11). dist is eas update's export directory. Skipped, not
+      # failed, while the environment has no token: the update is already out.
+      - name: Upload the update's source maps to Sentry
+        if: vars.EAS_ENABLED == 'true'
+        working-directory: apps/mobile
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+        run: |
+          if [ -z "$SENTRY_AUTH_TOKEN" ]; then
+            echo "SENTRY_AUTH_TOKEN is not set in this environment; source maps not uploaded"
+            exit 0
+          fi
+          pnpm exec sentry-expo-upload-sourcemaps dist
+
       - name: Remove the signing key file
         if: always()
         run: rm -f "$RUNNER_TEMP/update-signing-key.pem"

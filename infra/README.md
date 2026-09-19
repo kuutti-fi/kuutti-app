@@ -197,6 +197,14 @@ The composition then writes the non-secret parameters `app-env`, `log-level`, `d
 
 Every IAM role declared in an environment or module sets `permissions_boundary` to the bootstrap output `permissions_boundary_arn`; the apply role refuses to create a role without it. The plan role cannot read secrets, logs, or object data, only resource metadata and state.
 
+### Observability (#11)
+
+`infra/modules/observability`, composed by each environment: an SNS topic `kuutti-<env>-alerts` in eu-central-1, alarms for the instance status check, the instance and RDS CPU credit balances, RDS free storage and the API's 5xx rate (a metric filter on `/kuutti/<env>/api`), and three saved Logs Insights queries. The subscriber is the repository variable `ALERT_EMAIL` (`gh variable set ALERT_EMAIL --body <project alias>`), which CI hands to OpenTofu as `TF_VAR_alert_email`; confirm the subscription from that mailbox after the first apply, then run the delivery test in `docs/runbooks/alerts.md`. Without the variable the topic exists with no subscriber. About 0.80 USD a month per environment.
+
+Logs reach that group only if the Dokploy application uses the `awslogs` driver: in the application's Advanced settings, log driver `awslogs` with options `awslogs-group=/kuutti/<env>/api`, `awslogs-region=eu-central-1`, `awslogs-create-group=false`, `awslogs-stream-prefix=api`. The instance role already allows the stream calls; the group has 30-day retention.
+
+Sentry (TD-19, the one vendor besides AWS, Expo, GitHub and Telia), maintainer once: an organisation `kuutti` in the EU data region (`https://de.sentry.io`), projects `api` and `mobile`. The DSNs are public by design: `aws ssm put-parameter --name /kuutti/<env>/sentry-dsn --type String --value <api dsn>` per environment (the API reads it as `SENTRY_DSN`; unset keeps the SDK off), and `eas env:create --environment preview --name EXPO_PUBLIC_SENTRY_DSN --value <mobile dsn> --visibility plaintext` (and `production`). The source-map auth token is a secret in exactly three places, never at repository level: `gh secret set SENTRY_AUTH_TOKEN --env staging` and `--env prod` for the updates `deploy.yml` publishes, and `eas env:create --environment preview --name SENTRY_AUTH_TOKEN --visibility secret` (and `production`) for native builds. The token's scope is `project:releases` and `org:read`, nothing more.
+
 ### Cost
 
 TD-4 budgets 50 EUR a month. One environment is roughly 30 EUR (instance, database, address, storage); both together are around 65 EUR, above the budget alert. Decision (2026-09-14): staging is applied now, prod when there is a first release; raising `monthly_budget_usd` in the bootstrap is the deliberate step that goes with it.

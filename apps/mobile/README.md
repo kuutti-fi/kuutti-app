@@ -42,3 +42,9 @@ M1 uses the maintainer's individual Apple developer account for ad hoc distribut
 7. `gh variable set EAS_ENABLED --body true`.
 
 Checks: an Android team member installs the dev client from the link and sees the staging API version; an iOS tester registered by UDID installs from the build page; a JS-only merge to `main` shows up in the dev client's `staging` branch without a new build; a native change on `main` starts new `development` and `preview` builds and the recorded fingerprint changes; `eas update --branch staging --private-key-path <a throwaway key>` is refused by an installed binary; `gh secret list --env <env>` shows `EXPO_TOKEN` only in `staging`, `prod` and `preview`; the project on expo.dev is owned by the organisation.
+
+## Error reporting (Sentry, #11)
+
+Errors only, no analytics (rules/mobile.md): `src/lib/sentry.ts` builds the options and its test asserts `sendDefaultPii: false`, no tracing, no replay, no screenshots. The SDK is on exactly when `EXPO_PUBLIC_SENTRY_DSN` is set, as an EAS environment variable (plain text, DSNs are public) per environment; local runs have none. The environment name comes from the update channel (`staging`, `production`, `pr-<n>` becomes `preview`).
+
+Source maps: the `@sentry/react-native/expo` plugin in `app.json` names the EU server, organisation `kuutti` and project `mobile`, and uploads maps during EAS Build when `SENTRY_AUTH_TOKEN` is an EAS secret; for updates, `deploy.yml` runs `sentry-expo-upload-sourcemaps dist` with the token from the GitHub environment. The token is never in the repository or at repository level.

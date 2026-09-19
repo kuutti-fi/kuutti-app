@@ -49,6 +49,9 @@ const Env = z.object({
   OIDC_ISSUER: z.string().min(1).optional(),
   OIDC_CLIENT_ID: z.string().min(1).optional(),
   OIDC_REDIRECT_URI: z.string().min(1).optional(),
+  // Error reporting (#11). A DSN is public by design: /kuutti/<env>/sentry-dsn
+  // is a plain String parameter. Unset means the SDK stays off.
+  SENTRY_DSN: z.url().optional(),
   BODY_LIMIT_BYTES: z.coerce.number().int().min(1024).default(1_048_576),
   RATE_LIMIT_PER_MINUTE: z.coerce.number().int().min(1).optional(),
   SSM_PARAMETER_PREFIX: z.string().min(1).optional(),

@@ -5,6 +5,7 @@ import { createApp } from "./app.ts";
 import { type Config, ConfigError, loadConfig } from "./lib/config.ts";
 import { createLogger } from "./lib/logger.ts";
 import { ensurePreviewDatabase } from "./lib/preview-database.ts";
+import { flushSentry, initSentry, sentryReporter } from "./lib/sentry.ts";
 import { buildInfo } from "./lib/version.ts";
 
 async function main(): Promise<void> {
@@ -27,6 +28,10 @@ async function main(): Promise<void> {
     pretty: config.NODE_ENV === "development",
   });
   const info = buildInfo(config);
+
+  // Error reporting is on exactly when a DSN is configured (#11).
+  const reporting = initSentry(config);
+  logger.info({ reporting, environment: config.APP_ENV }, "error reporting");
 
   // A pull-request preview serves from its own kuutti_pr_<n> on the staging
   // instance, created here on first boot and dropped by preview-cleanup.yml
@@ -62,7 +67,12 @@ async function main(): Promise<void> {
     logger.info(seeded, "seed");
   }
 
-  const app = createApp({ config, logger, db: pool });
+  const app = createApp({
+    config,
+    logger,
+    db: pool,
+    ...(reporting ? { report: sentryReporter() } : {}),
+  });
   const server = serve({ fetch: app.fetch, port: config.PORT, hostname: "0.0.0.0" }, (address) => {
     logger.info(
       { port: address.port, appEnv: config.APP_ENV, version: info.version, commit: info.commit },
@@ -79,7 +89,9 @@ async function main(): Promise<void> {
     } else {
       logger.fatal({ err: error }, "server error");
     }
-    pool.end().finally(() => process.exit(1));
+    flushSentry()
+      .then(() => pool.end())
+      .finally(() => process.exit(1));
   });
 
   // Drain in-flight requests within 10 s so a redeploy drops nothing.

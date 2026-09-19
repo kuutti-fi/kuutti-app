@@ -19,6 +19,7 @@
     "@hono/zod-openapi": "^1.6.3",
     "@kuutti/db": "workspace:*",
     "@kuutti/schema": "workspace:*",
+    "@sentry/node": "^10.75.0",
     "hono": "^4.13.7",
     "pg": "^8.23.0",
     "pino": "^10.3.1",

@@ -18,6 +18,14 @@ export class AppError extends Error {
   }
 }
 
+/** Called for every unhandled error after it is logged; Sentry in deployed environments (#11), nothing in tests. */
+export type ErrorReporter = (
+  error: unknown,
+  context: { requestId: string; route?: string },
+) => void;
+
+export const noReporter: ErrorReporter = () => {};
+
 export function envelope(code: string, message: string, requestId: string): ErrorResponse {
   return { error: { code, message, requestId } };
 }
@@ -27,7 +35,10 @@ function requestIdOf<E extends Env>(c: Context<E, string>): string {
   return typeof id === "string" && id.length > 0 ? id : "unknown";
 }
 
-export function onError<E extends Env>(logger: Logger): ErrorHandler<E> {
+export function onError<E extends Env>(
+  logger: Logger,
+  report: ErrorReporter = noReporter,
+): ErrorHandler<E> {
   return (err, c) => {
     const requestId = requestIdOf(c);
     if (err instanceof AppError) {
@@ -42,6 +53,7 @@ export function onError<E extends Env>(logger: Logger): ErrorHandler<E> {
       return c.json(envelope(code, err.message || "Request failed", requestId), status);
     }
     logger.error({ requestId, err }, "unhandled error");
+    report(err, { requestId, route: c.req.routePath });
     return c.json(envelope("internal_error", "Internal error", requestId), 500);
   };
 }

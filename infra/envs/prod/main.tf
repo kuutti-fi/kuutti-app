@@ -43,6 +43,17 @@ module "compute" {
   manage_session_preferences = false
 }
 
+# Alarms, the alert topic and the saved log queries (#11).
+module "observability" {
+  source = "../../modules/observability"
+
+  environment    = local.environment
+  instance_id    = module.compute.instance_id
+  db_identifier  = module.data.identifier
+  log_group_name = module.compute.log_group_name
+  alert_email    = var.alert_email
+}
+
 # Non-secret configuration the API reads at boot from /kuutti/prod/ (TD-19).
 # Each key becomes the upper-cased environment variable (db-host -> DB_HOST).
 # Secrets are never resources (ADR-001): db-app-password comes from
