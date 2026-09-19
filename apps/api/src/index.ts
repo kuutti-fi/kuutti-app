@@ -55,6 +55,13 @@ async function main(): Promise<void> {
     max: config.DB_POOL_MAX,
     applicationName: `kuutti-api-${config.APP_ENV}`,
   });
+  // An idle client the server drops (an RDS reboot or failover) is reported
+  // here; pg-pool discards it and connects again on demand. Without a listener
+  // the event is an uncaught exception and the process exits. Code and message
+  // only: the error carries its client, connection parameters included.
+  pool.on("error", (error: Error & { code?: string }) => {
+    logger.error({ code: error.code, message: error.message }, "idle database client dropped");
+  });
 
   // Migrations run before the server listens, under the advisory lock (rule 10).
   const migration = await migrate(pool, resolve(config.MIGRATIONS_DIR));
