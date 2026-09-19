@@ -266,9 +266,10 @@ jobs:
 
       # The lane publishes only once #10 has configured expo-updates (an EAS
       # project id and updates.url). Updates are not code-signed (ADR-004), so
-      # the preview environment's EXPO_TOKEN is all it takes; the environment's
-      # required reviewer is what stands between a pull request and that token
-      # (infra/README.md, Previews, Trust).
+      # the preview environment's EXPO_TOKEN is all it takes: a preview run is
+      # as trusted as a push to main, and the environment gets a required
+      # reviewer before anyone but the owners can push (infra/README.md,
+      # Previews, Trust).
       - name: Is EAS Update configured?
         id: configured
         run: |
