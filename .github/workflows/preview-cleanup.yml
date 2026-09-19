@@ -32,7 +32,6 @@ concurrency:
   group: preview-cleanup-${{ github.event.pull_request.number || github.event.inputs.pr || 'sweep' }}
   cancel-in-progress: false
 
-env:
 
 jobs:
   # Which pull requests lose their previews, then everything that needs the

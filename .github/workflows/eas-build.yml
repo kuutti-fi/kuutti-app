@@ -38,7 +38,6 @@ concurrency:
   group: eas-build-${{ github.ref }}
   cancel-in-progress: false
 
-env:
 
 jobs:
   build:

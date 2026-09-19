@@ -28,8 +28,10 @@ allowBuilds:
   # by the package); the Expo plugin and the source-map upload in deploy.yml
   # need it (#11). Allowed deliberately, like esbuild.
   "@sentry/cli": true
-  dtrace-provider: set this to true or false
-  protobufjs: set this to true or false
+  # eas-cli's optional native helpers; not built, eas works without them, and
+  # pnpm 12 treats an undeclared ignored build as an install error.
+  dtrace-provider: false
+  protobufjs: false
 
 # Supply chain: a version must be at least one day old before pnpm installs it
 # (pnpm's default, stated explicitly). Exclusions are a decision, not a convenience.
