@@ -24,7 +24,7 @@ variable "log_group_name" {
 }
 
 variable "alert_email" {
-  description = "Mailbox subscribed to the alert topic. Null creates the topic without a subscriber; the address is a project alias, never a personal one (TD-4)."
+  description = "Mailbox subscribed to the alert topic. Null or empty creates the topic without a subscriber; the address is a project alias, never a personal one (TD-4)."
   type        = string
   default     = null
 }

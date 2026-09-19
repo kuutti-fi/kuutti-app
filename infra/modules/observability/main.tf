@@ -51,8 +51,11 @@ resource "aws_sns_topic_policy" "alerts" {
   policy = data.aws_iam_policy_document.alerts.json
 }
 
+# CI hands the address in as TF_VAR_alert_email from a repository variable; an
+# unset variable arrives as "", which must mean "no subscriber", not a
+# subscription with an empty endpoint (SNS refuses it and fails the apply).
 resource "aws_sns_topic_subscription" "email" {
-  count = var.alert_email == null ? 0 : 1
+  count = trimspace(coalesce(var.alert_email, "")) == "" ? 0 : 1
 
   topic_arn = aws_sns_topic.alerts.arn
   protocol  = "email"
