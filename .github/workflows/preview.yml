@@ -228,8 +228,11 @@ jobs:
           [ -n "${html:-}" ] || { echo "::error::$URL did not answer within 6 minutes"; exit 1; }
           scripts=$(grep -o '/_expo/static/js/web/[^"]*\.js' <<< "$html" | sort -u)
           [ -n "$scripts" ] || { echo "::error::no bundle referenced by $URL"; exit 1; }
+          # Not `curl | grep -q`: grep exits on the first match, curl gets EPIPE
+          # (exit 23) and pipefail turns a found URL into "not found".
           for s in $scripts; do
-            if curl -fsS --max-time 30 "$URL$s" | grep -q "$API_URL"; then echo "bundle $s targets $API_URL"; exit 0; fi
+            curl -fsS --max-time 30 "$URL$s" -o "$RUNNER_TEMP/bundle.js"
+            if grep -q "$API_URL" "$RUNNER_TEMP/bundle.js"; then echo "bundle $s targets $API_URL"; exit 0; fi
           done
           echo "::error::no bundle of $URL mentions $API_URL"; exit 1
 
