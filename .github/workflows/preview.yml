@@ -249,7 +249,11 @@ jobs:
     name: native preview
     needs: [api, web]
     if: needs.api.outputs.deployed == 'true'
-    runs-on: ubuntu-24.04-arm
+    # x86-64, unlike the other lanes: expo export compiles Hermes bytecode with
+    # hermes-compiler's hermesc, which ships for Linux as linux64-bin only; on
+    # an arm64 runner the shell cannot execute it (run 35459415764). deploy.yml
+    # publishes from ubuntu-latest for the same reason.
+    runs-on: ubuntu-latest
     # The same environment as the other lanes: EXPO_TOKEN is not available
     # to a pull-request job anywhere else.
     environment: preview
