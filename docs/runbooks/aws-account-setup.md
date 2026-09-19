@@ -101,8 +101,8 @@ Everything from here is in `infra/README.md`, Bootstrap, run once: fill `infra/b
 ## Checklist
 
 - [ ] Mailbox exists, 2-Step Verification on, credentials in the association's password manager
-- [ ] Account `kuutti` on the paid plan, no free-plan banner in Billing; `aws freetier get-account-plan-state --region us-east-1` says `PAID`
-- [ ] Domain registrant verified: `aws route53domains get-contact-reachability-status --region us-east-1 --domain-name kuutti.app` says `DONE` (a `PENDING` domain is suspended 15 days after registration)
+- [x] Account `kuutti` on the paid plan, no free-plan banner in Billing; `aws freetier get-account-plan-state --region us-east-1` says `PAID` (verified 2026-09-19: PAID, ACTIVE, sign-up credits 0)
+- [x] Domain registrant verified: `aws route53domains get-contact-reachability-status --region us-east-1 --domain-name kuutti.app` says `DONE` (a `PENDING` domain is suspended 15 days after registration) (verified 2026-09-19: DONE)
 - [ ] Root: two MFA devices, zero access keys, sign-in asks for the key
 - [ ] Alternate contacts set to the three plus-addresses
 - [ ] Receive CloudWatch Billing Alerts ticked
