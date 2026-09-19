@@ -19,6 +19,10 @@ resource "aws_db_parameter_group" "this" {
   parameter {
     name  = "rds.force_ssl"
     value = "1"
+    # A static parameter: AWS records it as pending-reboot, and a new instance
+    # boots with it in force; saying "immediate" here is refused by the API
+    # and shows as a change on every plan.
+    apply_method = "pending-reboot"
   }
 
   lifecycle {
