@@ -47,7 +47,9 @@ aws ssm start-session --target "$instance" \
   --document-name AWS-StartPortForwardingSessionToRemoteHost \
   --parameters "host=$host,portNumber=5432,localPortNumber=$local_port" >/dev/null &
 tunnel=$!
-trap 'kill "$tunnel" 2>/dev/null || true' EXIT
+# The aws process hands the forward to session-manager-plugin, its child, which
+# outlives a plain kill of the parent; close both.
+trap 'pkill -P "$tunnel" 2>/dev/null; kill "$tunnel" 2>/dev/null || true' EXIT
 for _ in $(seq 1 30); do
   if (echo > "/dev/tcp/127.0.0.1/$local_port") 2>/dev/null; then break; fi
   sleep 1
