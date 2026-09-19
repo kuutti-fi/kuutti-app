@@ -1,4 +1,5 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react-native";
+import { fireEvent, screen, waitFor } from "@testing-library/react-native";
+import { renderWithTheme } from "@/test/render";
 import { SmokeScreen } from "./SmokeScreen";
 
 const ok = {
@@ -28,7 +29,7 @@ describe("SmokeScreen", () => {
 
   it("shows the API version and commit when the API answers", async () => {
     mockFetch(async () => jsonResponse(ok));
-    await render(<SmokeScreen />);
+    await renderWithTheme(<SmokeScreen />);
     await waitFor(() => expect(screen.getByText("API 0.0.0-test")).toBeTruthy());
     expect(screen.getByText("commit abc1234")).toBeTruthy();
     expect(screen.getByText("db ok · migrations current")).toBeTruthy();
@@ -38,7 +39,7 @@ describe("SmokeScreen", () => {
     mockFetch(async () => {
       throw new Error("Network request failed");
     });
-    await render(<SmokeScreen />);
+    await renderWithTheme(<SmokeScreen />);
     await waitFor(() => expect(screen.getByLabelText("API unreachable")).toBeTruthy());
     expect(screen.getByText("Network request failed")).toBeTruthy();
 
@@ -49,7 +50,7 @@ describe("SmokeScreen", () => {
 
   it("gives the retry control a role and a label", async () => {
     mockFetch(async () => jsonResponse(ok));
-    await render(<SmokeScreen />);
+    await renderWithTheme(<SmokeScreen />);
     expect(screen.getByRole("button", { name: "Retry" })).toBeTruthy();
   });
 });

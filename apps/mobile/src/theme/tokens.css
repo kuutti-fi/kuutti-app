@@ -1,0 +1,109 @@
+/*
+ * Design tokens (#12, TD-9). This file is what a designer edits: semantic
+ * names only, as HSL channels ("hue saturation% lightness%") so Tailwind can
+ * add opacity. Components never hardcode a colour; they use the Tailwind
+ * names mapped to these variables in tailwind.config.js.
+ *
+ * Four sets: light (:root), dark (.dark:root, follows the system), and the
+ * high-contrast pair, which is a second token set and not a separate mode
+ * (CLAUDE.md Accessibility): ThemeProvider puts .high-contrast or
+ * .high-contrast-dark on the root view and every descendant inherits it.
+ *
+ * `pnpm --filter mobile check:contrast` holds every text pair to WCAG AA
+ * (4.5:1; 7:1 in the high-contrast sets) and control outlines to 3:1. It
+ * reads this file, so a value that fails never reaches main.
+ */
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 222 47% 11%;
+    --card: 210 40% 98%;
+    --card-foreground: 222 47% 11%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 11%;
+    --primary: 224 76% 48%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 214 32% 91%;
+    --secondary-foreground: 222 47% 11%;
+    --muted: 210 40% 96%;
+    --muted-foreground: 215 19% 35%;
+    --accent: 214 32% 91%;
+    --accent-foreground: 222 47% 11%;
+    --destructive: 0 74% 42%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 214 32% 85%;
+    --input: 215 16% 47%;
+    --ring: 224 76% 48%;
+    --overlay: 222 47% 11%;
+    --radius: 8px;
+  }
+
+  .dark:root {
+    --background: 220 49% 8%;
+    --foreground: 220 14% 96%;
+    --card: 221 39% 12%;
+    --card-foreground: 220 14% 96%;
+    --popover: 221 39% 12%;
+    --popover-foreground: 220 14% 96%;
+    --primary: 212 96% 78%;
+    --primary-foreground: 222 47% 11%;
+    --secondary: 217 33% 20%;
+    --secondary-foreground: 220 14% 96%;
+    --muted: 217 33% 17%;
+    --muted-foreground: 218 11% 70%;
+    --accent: 217 33% 20%;
+    --accent-foreground: 220 14% 96%;
+    --destructive: 0 94% 82%;
+    --destructive-foreground: 0 63% 15%;
+    --border: 217 33% 24%;
+    --input: 215 16% 60%;
+    --ring: 212 96% 78%;
+    --overlay: 0 0% 0%;
+  }
+
+  .high-contrast {
+    --background: 0 0% 100%;
+    --foreground: 0 0% 0%;
+    --card: 0 0% 100%;
+    --card-foreground: 0 0% 0%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 0% 0%;
+    --primary: 224 90% 25%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 0 0% 100%;
+    --secondary-foreground: 0 0% 0%;
+    --muted: 0 0% 100%;
+    --muted-foreground: 0 0% 15%;
+    --accent: 0 0% 100%;
+    --accent-foreground: 0 0% 0%;
+    --destructive: 0 100% 25%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 0 0% 0%;
+    --input: 0 0% 0%;
+    --ring: 224 90% 25%;
+    --overlay: 0 0% 0%;
+  }
+
+  .high-contrast-dark {
+    --background: 0 0% 0%;
+    --foreground: 0 0% 100%;
+    --card: 0 0% 0%;
+    --card-foreground: 0 0% 100%;
+    --popover: 0 0% 0%;
+    --popover-foreground: 0 0% 100%;
+    --primary: 212 100% 85%;
+    --primary-foreground: 0 0% 0%;
+    --secondary: 0 0% 0%;
+    --secondary-foreground: 0 0% 100%;
+    --muted: 0 0% 0%;
+    --muted-foreground: 0 0% 88%;
+    --accent: 0 0% 0%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 100% 86%;
+    --destructive-foreground: 0 0% 0%;
+    --border: 0 0% 100%;
+    --input: 0 0% 100%;
+    --ring: 212 100% 85%;
+    --overlay: 0 0% 0%;
+  }
+}
