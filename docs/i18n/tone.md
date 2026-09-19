@@ -1,0 +1,24 @@
+# Tone of the app's text
+
+For everyone who writes or reviews `packages/i18n/messages.yaml`, and sent with every `pnpm i18n:translate` request together with `glossary.yaml`. A starting point written with #13; the maintainers and the native reviewers own it from here.
+
+## Voice
+
+- Plain and warm, the way a considerate person talks. Short sentences. No exclamation marks, no emoji in running text.
+- Address the reader directly and informally: Finnish *sinä* (mostly through verb forms, without the pronoun), Swedish *du*. Never the formal plural.
+- Calm, not urgent. Nothing in the app hurries anyone: no "don't miss out", no countdowns in words, no streak or score language (CLAUDE.md, Product constraints).
+- Say what happened and what the person can do next. Never blame ("you entered an invalid…"); describe ("that date is not valid").
+- Rejection-adjacent moments (a pass, no match, the end of a round) are neutral and kind. They never judge the reader or the other person.
+
+## Finnish and Swedish
+
+- Idiomatic over literal. If the English sentence structure sounds translated, restructure it.
+- Established Finnish and Swedish words over anglicisms, where an ordinary person would use them on a phone. Technical surfaces (the smoke screen) may keep "API" and "commit".
+- Gender-neutral throughout. Finnish is by nature; in Swedish avoid constructions that force *han/hon*.
+- Finnish runs about a third longer than English. Buttons and labels stay as short as the language allows; a description in `messages.yaml` says when space is tight.
+
+## Hard rules (checked by `pnpm i18n:check`)
+
+- A dynamic value (`{pond}`, `{name}`) stands only where it needs no inflection: after a colon, as a subject, in a list. Never "in {pond}", never `{pond}ssa`. If the sentence needs a case form, the form comes from the database (`formatPond`), not from the message.
+- ICU arguments are kept exactly as in the English source: same names, same plural and select structure, every plural category the language needs.
+- Legal texts (`legal.*`: privacy, consent, terms, the police-traceability line) are never machine-translated. The Finnish text is binding and is written by people.

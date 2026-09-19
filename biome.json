@@ -15,7 +15,8 @@
       "!**/expo-env.d.ts",
       "!pnpm-lock.yaml",
       "!apps/api/openapi.json",
-      "!packages/schema/src/api.generated.ts"
+      "!packages/schema/src/api.generated.ts",
+      "!packages/i18n/src/generated"
     ]
   },
   "formatter": {

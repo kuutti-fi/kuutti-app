@@ -1,3 +1,4 @@
+import { LOCALE_NAMES, type PlainMessageKey } from "@kuutti/i18n";
 import Settings from "lucide-react-native/icons/settings";
 import { View } from "react-native";
 import { Button } from "@/components/ui/button";
@@ -12,59 +13,110 @@ import {
 import { Icon } from "@/components/ui/icon";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { Text } from "@/components/ui/text";
+import { type LocalePreference, OFFERED_LOCALES, useLocaleSettings, useT } from "@/lib/locale";
 import { type SchemePreference, useTheme } from "@/theme/ThemeProvider";
 
-const SCHEMES: ReadonlyArray<{ value: SchemePreference; label: string }> = [
-  { value: "system", label: "System" },
-  { value: "light", label: "Light" },
-  { value: "dark", label: "Dark" },
+const SCHEMES: ReadonlyArray<{ value: SchemePreference; label: PlainMessageKey }> = [
+  { value: "system", label: "settings.theme.system" },
+  { value: "light", label: "settings.theme.light" },
+  { value: "dark", label: "settings.theme.dark" },
 ];
 
+/** One option of a group. The chosen one is marked in text too, never by colour alone. */
+function Choice(props: { label: string; chosen: boolean; onPress: () => void }) {
+  const { t } = useT();
+  return (
+    <Button
+      variant={props.chosen ? "default" : "outline"}
+      accessibilityRole="radio"
+      accessibilityState={{ checked: props.chosen }}
+      // react-native-web reads the ARIA prop, not accessibilityState.
+      aria-checked={props.chosen}
+      className="grow"
+      onPress={props.onPress}
+    >
+      {props.chosen ? t("settings.selected", { option: props.label }) : props.label}
+    </Button>
+  );
+}
+
 /**
- * Theme and high-contrast toggles for builds that are not production (#12):
- * how all four token sets are looked at on a device. Strings are inline until
- * #13, like the rest of the smoke screen.
+ * Theme, high contrast and language for builds that are not production (#12,
+ * #13): how every token set and every locale, en-XA included, is looked at on
+ * a device. The language choice is the in-app override that beats the phone's.
  */
 export function DevSettings() {
-  const { preference, setPreference, highContrast, setHighContrast } = useTheme();
+  const { t } = useT();
+  const theme = useTheme();
+  const locale = useLocaleSettings();
+  const languages: ReadonlyArray<{ value: LocalePreference; label: string }> = [
+    { value: "system", label: t("settings.language.system") },
+    // A language is listed under its own name, whatever the app's language is.
+    ...OFFERED_LOCALES.map((value) => ({ value, label: LOCALE_NAMES[value] })),
+  ];
+
   return (
     <Dialog>
       <DialogTrigger asChild>
-        <Button variant="ghost" size="icon" accessibilityLabel="Appearance settings">
+        <Button variant="ghost" size="icon" accessibilityLabel={t("settings.open")}>
           <Icon as={Settings} />
         </Button>
       </DialogTrigger>
-      <DialogContent closeLabel="Close appearance settings">
+      <DialogContent closeLabel={t("settings.close")}>
         <DialogHeader>
-          <DialogTitle>Appearance</DialogTitle>
-          <DialogDescription>Development builds only.</DialogDescription>
+          <DialogTitle>{t("settings.title")}</DialogTitle>
+          <DialogDescription>{t("settings.devOnly")}</DialogDescription>
         </DialogHeader>
-        <View accessibilityRole="radiogroup" accessibilityLabel="Theme" className="flex-row gap-2">
-          {SCHEMES.map(({ value, label }) => (
-            <Button
-              key={value}
-              variant={preference === value ? "default" : "outline"}
-              accessibilityRole="radio"
-              accessibilityState={{ checked: preference === value }}
-              // react-native-web reads the ARIA prop, not accessibilityState.
-              aria-checked={preference === value}
-              className="flex-1"
-              onPress={() => setPreference(value)}
-            >
-              {/* The selected option is marked in text too, not by colour alone. */}
-              {preference === value ? `✓ ${label}` : label}
-            </Button>
-          ))}
+
+        <View className="gap-2">
+          <Text variant="small">{t("settings.theme.label")}</Text>
+          <View
+            accessibilityRole="radiogroup"
+            accessibilityLabel={t("settings.theme.label")}
+            className="flex-row flex-wrap gap-2"
+          >
+            {SCHEMES.map(({ value, label }) => (
+              <Choice
+                key={value}
+                label={t(label)}
+                chosen={theme.preference === value}
+                onPress={() => theme.setPreference(value)}
+              />
+            ))}
+          </View>
         </View>
+
         <View className="flex-row items-center justify-between gap-4">
-          <Label nativeID="high-contrast-label" onPress={() => setHighContrast(!highContrast)}>
-            High contrast
+          <Label
+            nativeID="high-contrast-label"
+            onPress={() => theme.setHighContrast(!theme.highContrast)}
+          >
+            {t("settings.highContrast")}
           </Label>
           <Switch
-            accessibilityLabel="High contrast"
-            checked={highContrast}
-            onCheckedChange={setHighContrast}
+            accessibilityLabel={t("settings.highContrast")}
+            checked={theme.highContrast}
+            onCheckedChange={theme.setHighContrast}
           />
+        </View>
+
+        <View className="gap-2">
+          <Text variant="small">{t("settings.language.label")}</Text>
+          <View
+            accessibilityRole="radiogroup"
+            accessibilityLabel={t("settings.language.label")}
+            className="flex-row flex-wrap gap-2"
+          >
+            {languages.map(({ value, label }) => (
+              <Choice
+                key={value}
+                label={label}
+                chosen={locale.preference === value}
+                onPress={() => locale.setPreference(value)}
+              />
+            ))}
+          </View>
         </View>
       </DialogContent>
     </Dialog>

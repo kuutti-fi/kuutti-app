@@ -3,19 +3,45 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "messages.yaml, typed t(), i18next + ICU. Contents arrive with issue #13.",
+  "description": "messages.yaml, typed t(), i18next + ICU for app, API and admin (#13, TD-17).",
   "main": "./src/index.ts",
   "types": "./src/index.ts",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./react": "./src/react.tsx",
+    "./pseudo": "./src/pseudo.ts"
   },
   "scripts": {
+    "build": "node scripts/build.ts",
+    "check": "node scripts/check.ts",
+    "check:ui-strings": "node scripts/check-ui-strings.ts",
+    "translate": "node scripts/translate.ts",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "test": "vitest run --passWithNoTests",
-    "translate": "node -e \"console.error('pnpm i18n:translate arrives with issue #13'); process.exit(1)\""
+    "test": "vitest run"
   },
   "devDependencies": {
+    "@anthropic-ai/sdk": "0.127.0",
+    "@types/node": "^22.20.2",
+    "@types/react": "catalog:",
+    "react": "catalog:",
     "typescript": "catalog:",
-    "vitest": "catalog:"
+    "vitest": "catalog:",
+    "yaml": "2.9.1",
+    "zod": "^4.6.2"
+  },
+  "dependencies": {
+    "@formatjs/icu-messageformat-parser": "3.5.18",
+    "i18next": "26.4.2",
+    "i18next-icu": "2.4.4",
+    "intl-messageformat": "11.2.15",
+    "react-i18next": "17.0.14"
+  },
+  "peerDependencies": {
+    "react": ">=19"
+  },
+  "peerDependenciesMeta": {
+    "react": {
+      "optional": true
+    }
   }
 }

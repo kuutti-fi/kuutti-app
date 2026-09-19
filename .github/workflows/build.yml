@@ -83,6 +83,16 @@ jobs:
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
 
+      # A release carries no Finnish text that is still machine-translated (#13,
+      # rules/i18n.md). Checked here, before anything is tagged: a refused
+      # release must not leave a vX.Y.Z image behind, and the production deploy
+      # and the release both wait for this job.
+      - uses: ./.github/actions/pnpm
+        if: startsWith(github.ref, 'refs/tags/v')
+      - name: Every Finnish text has had its native review
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: pnpm i18n:check --release
+
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
 
       - name: Log in to GHCR

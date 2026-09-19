@@ -3,6 +3,7 @@ import * as Sentry from "@sentry/react-native";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import * as Updates from "expo-updates";
+import { LocaleProvider } from "@/lib/locale";
 import { sentryOptions } from "@/lib/sentry";
 import { ThemeProvider } from "@/theme/ThemeProvider";
 
@@ -13,12 +14,14 @@ Sentry.init(sentryOptions({ dsn: process.env.EXPO_PUBLIC_SENTRY_DSN, channel: Up
 // Routes stay thin and delegate to src/features/<slice>/ (rules/layout.md).
 function RootLayout() {
   return (
-    <ThemeProvider>
-      <Stack
-        screenOptions={{ headerShown: false, contentStyle: { backgroundColor: "transparent" } }}
-      />
-      <StatusBar style="auto" />
-    </ThemeProvider>
+    <LocaleProvider>
+      <ThemeProvider>
+        <Stack
+          screenOptions={{ headerShown: false, contentStyle: { backgroundColor: "transparent" } }}
+        />
+        <StatusBar style="auto" />
+      </ThemeProvider>
+    </LocaleProvider>
   );
 }
 

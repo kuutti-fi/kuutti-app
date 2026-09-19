@@ -10,6 +10,7 @@ import { Icon } from "@/components/ui/icon";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Text } from "@/components/ui/text";
 import { apiBaseUrl, fetchHealth } from "@/lib/api";
+import { useT } from "@/lib/locale";
 import { useHapticTap } from "@/theme/haptics";
 import { DevSettings } from "./DevSettings";
 
@@ -23,13 +24,14 @@ const SHOW_DEV_SETTINGS = Updates.channel !== "production";
 
 /**
  * M1 smoke screen: proves the app boots and reaches the API, and is the first
- * screen built on the UI primitives and tokens (#12). Localised in #13;
- * strings are inline until then. It scrolls, so the largest OS font size
- * never clips anything.
+ * screen built on the UI primitives and tokens (#12) with every string from
+ * messages.yaml (#13). It scrolls, so the largest OS font size and the longest
+ * language never clip anything.
  */
 export function SmokeScreen() {
   const [state, setState] = useState<State>({ kind: "loading" });
   const tap = useHapticTap();
+  const { t } = useT();
 
   const load = useCallback(async () => {
     setState({ kind: "loading" });
@@ -54,38 +56,45 @@ export function SmokeScreen() {
       )}
       <ScrollView contentContainerClassName="flex-grow items-center justify-center gap-4 p-6">
         <Text variant="h1" accessibilityRole="header">
-          Kuutti
+          {t("smoke.title")}
         </Text>
         <Text variant="muted">{apiBaseUrl()}</Text>
 
         <Card className="w-full max-w-md">
           {state.kind === "loading" && (
-            <CardContent accessibilityLabel="Reaching the API" className="gap-3">
-              <Text>Reaching the API…</Text>
+            <CardContent accessibilityLabel={t("smoke.loading")} className="gap-3">
+              <Text>{t("smoke.loading")}</Text>
               <Skeleton className="h-4 w-2/3" />
               <Skeleton className="h-4 w-1/2" />
             </CardContent>
           )}
 
           {state.kind === "ok" && (
-            <View accessibilityLabel="API status" className="gap-6">
+            <View accessibilityLabel={t("smoke.status.label")} className="gap-6">
               <CardHeader>
-                <CardTitle>API {state.health.version}</CardTitle>
-                <CardDescription>commit {state.health.commit}</CardDescription>
+                <CardTitle>
+                  {t("smoke.status.version", { version: state.health.version })}
+                </CardTitle>
+                <CardDescription>
+                  {t("smoke.status.commit", { commit: state.health.commit })}
+                </CardDescription>
               </CardHeader>
               <CardContent>
                 <Text variant="muted">
-                  db {state.health.db} · migrations {state.health.migrations}
+                  {t("smoke.status.database", {
+                    db: state.health.db,
+                    migrations: state.health.migrations,
+                  })}
                 </Text>
               </CardContent>
             </View>
           )}
 
           {state.kind === "error" && (
-            <View accessibilityLabel="API unreachable" className="gap-6">
+            <View accessibilityLabel={t("smoke.unreachable.title")} className="gap-6">
               <CardHeader>
                 {/* The words carry the state; the colour only repeats it. */}
-                <CardTitle className="text-destructive">API unreachable</CardTitle>
+                <CardTitle className="text-destructive">{t("smoke.unreachable.title")}</CardTitle>
                 <CardDescription>{state.message}</CardDescription>
               </CardHeader>
             </View>
@@ -93,14 +102,14 @@ export function SmokeScreen() {
         </Card>
 
         <Button
-          accessibilityLabel="Retry"
+          accessibilityLabel={t("smoke.retry")}
           onPress={() => {
             tap();
             void load();
           }}
         >
           <Icon as={RotateCw} />
-          <Text>Retry</Text>
+          <Text>{t("smoke.retry")}</Text>
         </Button>
       </ScrollView>
     </SafeAreaView>

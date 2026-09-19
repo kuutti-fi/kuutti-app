@@ -1,6 +1,7 @@
 import { getConnInfo } from "@hono/node-server/conninfo";
 import type { Context, MiddlewareHandler } from "hono";
 import { envelope } from "./errors.ts";
+import { tOf } from "./i18n.ts";
 
 export type RateLimitOptions = {
   limit: number;
@@ -44,7 +45,7 @@ export function rateLimit(options: RateLimitOptions): MiddlewareHandler {
       return c.json(
         envelope(
           "rate_limited",
-          "Too many requests",
+          tOf(c)("errors.rate_limited", { seconds: retryAfter }),
           typeof requestId === "string" ? requestId : "unknown",
         ),
         429,

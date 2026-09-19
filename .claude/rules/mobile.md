@@ -41,7 +41,8 @@ Stack: Expo SDK 57, React Native 0.86, React 19, TypeScript, dev client (`expo s
 
 ## i18n
 
-- Every user-facing string is a typed `t()` key from `packages/i18n`. No inline strings, no concatenation with inflected values; `in {pond}` is banned.
+- Every user-facing string is a typed `t()` key from `packages/i18n`, through `useT()` from `src/lib/locale.tsx`. No inline strings (`pnpm lint` fails on them), no concatenation with inflected values; `in {pond}` is banned. Required label props (`accessibilityLabel`, `closeLabel`) take `t(...)` too.
+- The language is the stored in-app choice if there is one, else the phone's first language with a catalogue (`expo-localization`), else English; `LocaleProvider` wraps the app above `ThemeProvider`. Tests render through `renderWithTheme`, which supplies both, and set the phone's language with the `expo-localization` mock (`src/features/smoke/language.test.tsx`).
 - ICU plurals; Intl for dates and numbers; the `en-XA` pseudo-locale in dev builds to catch overflow.
 
 ## Testing and builds

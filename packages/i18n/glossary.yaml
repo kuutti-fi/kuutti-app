@@ -1,0 +1,26 @@
+# Product vocabulary for `pnpm i18n:translate` and for human translators (#13, TD-17).
+# A term with a fi or sv value is fixed: translations must use exactly that word.
+# A term without one is explained by its definition only, and the translation
+# is left to the translator until a native reviewer fixes the word here.
+# The Finnish and Swedish product terms are a naming decision, not a lookup:
+# they are empty until the maintainers and a native speaker choose them.
+
+Kuutti:
+  definition: The name of the app and of the association. A proper noun; never translated and never inflected in a message (keep it in nominative positions).
+  fi: Kuutti
+  sv: Kuutti
+
+pond:
+  definition: The group of people a member meets within, usually a city or region. One of the app's own words, used as a common noun ("your pond"). Pond names themselves come from the database with their case forms and are never built in a message.
+
+round:
+  definition: The small, fixed set of profiles a member receives once a day. There is no feed and nothing loads after it; the word should sound finite and calm.
+
+like:
+  definition: Telling the app you would like to talk to someone. A noun and a verb in English; never a score, never a count shown to others.
+
+pass:
+  definition: Deciding not to talk to someone in this round. Neutral and kind; it must not read as rejection or as a judgement of the other person.
+
+standing:
+  definition: Whether a verified person is in good standing, suspended or banned. Used in moderation and account notices; formal, factual register.
