@@ -1,0 +1,30 @@
+name: Dependency audit
+
+# pnpm audit runs in ci.yml on every push and pull request, which only catches
+# an advisory when someone pushes. This is the same check on a clock, so an
+# advisory published against the lockfile as it stands is noticed within a
+# working day: GitHub mails the failed run. Dependabot alerts cover the same
+# ground once the dependency graph has ingested pnpm-lock.yaml (#16).
+
+on:
+  schedule:
+    # Weekdays 06:30 UTC, after the weekly secret scan.
+    - cron: "30 6 * * 1-5"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    name: audit
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/pnpm
+        with:
+          install: "false"
+      - name: No known high or critical vulnerability in the lockfile
+        run: pnpm audit --audit-level high
