@@ -175,4 +175,20 @@ describe("ssmPrefix", () => {
     expect(url.searchParams.get("sslmode")).toBe("verify-full");
     expect(url.searchParams.get("sslrootcert")).toBe("/app/certs/rds-eu-central-1-bundle.pem");
   });
+
+  it("drops the environment's application password from a preview's config", () => {
+    const config = parseConfig({
+      APP_ENV: "preview",
+      PR_NUMBER: "42",
+      DB_HOST: "rds.internal",
+      DB_NAME: "kuutti",
+      DB_USER: "kuutti_app",
+      DB_APP_PASSWORD: "staging-secret",
+      DB_PREVIEW_USER: "kuutti_preview",
+      DB_PREVIEW_PASSWORD: "preview-secret",
+    });
+    expect(config.DB_APP_PASSWORD).toBeUndefined();
+    expect(JSON.stringify(config)).not.toContain("staging-secret");
+    expect(new URL(config.databaseUrl).username).toBe("kuutti_preview");
+  });
 });

@@ -125,6 +125,13 @@ export function parseConfig(raw: Record<string, string | undefined>): Config {
   const rateLimit =
     env.RATE_LIMIT_PER_MINUTE ??
     (env.APP_ENV === "preview" ? RATE_LIMIT_DEFAULT.preview : RATE_LIMIT_DEFAULT.other);
+  // A preview reads the whole /kuutti/staging/* prefix through the shared
+  // instance role; what it must never hold in memory is dropped here, so a
+  // preview process cannot reach the environment's own database even by
+  // accident. The preview role from db-app-role.sh is the real boundary.
+  if (preview) {
+    env.DB_APP_PASSWORD = undefined;
+  }
   return {
     ...env,
     RATE_LIMIT_PER_MINUTE: rateLimit,

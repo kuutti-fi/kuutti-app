@@ -40,6 +40,7 @@ module "compute" {
   permissions_boundary_arn   = local.permissions_boundary_arn
   backup_bucket              = local.state_bucket
   dokploy_version            = var.dokploy_version
+  domain                     = var.domain
   manage_session_preferences = false
 }
 

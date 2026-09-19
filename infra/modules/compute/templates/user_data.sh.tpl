@@ -54,6 +54,32 @@ echo "${dokploy_installer}" | base64 -d | gunzip > /root/dokploy-install.sh
 echo "${dokploy_installer_sha256}  /root/dokploy-install.sh" | sha256sum -c -
 DOKPLOY_VERSION="${dokploy_version}" sh /root/dokploy-install.sh
 
+# Traefik: whoever holds a Dokploy member token (the previews project, #9)
+# may attach any host name to an application, the control plane's own
+# included; two routers with the same Host rule and no priority are picked in
+# undefined order. This file wins for the control plane by priority; the api
+# host is added by infra/scripts/dokploy-setup.sh once the application and
+# its service name exist. Dokploy's file provider watches this directory.
+mkdir -p /etc/dokploy/traefik/dynamic
+cat > /etc/dokploy/traefik/dynamic/00-control-plane.yml <<'YAML'
+# Written by user_data (infra/modules/compute); dokploy-setup.sh adds the api router.
+http:
+  routers:
+    control-plane-dokploy:
+      rule: Host(`dokploy.${environment}.${domain}`)
+      priority: 1000
+      service: dokploy-service-app
+      entryPoints: [web]
+      middlewares: [redirect-to-https]
+    control-plane-dokploy-secure:
+      rule: Host(`dokploy.${environment}.${domain}`)
+      priority: 1000
+      service: dokploy-service-app
+      entryPoints: [websecure]
+      tls:
+        certResolver: letsencrypt
+YAML
+
 # The RDS root certificates for this region, for the box's own psql (the
 # preview-database Run Command). Same bundle as apps/api/certs, same hash; a
 # mismatch is a warning here, never a failed boot: the API image carries its

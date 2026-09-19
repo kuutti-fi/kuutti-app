@@ -41,6 +41,10 @@ deploy() {
   local pr="$1" image="$2" origin="$3"
   [[ "$pr" =~ ^[0-9]{1,7}$ ]] || { echo "not a pull request number: $pr" >&2; exit 2; }
   local name="api-pr-$pr" host="pr-$pr.$PREVIEW_API_DOMAIN"
+  # Only hosts under the preview wildcard: the member token could attach any
+  # host, api.staging and dokploy.staging included (the box also pins those
+  # two with priority routers, infra/README.md Previews, Trust).
+  [[ "$host" == pr-[0-9]*."$PREVIEW_API_DOMAIN" ]] || { echo "refusing host $host" >&2; exit 2; }
   local id
   id=$(application_id "$pr")
 
@@ -56,6 +60,13 @@ deploy() {
     echo "created $name ($id) at https://$host"
   else
     echo "updating $name ($id) at https://$host"
+    # A cancel between application.create and domain.create leaves an
+    # application without a domain that later pushes would never fix.
+    if ! api "$DOKPLOY_URL/api/domain.byApplicationId?applicationId=$id" | jq -e --arg h "$host" '.[] | select(.host == $h)' >/dev/null; then
+      post domain.create "$(jq -cn --arg id "$id" --arg host "$host" \
+        '{applicationId: $id, host: $host, path: "/", port: 3000, https: true, certificateType: "letsencrypt", domainType: "application"}')" >/dev/null
+      echo "added the missing domain https://$host"
+    fi
   fi
 
   # The image is public on GHCR, so no registry credential.

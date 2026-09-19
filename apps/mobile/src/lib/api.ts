@@ -13,6 +13,9 @@ export function apiBaseUrl(): string {
   if (fromEnv) return fromEnv.replace(/\/$/, "");
   const host = Constants.expoConfig?.hostUri?.split(":")[0];
   if (host) return `http://${host}:3000`;
+  // A release bundle without the variable would silently talk to nothing;
+  // EAS environments and CI both set it (apps/mobile/README.md, API URLs).
+  if (!__DEV__) throw new Error("EXPO_PUBLIC_API_URL is not set for this build");
   return "http://localhost:3000";
 }
 

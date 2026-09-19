@@ -33,8 +33,6 @@ defaults:
   run:
     shell: bash
 
-env:
-  EAS_CLI_VERSION: "24.3.0"
 
 jobs:
   deploy:
@@ -108,7 +106,10 @@ jobs:
           EAS_ENVIRONMENT: ${{ inputs.environment == 'prod' && 'production' || 'preview' }}
           COMMIT: ${{ inputs.commit }}
         run: |
-          npx --yes "eas-cli@$EAS_CLI_VERSION" update --channel "$CHANNEL" --environment "$EAS_ENVIRONMENT" \
+          # --environment makes the EAS environment's EXPO_PUBLIC_API_URL win over
+          # the runner's; both must exist and README keeps them equal.
+          : "${EXPO_PUBLIC_API_URL:?API_URL must be set in the GitHub environment}"
+          pnpm exec eas update --channel "$CHANNEL" --environment "$EAS_ENVIRONMENT" \
             --message "$COMMIT" --platform all --private-key-path "$RUNNER_TEMP/update-signing-key.pem" \
             --json --non-interactive \
             | jq -r '.[] | "\(.platform) \(.id) runtime \(.runtimeVersion) branch \(.branch)"'

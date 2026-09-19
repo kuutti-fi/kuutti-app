@@ -70,3 +70,9 @@ variable "cpu_credits" {
     error_message = "cpu_credits must be standard or unlimited."
   }
 }
+
+variable "domain" {
+  description = "The project domain; the box pins dokploy.<environment>.<domain> to the control plane in Traefik."
+  type        = string
+  default     = "kuutti.app"
+}

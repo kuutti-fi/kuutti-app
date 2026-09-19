@@ -35,7 +35,6 @@ concurrency:
 
 env:
   IMAGE: ghcr.io/kuutti-fi/kuutti-api
-  EAS_CLI_VERSION: "24.3.0"
   PREVIEW_LIMIT: "3"
 
 jobs:
@@ -207,7 +206,7 @@ jobs:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
           EXPECTED: ${{ needs.api.outputs.web_origin }}
         run: |
-          out=$(npx --yes "eas-cli@$EAS_CLI_VERSION" deploy --alias "pr-$PR_NUMBER" --json --non-interactive)
+          out=$(pnpm exec eas deploy --alias "pr-$PR_NUMBER" --json --non-interactive)
           url=$(jq -r '(.aliases // [])[0].url // .url' <<< "$out")
           url="${url%/}"
           [ "$url" = "$EXPECTED" ] || { echo "::error::EAS Hosting gave $url, the API allows $EXPECTED: check EAS_HOSTING_SUBDOMAIN"; exit 1; }
@@ -245,6 +244,9 @@ jobs:
     needs: [api, web]
     if: needs.api.outputs.deployed == 'true'
     runs-on: ubuntu-24.04-arm
+    # The same environment as the other lanes: its secrets (EXPO_TOKEN, and
+    # the signing key once the maintainer grants it) exist nowhere else.
+    environment: preview
     permissions:
       contents: read
       pull-requests: write
@@ -345,11 +347,13 @@ jobs:
           EXPO_PUBLIC_API_URL: ${{ needs.api.outputs.api_url }}
           SHORT_SHA: ${{ needs.api.outputs.short_sha }}
         run: |
+          # No --environment here: an EAS environment's variables override the
+          # runner's, and this bundle must point at the pull request's own API.
+          : "${EXPO_PUBLIC_API_URL:?the preview API URL must be set}"
           key=()
           [ -f "$RUNNER_TEMP/update-signing-key.pem" ] && key=(--private-key-path "$RUNNER_TEMP/update-signing-key.pem")
-          out=$(npx --yes "eas-cli@$EAS_CLI_VERSION" update --branch "pr-$PR_NUMBER" --message "pr-$PR_NUMBER $SHORT_SHA" \
-            --environment preview --platform all "${key[@]}" --json --non-interactive)
-          rm -f "$RUNNER_TEMP/update-signing-key.pem"
+          out=$(pnpm exec eas update --branch "pr-$PR_NUMBER" --message "pr-$PR_NUMBER $SHORT_SHA" \
+            --platform all "${key[@]}" --json --non-interactive)
           group=$(jq -r '.[0].group' <<< "$out")
           project=$(jq -r .expo.extra.eas.projectId app.json)
           slug=$(jq -r .expo.slug app.json)
@@ -357,6 +361,10 @@ jobs:
             echo "qr=https://qr.expo.dev/eas-update?appScheme=$slug&projectId=$project&groupId=$group"
             echo "link=https://expo.dev/projects/$project/updates/$group"
           } >> "$GITHUB_OUTPUT"
+
+      - name: Remove the signing key file
+        if: always()
+        run: rm -f "$RUNNER_TEMP/update-signing-key.pem"
           jq -r '.[] | "\(.platform) \(.id) runtime \(.runtimeVersion)"' <<< "$out"
 
       - name: Comment

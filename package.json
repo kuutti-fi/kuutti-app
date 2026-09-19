@@ -28,7 +28,8 @@
     "check:schema-words": "node scripts/check-schema-words.ts"
   },
   "devDependencies": {
-    "@biomejs/biome": "2.5.13"
+    "@biomejs/biome": "2.5.13",
+    "eas-cli": "24.7.0"
   },
   "dependencies": {
     "zod": "^4.6.2"

@@ -4,8 +4,10 @@
 # account, its 2FA and the API key). Idempotent: run it again after a change
 # and it updates what exists.
 #
-#   DOKPLOY_URL=http://localhost:3000 DOKPLOY_TOKEN=<api key> infra/scripts/dokploy-setup.sh staging
+#   DOKPLOY_URL=http://localhost:3000 DOKPLOY_TOKEN=<api key> INSTANCE_ID=<i-…> infra/scripts/dokploy-setup.sh staging
 #
+# INSTANCE_ID (tofu output instance_id in infra/envs/<env>) lets the script
+# write the Traefik control-plane routers on the box through Run Command.
 # DOKPLOY_URL is the port-forward while Dokploy has no domain of its own, the
 # real https://dokploy.<env>.<domain> afterwards. The token comes from Profile
 # in the UI and is exported in your shell; this script never prints it.
@@ -86,6 +88,61 @@ if post settings.assignDomainServer "$(jq -cn --arg host "$dokploy_host" \
   echo "Dokploy's own domain https://$dokploy_host"
 else
   echo "could not set Dokploy's own domain through the API; set $dokploy_host under Settings, Web Server" >&2
+fi
+
+# --- Traefik: pin the control-plane hosts (#9 trust) ----------------------
+# A Dokploy member token may attach any host to a preview application; these
+# priority routers keep dokploy.<env> and api.<env> with their owners.
+app_name=$(get "application.one?applicationId=$app_id" | jq -r .appName)
+if [ -n "$app_name" ] && [ "$app_name" != null ] && command -v aws >/dev/null && [ -n "${INSTANCE_ID:-}" ]; then
+  file=$(cat <<YAML
+# Written by infra/scripts/dokploy-setup.sh; user_data writes the dokploy part at first boot.
+http:
+  routers:
+    control-plane-dokploy:
+      rule: Host(\`$dokploy_host\`)
+      priority: 1000
+      service: dokploy-service-app
+      entryPoints: [web]
+      middlewares: [redirect-to-https]
+    control-plane-dokploy-secure:
+      rule: Host(\`$dokploy_host\`)
+      priority: 1000
+      service: dokploy-service-app
+      entryPoints: [websecure]
+      tls:
+        certResolver: letsencrypt
+    control-plane-api:
+      rule: Host(\`$api_host\`)
+      priority: 1000
+      service: control-plane-api
+      entryPoints: [web]
+      middlewares: [redirect-to-https]
+    control-plane-api-secure:
+      rule: Host(\`$api_host\`)
+      priority: 1000
+      service: control-plane-api
+      entryPoints: [websecure]
+      tls:
+        certResolver: letsencrypt
+  services:
+    control-plane-api:
+      loadBalancer:
+        servers:
+          - url: http://$app_name:3000
+        passHostHeader: true
+YAML
+)
+  cmd=$(jq -cn --arg f "$file" '{commands: ["cat > /etc/dokploy/traefik/dynamic/00-control-plane.yml <<'"'"'EOF'"'"'", $f, "EOF", "echo written"]}')
+  cid=$(aws ssm send-command --instance-ids "$INSTANCE_ID" --document-name AWS-RunShellScript --comment "control-plane routers (dokploy-setup.sh)" --parameters "$cmd" --query 'Command.CommandId' --output text)
+  for _ in $(seq 1 20); do
+    st=$(aws ssm get-command-invocation --command-id "$cid" --instance-id "$INSTANCE_ID" --query Status --output text 2>/dev/null || echo Pending)
+    case "$st" in Success|Failed|TimedOut|Cancelled) break ;; esac
+    sleep 3
+  done
+  echo "Traefik control-plane routers for $dokploy_host and $api_host -> $app_name: $st"
+else
+  echo "INSTANCE_ID not set or aws missing: control-plane routers not written (see infra/README.md Previews, Trust)" >&2
 fi
 
 # --- deploy ----------------------------------------------------------------

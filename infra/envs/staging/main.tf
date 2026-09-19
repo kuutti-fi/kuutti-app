@@ -40,6 +40,7 @@ module "compute" {
   permissions_boundary_arn   = local.permissions_boundary_arn
   backup_bucket              = local.state_bucket
   dokploy_version            = var.dokploy_version
+  domain                     = var.domain
   cpu_credits                = "standard" # a pegged staging box slows down instead of costing extra
   manage_session_preferences = true
   preview_databases          = true # pull-request previews run here (#9)

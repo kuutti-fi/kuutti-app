@@ -33,7 +33,6 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  EAS_CLI_VERSION: "24.3.0"
 
 jobs:
   # Which pull requests lose their previews, then everything that needs the
@@ -85,9 +84,16 @@ jobs:
                 pr=$(jq -r .pr <<< "$row")
                 created=$(jq -r .createdAt <<< "$row")
                 age=$(( (now - $(date -u -d "$created" +%s)) / 86400 ))
-                state=$(gh pr view "$pr" --json state --jq .state 2>/dev/null || echo UNKNOWN)
-                if [ "$state" != OPEN ]; then
+                # A pull request that does not exist is closed; any other
+                # failure of gh (rate limit, outage) must not remove an open
+                # preview, so it is skipped with a warning.
+                if state=$(gh pr view "$pr" --json state --jq .state 2>"$RUNNER_TEMP/pr-view.err"); then :
+                elif grep -q "Could not resolve to a PullRequest" "$RUNNER_TEMP/pr-view.err"; then state=CLOSED
+                else echo "::warning::could not read the state of #$pr: $(cat "$RUNNER_TEMP/pr-view.err")"; continue; fi
+                if [ "$state" = CLOSED ] || [ "$state" = MERGED ]; then
                   echo "#$pr is $state: removing its preview"
+                  NOTICE="Previews removed: the pull request is $state." \
+                    PR_NUMBER="$pr" SHORT_SHA="sweep" .github/scripts/preview-comment.sh || true
                 elif [ "$age" -ge 7 ]; then
                   echo "#$pr preview is $age days old: retiring it"
                   NOTICE="Preview retired after $age days to free the box; push again to recreate it." \
@@ -125,18 +131,21 @@ jobs:
           NUMBERS: ${{ steps.select.outputs.numbers }}
         run: |
           for pr in $(jq -r '.[]' <<< "$NUMBERS"); do
-            npx --yes "eas-cli@$EAS_CLI_VERSION" deploy:alias:delete "pr-$pr" --non-interactive \
+            pnpm exec eas deploy:alias:delete "pr-$pr" --non-interactive \
               || echo "no EAS Hosting alias pr-$pr"
             if jq -e '.expo.updates.url' app.json >/dev/null 2>&1; then
-              npx --yes "eas-cli@$EAS_CLI_VERSION" branch:delete "pr-$pr" --non-interactive \
+              pnpm exec eas branch:delete "pr-$pr" --non-interactive \
                 || echo "no EAS Update branch pr-$pr"
             fi
           done
 
       - name: Comment on the closed pull request
         if: github.event_name == 'pull_request'
+        # A failed comment must not skip the databases job below.
+        continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
           SHORT_SHA: closed
           NOTICE: "Previews removed: the pull request closed."
         run: .github/scripts/preview-comment.sh
@@ -147,7 +156,9 @@ jobs:
   databases:
     name: drop kuutti_pr_<n>
     needs: previews
-    if: needs.previews.outputs.numbers != '[]'
+    # Runs whenever the selection produced numbers, even if a later step of
+    # the previews job failed: a stranded kuutti_pr_<n> is the worse outcome.
+    if: ${{ !cancelled() && needs.previews.result != 'skipped' && needs.previews.outputs.numbers != '[]' && needs.previews.outputs.numbers != '' }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
