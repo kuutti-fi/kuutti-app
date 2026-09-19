@@ -1,6 +1,207 @@
-# Source of truth for user-facing text. Semantic keys, English text, a description
-# per key, Finnish and Swedish added by native reviewers or flagged machine: true.
-# The build step, typed t() and CI checks arrive with issue #13.
+# Source of truth for every user-facing string in app, API and admin (#13, TD-17).
+#
+#   some.semantic.key:
+#     en: English text, ICU MessageFormat ({name}, {count, plural, one {#} other {#}})
+#     description: what it is and where it shows, for translators and reviewers
+#     fi: Finnish (required: CI fails without it, except under admin.*)
+#     sv: Swedish (CI warns without it)
+#     machine: { fi: true, sv: true }   # set by `pnpm i18n:translate`, cleared by a
+#                                       # native reviewer; a release tag refuses fi: true
+#
+# Never inflect a dynamic value: proper nouns and user values stand in nominative
+# positions only ("in {pond}" is banned; ponds carry their case forms in the
+# database). legal.* keys take a consent_version and never a machine flag.
+# After editing: `pnpm i18n:build`, and commit src/generated with it.
+
 smoke.title:
   en: Kuutti
-  description: App name shown on the smoke screen.
+  description: App name as the heading of the smoke screen. Never translated.
+  fi: Kuutti
+  sv: Kuutti
+
+smoke.loading:
+  en: Reaching the API…
+  description: Smoke screen, shown while the first request to the API is in flight.
+  fi: Yhdistetään rajapintaan…
+  sv: Ansluter till API:et…
+  machine: { fi: true, sv: true }
+
+smoke.status.label:
+  en: API status
+  description: Smoke screen, screen-reader label of the card that shows the API's version.
+  fi: Rajapinnan tila
+  sv: API-status
+  machine: { fi: true, sv: true }
+
+smoke.status.version:
+  en: API {version}
+  description: Smoke screen, card title. {version} is a version string such as 0.0.0-2b846b9.
+  fi: API {version}
+  sv: API {version}
+
+smoke.status.commit:
+  en: commit {commit}
+  description: Smoke screen, under the version. {commit} is a short git hash.
+  fi: commit {commit}
+  sv: commit {commit}
+
+smoke.status.database:
+  en: database {db} · migrations {migrations}
+  description: Smoke screen. {db} and {migrations} are raw state words from the API (ok, current), not translated.
+  fi: tietokanta {db} · migraatiot {migrations}
+  sv: databas {db} · migreringar {migrations}
+  machine: { fi: true, sv: true }
+
+smoke.unreachable.title:
+  en: API unreachable
+  description: Smoke screen, title of the error state when the request to the API failed. The technical reason follows untranslated.
+  fi: Rajapintaan ei saada yhteyttä
+  sv: API:et kan inte nås
+  machine: { fi: true, sv: true }
+
+smoke.retry:
+  en: Retry
+  description: Smoke screen, button that repeats the request to the API.
+  fi: Yritä uudelleen
+  sv: Försök igen
+  machine: { fi: true, sv: true }
+
+settings.open:
+  en: Settings
+  description: Screen-reader label of the icon button that opens the settings sheet (non-production builds).
+  fi: Asetukset
+  sv: Inställningar
+  machine: { fi: true, sv: true }
+
+settings.title:
+  en: Settings
+  description: Title of the settings sheet.
+  fi: Asetukset
+  sv: Inställningar
+  machine: { fi: true, sv: true }
+
+settings.devOnly:
+  en: Shown in development builds only.
+  description: Note under the title of the settings sheet.
+  fi: Näkyy vain kehitysversioissa.
+  sv: Visas bara i utvecklingsversioner.
+  machine: { fi: true, sv: true }
+
+settings.close:
+  en: Close settings
+  description: Screen-reader label of the close button of the settings sheet.
+  fi: Sulje asetukset
+  sv: Stäng inställningarna
+  machine: { fi: true, sv: true }
+
+settings.theme.label:
+  en: Theme
+  description: Settings sheet, name of the group of theme choices (system, light, dark).
+  fi: Teema
+  sv: Tema
+  machine: { fi: true, sv: true }
+
+settings.theme.system:
+  en: System
+  description: Settings sheet, theme choice that follows the phone's light or dark setting. Keep it short, it sits on a button.
+  fi: Järjestelmä
+  sv: System
+  machine: { fi: true, sv: true }
+
+settings.theme.light:
+  en: Light
+  description: Settings sheet, theme choice. Short, on a button.
+  fi: Vaalea
+  sv: Ljust
+  machine: { fi: true, sv: true }
+
+settings.theme.dark:
+  en: Dark
+  description: Settings sheet, theme choice. Short, on a button.
+  fi: Tumma
+  sv: Mörkt
+  machine: { fi: true, sv: true }
+
+settings.selected:
+  en: ✓ {option}
+  description: Marks the chosen option of a group in text, so the choice never depends on colour. {option} is the option's own label, in nominative.
+  fi: ✓ {option}
+  sv: ✓ {option}
+
+settings.highContrast:
+  en: High contrast
+  description: Settings sheet, label of the switch for the high-contrast colours.
+  fi: Suuri kontrasti
+  sv: Hög kontrast
+  machine: { fi: true, sv: true }
+
+settings.language.label:
+  en: Language
+  description: Settings sheet, name of the group of language choices. The languages themselves show their own names (English, Suomi, Svenska) and are not messages.
+  fi: Kieli
+  sv: Språk
+  machine: { fi: true, sv: true }
+
+settings.language.system:
+  en: Phone's language
+  description: Settings sheet, language choice that follows the phone's language setting.
+  fi: Puhelimen kieli
+  sv: Telefonens språk
+  machine: { fi: true, sv: true }
+
+errors.validation_failed:
+  en: The request was not valid.
+  description: API error message (400) when the request body, query or parameters fail validation. Details are never returned.
+  fi: Pyyntö ei ollut kelvollinen.
+  sv: Begäran var inte giltig.
+  machine: { fi: true, sv: true }
+
+errors.not_found:
+  en: Not found.
+  description: API error message (404).
+  fi: Ei löytynyt.
+  sv: Hittades inte.
+  machine: { fi: true, sv: true }
+
+errors.unauthenticated:
+  en: Sign in to continue.
+  description: API error message (401) when the request carries no valid session.
+  fi: Kirjaudu sisään jatkaaksesi.
+  sv: Logga in för att fortsätta.
+  machine: { fi: true, sv: true }
+
+errors.payload_too_large:
+  en: The request is too large.
+  description: API error message (413) when the request body exceeds the limit.
+  fi: Pyyntö on liian suuri.
+  sv: Begäran är för stor.
+  machine: { fi: true, sv: true }
+
+errors.rate_limited:
+  en: "Too many requests. Try again in {seconds, plural, one {# second} other {# seconds}}."
+  description: API error message (429). {seconds} is the whole number of seconds until the limit resets.
+  fi: "Liian monta pyyntöä. Yritä uudelleen {seconds, plural, one {# sekunnin} other {# sekunnin}} kuluttua."
+  sv: "För många förfrågningar. Försök igen om {seconds, plural, one {# sekund} other {# sekunder}}."
+  machine: { fi: true, sv: true }
+
+errors.http_error:
+  en: The request failed.
+  description: API error message for an HTTP failure that has no message of its own.
+  fi: Pyyntö epäonnistui.
+  sv: Begäran misslyckades.
+  machine: { fi: true, sv: true }
+
+errors.internal_error:
+  en: Something went wrong on our side.
+  description: API error message (500). Never carries detail.
+  fi: Jokin meni vikaan meidän päässämme.
+  sv: Något gick fel hos oss.
+  machine: { fi: true, sv: true }
+
+admin.title:
+  en: Kuutti admin
+  description: Moderation panel, page heading. The panel is English only (TD-17), so admin.* keys need no fi or sv.
+
+admin.empty:
+  en: Moderation panel. Nothing to moderate yet.
+  description: Moderation panel, placeholder text until the queues arrive in M4.

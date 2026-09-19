@@ -18,6 +18,7 @@
     "@hono/node-server": "^2.1.1",
     "@hono/zod-openapi": "^1.6.3",
     "@kuutti/db": "workspace:*",
+    "@kuutti/i18n": "workspace:*",
     "@kuutti/schema": "workspace:*",
     "@sentry/node": "^10.75.0",
     "hono": "^4.13.7",

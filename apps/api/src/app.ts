@@ -7,7 +7,14 @@ import { healthRoutes } from "./health/index.ts";
 import type { Config } from "./lib/config.ts";
 import { corsAllowlist } from "./lib/cors.ts";
 import type { AppEnv } from "./lib/env.ts";
-import { type ErrorReporter, envelope, notFound, onError, validationHook } from "./lib/errors.ts";
+import {
+  type ErrorReporter,
+  localisedEnvelope,
+  notFound,
+  onError,
+  validationHook,
+} from "./lib/errors.ts";
+import { requestLocale } from "./lib/i18n.ts";
 import { type Logger, requestLogger } from "./lib/logger.ts";
 import { openApiDocument } from "./lib/openapi.ts";
 import { rateLimit } from "./lib/rate-limit.ts";
@@ -31,6 +38,8 @@ export function createApp(deps: Deps) {
   // Order matters: id first so every later line carries it, logging next so
   // even rejected requests are logged, then the protections, then routes.
   app.use("*", requestId());
+  // Before everything that may answer, so a refusal speaks the request's language (#13).
+  app.use("*", requestLocale());
   app.use("*", requestLogger(deps.logger));
   app.use("*", secureHeaders());
   // No environment of this API is a web surface (rule 8); previews have public
@@ -44,8 +53,7 @@ export function createApp(deps: Deps) {
     "*",
     bodyLimit({
       maxSize: deps.config.BODY_LIMIT_BYTES,
-      onError: (c) =>
-        c.json(envelope("payload_too_large", "Request body too large", c.get("requestId")), 413),
+      onError: (c) => c.json(localisedEnvelope(c, "payload_too_large"), 413),
     }),
   );
   app.use(

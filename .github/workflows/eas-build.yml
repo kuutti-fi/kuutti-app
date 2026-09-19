@@ -40,8 +40,29 @@ concurrency:
 
 
 jobs:
+  # A production binary bundles the texts: none of its Finnish may still be
+  # machine-translated (#13). A job of its own, without an environment, so it
+  # answers before the prod reviewer is asked. It always runs and only checks on
+  # a tag or a production dispatch, so the build's `needs` is never a skipped job.
+  i18n-release:
+    name: i18n release gate
+    runs-on: ubuntu-24.04-arm
+    env:
+      PRODUCTION: ${{ startsWith(github.ref, 'refs/tags/v') || inputs.profile == 'production' }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: env.PRODUCTION == 'true'
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/pnpm
+        if: env.PRODUCTION == 'true'
+      - name: Every Finnish text has had its native review
+        if: env.PRODUCTION == 'true'
+        run: pnpm i18n:check --release
+
   build:
     name: eas build
+    needs: i18n-release
     if: vars.EAS_ENABLED == 'true'
     runs-on: ubuntu-24.04-arm
     # A production build, from a tag or by hand, goes through the prod

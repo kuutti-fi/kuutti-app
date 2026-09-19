@@ -86,6 +86,25 @@ jobs:
       - name: Token contrast
         run: pnpm --filter @kuutti/mobile check:contrast
 
+  i18n:
+    name: i18n
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/pnpm
+      # rules/i18n.md: the file validates, a missing fi fails, a missing sv
+      # warns, no dynamic value is inflected. Unreviewed Finnish blocks a
+      # release tag, which is build.yml's i18n release gate.
+      - name: messages.yaml follows the rules
+        run: pnpm i18n:check
+      - name: Compiled catalogues and the key type are committed and current
+        run: |
+          pnpm i18n:build
+          git diff --exit-code -- packages/i18n/src/generated
+          test -z "$(git status --porcelain -- packages/i18n/src/generated)" || { git status --porcelain -- packages/i18n/src/generated; echo "run pnpm i18n:build and commit src/generated"; exit 1; }
+
   audit:
     name: audit
     runs-on: ubuntu-24.04-arm

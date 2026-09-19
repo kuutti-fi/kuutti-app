@@ -12,6 +12,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@kuutti/i18n": "workspace:*",
     "@kuutti/schema": "workspace:*",
     "react": "catalog:",
     "react-dom": "catalog:"

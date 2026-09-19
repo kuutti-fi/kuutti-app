@@ -3,6 +3,7 @@ import type { ErrorResponse } from "@kuutti/schema";
 import type { Context, Env, ErrorHandler, NotFoundHandler } from "hono";
 import { HTTPException } from "hono/http-exception";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
+import { ERROR_MESSAGE_KEYS, isLocalisedErrorCode, type LocalisedErrorCode, tOf } from "./i18n.ts";
 import type { Logger } from "./logger.ts";
 
 /** A failure the route chose to signal. Detail is logged, never returned. */
@@ -30,6 +31,14 @@ export function envelope(code: string, message: string, requestId: string): Erro
   return { error: { code, message, requestId } };
 }
 
+/** The envelope for a code whose message is in messages.yaml, in the request's language (#13). */
+export function localisedEnvelope<E extends Env>(
+  c: Context<E, string>,
+  code: LocalisedErrorCode,
+): ErrorResponse {
+  return envelope(code, tOf(c)(ERROR_MESSAGE_KEYS[code]), requestIdOf(c));
+}
+
 function requestIdOf<E extends Env>(c: Context<E, string>): string {
   const id: unknown = c.get("requestId");
   return typeof id === "string" && id.length > 0 ? id : "unknown";
@@ -43,23 +52,28 @@ export function onError<E extends Env>(
     const requestId = requestIdOf(c);
     if (err instanceof AppError) {
       logger.warn({ requestId, code: err.code, detail: err.detail }, err.message);
-      return c.json(envelope(err.code, err.message, requestId), err.status);
+      // A code with a catalogue message answers in the request's language; any
+      // other code returns the route's own English message until it gets a key.
+      const body = isLocalisedErrorCode(err.code)
+        ? localisedEnvelope(c, err.code)
+        : envelope(err.code, err.message, requestId);
+      return c.json(body, err.status);
     }
     if (err instanceof HTTPException) {
       const status = err.status as ContentfulStatusCode;
       const code =
         status === 413 ? "payload_too_large" : status === 401 ? "unauthenticated" : "http_error";
       logger.warn({ requestId, status }, err.message);
-      return c.json(envelope(code, err.message || "Request failed", requestId), status);
+      return c.json(localisedEnvelope(c, code), status);
     }
     logger.error({ requestId, err }, "unhandled error");
     report(err, { requestId, route: c.req.routePath });
-    return c.json(envelope("internal_error", "Internal error", requestId), 500);
+    return c.json(localisedEnvelope(c, "internal_error"), 500);
   };
 }
 
 export function notFound<E extends Env>(): NotFoundHandler<E> {
-  return (c) => c.json(envelope("not_found", "Not found", requestIdOf(c)), 404);
+  return (c) => c.json(localisedEnvelope(c, "not_found"), 404);
 }
 
 /**
@@ -74,10 +88,7 @@ export function validationHook<E extends Env>(logger: Logger): Hook<unknown, E, 
         { requestId: requestIdOf(c), route: c.req.routePath, issues: result.error.issues },
         "request validation failed",
       );
-      return c.json(
-        envelope("validation_failed", "Request validation failed", requestIdOf(c)),
-        400,
-      );
+      return c.json(localisedEnvelope(c, "validation_failed"), 400);
     }
     return undefined;
   };

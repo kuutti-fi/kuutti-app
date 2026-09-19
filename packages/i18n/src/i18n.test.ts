@@ -1,0 +1,102 @@
+import { describe, expect, it } from "vitest";
+import {
+  createI18n,
+  formatDate,
+  formatNumber,
+  formatPond,
+  parseAcceptLanguage,
+  resolveLocale,
+  typedT,
+} from "./index.ts";
+import { enXA } from "./pseudo.ts";
+
+describe("t()", () => {
+  it("renders a key in English and in Finnish", () => {
+    expect(typedT(createI18n({ locale: "en" }))("smoke.retry")).toBe("Retry");
+    expect(typedT(createI18n({ locale: "fi" }))("smoke.retry")).toBe("Yritä uudelleen");
+  });
+
+  it("formats ICU arguments and plurals per locale", () => {
+    const i18n = createI18n({ locale: "en" });
+    expect(typedT(i18n)("smoke.status.version", { version: "1.2.3" })).toBe("API 1.2.3");
+    expect(typedT(i18n)("errors.rate_limited", { seconds: 1 })).toBe(
+      "Too many requests. Try again in 1 second.",
+    );
+    expect(typedT(i18n, "sv")("errors.rate_limited", { seconds: 30 })).toBe(
+      "För många förfrågningar. Försök igen om 30 sekunder.",
+    );
+  });
+
+  it("falls back to English for a key a locale does not have (fi to en, sv to en)", () => {
+    // admin.* is English only, so it is missing from fi and sv by design.
+    expect(typedT(createI18n({ locale: "fi" }))("admin.title")).toBe("Kuutti admin");
+    expect(typedT(createI18n({ locale: "sv" }))("admin.title")).toBe("Kuutti admin");
+  });
+
+  it("offers en-XA only when a dev build hands the catalogue in", () => {
+    expect(typedT(createI18n({ locale: "en-XA", pseudo: enXA }))("smoke.retry")).toBe(
+      "［Réétrýý］",
+    );
+    expect(typedT(createI18n({ locale: "en-XA" }))("smoke.retry")).toBe("Retry");
+  });
+
+  it("changes language on one instance, and a fixed t ignores the change (the API's per-request t)", async () => {
+    const i18n = createI18n({ locale: "en" });
+    const fixedFi = typedT(i18n, "fi");
+    await i18n.changeLanguage("sv");
+    expect(typedT(i18n)("smoke.retry")).toBe("Försök igen");
+    expect(fixedFi("smoke.retry")).toBe("Yritä uudelleen");
+  });
+
+  it("makes an unknown key and wrong arguments type errors", () => {
+    const t = typedT(createI18n({ locale: "en" }));
+    // Compile-time assertions: tsc fails on an unused @ts-expect-error.
+    // @ts-expect-error not a key of messages.yaml
+    t("does.not.exist");
+    // @ts-expect-error errors.rate_limited needs { seconds: number }
+    t("errors.rate_limited");
+    // @ts-expect-error seconds is a number
+    t("errors.rate_limited", { seconds: "3" });
+    // @ts-expect-error smoke.retry takes no arguments
+    t("smoke.retry", { extra: 1 });
+    expect(t("smoke.title")).toBe("Kuutti");
+  });
+});
+
+describe("locale resolution", () => {
+  it("picks the first preference with a catalogue, by language, else English", () => {
+    expect(resolveLocale(["fi-FI", "en-US"])).toBe("fi");
+    expect(resolveLocale(["de-DE", "sv_SE", "fi"])).toBe("sv");
+    expect(resolveLocale(["de-DE"])).toBe("en");
+    expect(resolveLocale([])).toBe("en");
+  });
+
+  it("reads Accept-Language by weight and drops q=0 and the wildcard", () => {
+    expect(parseAcceptLanguage("en;q=0.5, fi-FI, sv;q=0.8, *;q=0.1, de;q=0")).toEqual([
+      "fi-FI",
+      "sv",
+      "en",
+    ]);
+    expect(parseAcceptLanguage(undefined)).toEqual([]);
+    // A hostile header is cut off, not processed: the tag past the cap is never seen.
+    expect(parseAcceptLanguage(`${",".repeat(300)}fi`)).toEqual([]);
+    expect(resolveLocale(parseAcceptLanguage("fi;q=0.9, en"))).toBe("en");
+  });
+});
+
+describe("formatting", () => {
+  it("goes through Intl for dates and numbers", () => {
+    const day = Date.UTC(2026, 8, 19, 12);
+    expect(formatDate("fi", day, { dateStyle: "medium", timeZone: "UTC" })).toBe("19.9.2026");
+    expect(formatDate("en-XA", day, { dateStyle: "medium", timeZone: "UTC" })).toBe("Sep 19, 2026");
+    expect(formatNumber("fi", 1234.5)).toBe("1\u00a0234,5");
+  });
+
+  it("reads a pond's case form from the database and never builds one", () => {
+    const helsinki = { name: "Helsinki", name_inessive: "Helsingissä" };
+    expect(formatPond(helsinki, "inessive", "fi")).toBe("Helsingissä");
+    expect(formatPond(helsinki, "inessive", "en")).toBe("Helsinki");
+    expect(formatPond(helsinki, "nominative", "fi")).toBe("Helsinki");
+    expect(formatPond({ name: "Oulu" }, "inessive", "fi")).toBe("Oulu");
+  });
+});
