@@ -218,11 +218,14 @@ jobs:
           URL: ${{ steps.deploy.outputs.url }}
           API_URL: ${{ needs.api.outputs.api_url }}
         run: |
-          for _ in $(seq 1 30); do
+          # A brand-new alias took over 150 s to answer on its first
+          # deployment (PR #18); later ones are quick. Six minutes is the
+          # limit before the lane is called broken.
+          for _ in $(seq 1 72); do
             if html=$(curl -fsS --max-time 10 "$URL/"); then break; fi
             sleep 5
           done
-          [ -n "${html:-}" ] || { echo "::error::$URL did not answer"; exit 1; }
+          [ -n "${html:-}" ] || { echo "::error::$URL did not answer within 6 minutes"; exit 1; }
           scripts=$(grep -o '/_expo/static/js/web/[^"]*\.js' <<< "$html" | sort -u)
           [ -n "$scripts" ] || { echo "::error::no bundle referenced by $URL"; exit 1; }
           for s in $scripts; do
