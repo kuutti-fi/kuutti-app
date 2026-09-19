@@ -2,7 +2,7 @@
 
 A free, open-source dating app for Finland. No ads, no premium tiers, no data sales. Every account is a real adult verified through Finnish bank identification. Run by a non-profit association, built as a hobby by volunteers, with research partners onboard.
 
-This repository is being set up. Code arrives with the first milestone.
+Milestone 1 (the skeleton) is in progress: a Hono API on AWS (`infra/`), an Expo app (`apps/mobile`), a moderation panel (`apps/admin`), shared contracts and database packages, and the CI that deploys staging on every merge. `CLAUDE.md` carries the standing rules, `docs/adr/` the decisions, `CONTRIBUTING.md` the fifteen-minute local setup.
 
 ## Licence
 
