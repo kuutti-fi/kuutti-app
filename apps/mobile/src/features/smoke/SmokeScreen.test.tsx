@@ -31,6 +31,7 @@ describe("SmokeScreen", () => {
     await render(<SmokeScreen />);
     await waitFor(() => expect(screen.getByText("API 0.0.0-test")).toBeTruthy());
     expect(screen.getByText("commit abc1234")).toBeTruthy();
+    expect(screen.getByText("db ok · migrations current")).toBeTruthy();
   });
 
   it("shows an explicit error state when the API is unreachable, and retries", async () => {

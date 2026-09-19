@@ -49,6 +49,9 @@ export function SmokeScreen() {
             API {state.health.version}
           </Text>
           <Text style={[styles.muted, { color: colors.muted }]}>commit {state.health.commit}</Text>
+          <Text style={[styles.muted, { color: colors.muted }]}>
+            db {state.health.db} · migrations {state.health.migrations}
+          </Text>
         </View>
       )}
 
