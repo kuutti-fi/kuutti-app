@@ -57,6 +57,12 @@ const Env = z.object({
   // Error reporting (#11). A DSN is public by design: /kuutti/<env>/sentry-dsn
   // is a plain String parameter. Unset means the SDK stays off.
   SENTRY_DSN: z.url().optional(),
+  // AGPL-3.0 section 13 (#16): whoever runs a modified version as a service owes
+  // its users the corresponding source. /health offers this URL with the running
+  // commit, and the app and the admin panel show both. A fork that deploys
+  // changes sets it to its own repository; https only, because it is a link
+  // people are asked to follow.
+  SOURCE_URL: z.url({ protocol: /^https$/ }).default("https://github.com/kuutti-fi/kuutti-app"),
   BODY_LIMIT_BYTES: z.coerce.number().int().min(1024).default(1_048_576),
   RATE_LIMIT_PER_MINUTE: z.coerce.number().int().min(1).optional(),
   SSM_PARAMETER_PREFIX: z.string().min(1).optional(),
@@ -194,8 +200,9 @@ function composeDatabaseUrl(env: z.infer<typeof Env>, preview: boolean): string 
 
 /**
  * Browser origins are refused unless named here (rule 8: no product web
- * surface). Development allows the Metro web target; deployed environments
- * name exactly the admin SPA, the waitlist site, or the preview's own origin.
+ * surface). Development allows the Metro web target and the admin SPA's Vite
+ * server; deployed environments name exactly the admin SPA, the waitlist site,
+ * or the preview's own origin.
  */
 function allowedOrigins(env: z.infer<typeof Env>): ReadonlySet<string> {
   if (env.CORS_ALLOWED_ORIGINS !== undefined) {
@@ -206,7 +213,7 @@ function allowedOrigins(env: z.infer<typeof Env>): ReadonlySet<string> {
     );
   }
   return env.APP_ENV === "development" || env.APP_ENV === "test"
-    ? new Set(["http://localhost:8081"])
+    ? new Set(["http://localhost:8081", "http://localhost:5173"])
     : new Set();
 }
 

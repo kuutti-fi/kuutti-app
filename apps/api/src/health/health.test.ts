@@ -18,6 +18,36 @@ describe("GET /health", () => {
     });
   });
 
+  test("offers the source of the running service with its commit (AGPL-3.0 section 13)", async ({
+    ctx,
+  }) => {
+    const body = HealthResponse.parse(await (await ctx.app.request("/health")).json());
+    expect(body.source).toBe("https://github.com/kuutti-fi/kuutti-app");
+    expect(body.commit).toBe("test");
+  });
+
+  test("a deployment that sets SOURCE_URL offers its own source", async () => {
+    const { logger } = await captureLogger();
+    const pool = createPool({ connectionString: testConfig().databaseUrl, max: 1 });
+    try {
+      const app = createApp({
+        config: testConfig({ SOURCE_URL: "https://codeberg.org/example/kuutti-fork" }),
+        logger,
+        db: pool,
+      });
+      const body = HealthResponse.parse(await (await app.request("/health")).json());
+      expect(body.source).toBe("https://codeberg.org/example/kuutti-fork");
+    } finally {
+      await pool.end();
+    }
+  });
+
+  test("refuses a SOURCE_URL that is not an https URL", () => {
+    expect(() => testConfig({ SOURCE_URL: "http://example.com/fork" })).toThrow();
+    expect(() => testConfig({ SOURCE_URL: "javascript:alert(1)" })).toThrow();
+    expect(() => testConfig({ SOURCE_URL: "not a url" })).toThrow();
+  });
+
   test("answers HEAD without a body", async ({ ctx }) => {
     const res = await ctx.app.request("/health", { method: "HEAD" });
     expect(res.status).toBe(200);
