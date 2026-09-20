@@ -1,0 +1,84 @@
+{
+  "$comment": "Dependency licence policy (#16 C.2). `allow` is what may enter the tree without a second look; it is also the allow-licenses list of .github/dependency-review-config.yml, and check:licenses fails when the two differ. Anything else, GPL and LGPL included, needs an entry under `exceptions` with the reason: Kuutti is AGPL-3.0 with an App Store exception (LICENSE-EXCEPTION), and a copyleft library in the mobile bundle without an equivalent permission would take the store distribution away again. An exception names the package and the exact licence string, so a licence change brings the question back.",
+  "allow": [
+    "MIT",
+    "ISC",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "Apache-2.0",
+    "0BSD",
+    "CC0-1.0",
+    "Unlicense",
+    "MPL-2.0",
+    "Zlib",
+    "BlueOak-1.0.0",
+    "Python-2.0"
+  ],
+  "exceptions": [
+    {
+      "name": "@csstools/color-helpers",
+      "license": "MIT-0",
+      "reason": "MIT No Attribution: MIT without the attribution duty. Test tooling (jsdom), not distributed."
+    },
+    {
+      "name": "@csstools/css-syntax-patches-for-csstree",
+      "license": "MIT-0",
+      "reason": "MIT No Attribution. Test tooling (jsdom), not distributed."
+    },
+    {
+      "name": "@expo/logger",
+      "license": "BUSL-1.1",
+      "reason": "Transitive of eas-cli, a command-line tool that runs on developers' machines and in CI. Never bundled into the app, the API or the admin panel, and not redistributed by us."
+    },
+    {
+      "name": "@expo/steps",
+      "license": "BUSL-1.1",
+      "reason": "Transitive of eas-cli; see @expo/logger."
+    },
+    {
+      "name": "@expo/turtle-spawn",
+      "license": "BUSL-1.1",
+      "reason": "Transitive of eas-cli; see @expo/logger."
+    },
+    {
+      "name": "@sentry/cli",
+      "license": "FSL-1.1-MIT",
+      "reason": "A native command-line binary that uploads source maps (#11). It is installed through @sentry/react-native, a dependency of the app, but only that package's build scripts call it: Metro cannot bundle a binary, the API image does not contain it, and we do not redistribute it. FSL converts to MIT two years after each release."
+    },
+    {
+      "name": "@sentry/cli-darwin",
+      "license": "FSL-1.1-MIT",
+      "reason": "Platform binary of @sentry/cli on macOS; see @sentry/cli."
+    },
+    {
+      "name": "@sentry/cli-linux-arm64",
+      "license": "FSL-1.1-MIT",
+      "reason": "Platform binary of @sentry/cli on the arm64 CI runners; see @sentry/cli."
+    },
+    {
+      "name": "@sentry/cli-linux-x64",
+      "license": "FSL-1.1-MIT",
+      "reason": "Platform binary of @sentry/cli on the x64 CI runners; see @sentry/cli."
+    },
+    {
+      "name": "caniuse-lite",
+      "license": "CC-BY-4.0",
+      "reason": "Browser support data read by browserslist at build time. Data, not code that ships; attribution is kept by the package itself."
+    },
+    {
+      "name": "@segment/loosely-validate-event",
+      "license": "NONE",
+      "reason": "No licence field in package.json; the package carries an MIT LICENSE file. Transitive of eas-cli, not distributed."
+    },
+    {
+      "name": "golden-fleece",
+      "license": "NONE",
+      "reason": "No licence field in package.json. Its LICENSE file is a short permissive licence by the author (use, copy, change, distribute and sell, with the licence text kept), not an SPDX-listed one. Transitive of eas-cli, not distributed."
+    },
+    {
+      "name": "qrcode-terminal",
+      "license": "Apache 2.0",
+      "reason": "Apache-2.0 spelled without the SPDX hyphen. Transitive of eas-cli, which prints QR codes in the terminal; not distributed."
+    }
+  ]
+}

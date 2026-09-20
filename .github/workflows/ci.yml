@@ -105,6 +105,19 @@ jobs:
           git diff --exit-code -- packages/i18n/src/generated
           test -z "$(git status --porcelain -- packages/i18n/src/generated)" || { git status --porcelain -- packages/i18n/src/generated; echo "run pnpm i18n:build and commit src/generated"; exit 1; }
 
+  licenses:
+    name: licenses
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/pnpm
+      # Every installed dependency is under an allowed licence or is a named
+      # exception with its reason (#16 C.2, scripts/license-policy.json).
+      - name: Dependency licences follow the policy
+        run: pnpm check:licenses --self-test
+
   audit:
     name: audit
     runs-on: ubuntu-24.04-arm
