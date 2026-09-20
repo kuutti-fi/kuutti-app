@@ -1,7 +1,8 @@
 import { createRoute, z } from "@hono/zod-openapi";
 import { ErrorResponse } from "@kuutti/schema";
-import { describe, expect } from "vitest";
-import { test } from "../test/harness.ts";
+import { describe, expect, vi } from "vitest";
+import { createApp } from "../app.ts";
+import { captureLogger, test, testConfig } from "../test/harness.ts";
 import { AppError } from "./errors.ts";
 
 const echoRoute = createRoute({
@@ -78,6 +79,36 @@ describe("error envelope", () => {
     expect(text).not.toContain("kaboom");
     expect(ErrorResponse.parse(JSON.parse(text)).error).toMatchObject({ code: "internal_error" });
     expect(ctx.logs().some((l) => l.msg === "unhandled error")).toBe(true);
+  });
+
+  // The hop between a route and Sentry (#11): the reporter that index.ts wires
+  // in is called once, with the error itself and exactly what the envelope
+  // lets the user quote back, the request id, plus the route pattern. Expected
+  // errors (AppError, HTTPException) are never reported: they are answers.
+  test("unexpected throw: reported once with the envelope's request id and the route", async ({
+    ctx,
+  }) => {
+    const report = vi.fn();
+    const { logger } = await captureLogger();
+    const app = createApp({ config: testConfig(), logger, db: ctx.client, report });
+    app.get("/boom/:id", () => {
+      throw new Error("kaboom");
+    });
+    app.get("/teapot", () => {
+      throw new AppError(418, "teapot", "I am a teapot");
+    });
+
+    const res = await app.request("/boom/7");
+    expect(res.status).toBe(500);
+    const body = ErrorResponse.parse(await res.json());
+    expect(report).toHaveBeenCalledTimes(1);
+    const [error, context] = report.mock.calls[0] ?? [];
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).toBe("kaboom");
+    expect(context).toEqual({ requestId: body.error.requestId, route: "/boom/:id" });
+
+    expect((await app.request("/teapot")).status).toBe(418);
+    expect(report).toHaveBeenCalledTimes(1);
   });
 
   test("body over the limit: 413 envelope", async ({ ctx }) => {
