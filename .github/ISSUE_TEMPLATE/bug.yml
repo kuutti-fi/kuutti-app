@@ -1,0 +1,35 @@
+name: Bug
+description: Something behaves differently from what the code, the docs or an issue says it should.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Security problems do not belong here: use the private form linked from the issue chooser.
+        Never paste personal data, tokens, or anything from a real account or conversation.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happens
+      description: What you did, what you saw, and what you expected instead.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: How to reproduce
+      description: Steps from a clean `pnpm env:up`, or the request and response. The `requestId` of an API error finds its log line.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: The commit from the app's "Source code" section or from `GET /health`, and the platform (iOS, Android, web preview, API).
+    validations:
+      required: true
+  - type: textarea
+    id: more
+    attributes:
+      label: Anything else
+      description: Logs with personal data removed, screenshots without other people in them.

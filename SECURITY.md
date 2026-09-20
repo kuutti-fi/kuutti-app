@@ -17,3 +17,13 @@ Only the `main` branch receives security fixes.
 ## Disclosure
 
 Please give us reasonable time to fix the issue before disclosing it publicly. We will credit reporters in the advisory unless they prefer to stay anonymous.
+
+## Maintainer accounts
+
+The GitHub organisation is part of what protects a release: a `v*` tag deploys production. Organisation owners therefore keep, for their GitHub account and for every account in `docs/runbooks/custody.md` they hold:
+
+- two second factors, of which at least one is not the laptop they work on (a passkey on a phone, or a hardware security key);
+- recovery codes stored off the device, in the project's password-manager entry or on paper in a place another owner knows of;
+- no classic personal access token with access to the organisation, and fine-grained tokens only with the repositories and permissions the task needs.
+
+An owner who loses a device tells the other owners the same day, revokes its sessions and tokens (GitHub, Expo, AWS Identity Center), and registers a new second factor before doing anything else. On 2026-09-17 a maintainer's machine was wiped; what existed only there was lost. Nothing the project depends on may exist in one place only.
