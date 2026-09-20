@@ -35,6 +35,7 @@
     "plugins": [
       "expo-router",
       "expo-updates",
+      "./plugins/withNoForceDark.js",
       [
         "expo-build-properties",
         {
@@ -47,7 +48,7 @@
         "@sentry/react-native/expo",
         {
           "url": "https://de.sentry.io/",
-          "organization": "kuutti",
+          "organization": "kuutti-fi",
           "project": "mobile"
         }
       ]

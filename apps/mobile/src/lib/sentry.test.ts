@@ -1,4 +1,4 @@
-import { sentryEnvironment, sentryOptions, stripBreadcrumb } from "./sentry";
+import { sentryEnvironment, sentryOptions, stripBreadcrumb, stripUser } from "./sentry";
 
 describe("sentry options", () => {
   const on = sentryOptions({ dsn: "https://k@o1.ingest.de.sentry.io/2", channel: "staging" });
@@ -29,6 +29,16 @@ describe("sentry options", () => {
       { name: "NativeLinkedErrors" },
     ] as never[]).map((i) => i.name);
     expect(names).toEqual(["ReactNativeErrorHandlers", "NativeLinkedErrors"]);
+  });
+
+  it("sends every event without a user: the SDK's per-install id is a device identifier", () => {
+    const send = on.beforeSend;
+    if (typeof send !== "function") throw new Error("beforeSend must be set");
+    const event = { message: "x", user: { id: "4025CEE9-1C6D-41D0-A854-6B3CD8FC2652" } };
+    const sent = send(event as never, {}) as { user?: unknown };
+    expect(sent.user).toBeUndefined();
+    expect(JSON.stringify(sent)).not.toContain("4025CEE9");
+    expect(stripUser({ user: { id: "a" }, other: 1 })).toEqual({ user: undefined, other: 1 });
   });
 
   it("maps the update channel to the environment", () => {
