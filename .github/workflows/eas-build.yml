@@ -6,8 +6,10 @@ name: EAS build
 # when the project's fingerprint differs from the last finished development
 # build's, so a JS-only change never spends a build; those reach devices as
 # EAS Updates from deploy.yml. Never per pull request: the free tier is 15
-# builds per platform a month. Install links land on the pinned builds issue
-# (repository variable EAS_BUILDS_ISSUE); EAS_ENABLED switches this on.
+# builds per platform a month. Install links are on the project's builds page
+# (https://expo.dev/accounts/kuutti/projects/kuutti/builds); a repository
+# variable EAS_BUILDS_ISSUE, if set, mirrors them onto that issue as well.
+# EAS_ENABLED switches this on.
 
 on:
   push:
@@ -169,7 +171,7 @@ jobs:
       # One sticky comment per profile on the pinned issue: the build pages
       # carry the install link (APK) or the ad hoc install for registered iOS
       # devices once the build finishes.
-      - name: Post the build links on the pinned builds issue
+      - name: Mirror the build links onto an issue (only with EAS_BUILDS_ISSUE)
         if: steps.plan.outputs.profiles != '' && vars.EAS_BUILDS_ISSUE != ''
         env:
           GH_TOKEN: ${{ github.token }}

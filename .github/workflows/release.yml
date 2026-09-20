@@ -1,8 +1,9 @@
 name: Release
 
 # Called by build.yml on a v* tag: a draft release with notes generated from
-# the commits since the previous tag, the image digest (#8) and, when the
-# pinned builds issue exists, where the production builds' links land (#10).
+# the commits since the previous tag, the image digest (#8) and where the
+# production builds' links land (#10): the project's builds page on Expo, or
+# the issue named by EAS_BUILDS_ISSUE when that variable is set.
 # The maintainer reads the draft and publishes it.
 
 on:
