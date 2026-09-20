@@ -34,6 +34,7 @@ Stack: Expo SDK 57, React Native 0.86, React 19, TypeScript, dev client (`expo s
 - Every candidate card shows its reason label: matches all filters, liked you, seen before, or included because you relaxed X.
 - Candidate lists are bounded to the round. No pagination, no "load more", no on-demand fetch of the next profile.
 - Glyph sets never imitate console vendors' trademarked shapes or names.
+- The Android theme declares `android:forceDarkAllowed=false` (`plugins/withNoForceDark.js`, #27): the app follows the system scheme and ships its own dark and high-contrast sets, so a launcher's forced dark mode (MIUI) must not repaint them.
 
 ## Notifications
 
@@ -48,5 +49,5 @@ Stack: Expo SDK 57, React Native 0.86, React 19, TypeScript, dev client (`expo s
 ## Testing and builds
 
 - Component tests use jest-expo, not Vitest. Test that accessibility props exist.
-- EAS Update uses `runtimeVersion: { policy: "fingerprint" }`; rebuild natively only when the fingerprint changes. Channels `staging` and `production` follow the deploy promotion.
+- EAS Update uses `runtimeVersion: { policy: "fingerprint" }`; rebuild natively only when the fingerprint changes. Channels `staging` and `production` follow the deploy promotion. Any change to `app.json` moves the fingerprint of both platforms and orphans every installed build; batch native changes. `app.config.ts` stamps the git commit into `extra.commit`, and `fingerprint.config.js` skips `extra` so that a commit is never a native change.
 - The web preview runs only against the mock IdP and seed data. Nothing in the web target may become a product web surface.

@@ -33,17 +33,67 @@ smoke.status.label:
   sv: API-status
   machine: { fi: true, sv: true }
 
+smoke.api.title:
+  en: API
+  description: Smoke screen, title of the card about the API the app talks to. Never translated.
+  fi: API
+  sv: API
+
 smoke.status.version:
-  en: API {version}
-  description: Smoke screen, card title. {version} is a version string such as 0.0.0-2b846b9.
-  fi: API {version}
-  sv: API {version}
+  en: version {version}
+  description: Smoke screen, under the API card's title. {version} is a version string such as 0.0.0-2b846b9.
+  fi: versio {version}
+  sv: version {version}
+  machine: { fi: true, sv: true }
 
 smoke.status.commit:
-  en: commit {commit}
-  description: Smoke screen, under the version. {commit} is a short git hash.
-  fi: commit {commit}
-  sv: commit {commit}
+  en: git commit {commit}
+  description: Smoke screen, in both cards. {commit} is a short git hash (a code, not translated); the card title says whose it is, the API's or the app's.
+  fi: git-commit {commit}
+  sv: git-commit {commit}
+  machine: { fi: true, sv: true }
+
+smoke.app.title:
+  en: App
+  description: Smoke screen, title of the card about the JavaScript this phone is running, as opposed to the API.
+  fi: Sovellus
+  sv: Appen
+  machine: { fi: true, sv: true }
+
+smoke.app.version:
+  en: "version {version}, build {build}"
+  description: Smoke screen, under the App card's title. {version} is the app's version string (0.0.0), {build} its native build number; both are codes.
+  fi: "versio {version}, rakennus {build}"
+  sv: "version {version}, bygge {build}"
+  machine: { fi: true, sv: true }
+
+smoke.app.label:
+  en: App version
+  description: Smoke screen, screen-reader label of the card that shows the app's own commit and update.
+  fi: Sovelluksen versio
+  sv: Appens version
+  machine: { fi: true, sv: true }
+
+smoke.app.noCommit:
+  en: git commit not recorded in this build
+  description: Smoke screen, App card, when the running code was built before the commit was stamped into it.
+  fi: git-committia ei ole tallennettu tähän rakennukseen
+  sv: git-commit inte registrerad i det här bygget
+  machine: { fi: true, sv: true }
+
+smoke.app.web:
+  en: web version of the app, no updates
+  description: Smoke screen, App card, on the web target (pull-request previews and local development); updates exist only on phones.
+  fi: sovelluksen verkkoversio, ei päivityksiä
+  sv: webbversion av appen, inga uppdateringar
+  machine: { fi: true, sv: true }
+
+smoke.app.dev:
+  en: development server, no updates
+  description: Smoke screen, App card, in a Metro session, where updates are disabled.
+  fi: kehityspalvelin, ei päivityksiä
+  sv: utvecklingsserver, inga uppdateringar
+  machine: { fi: true, sv: true }
 
 smoke.status.database:
   en: database {db} · migrations {migrations}
@@ -52,18 +102,18 @@ smoke.status.database:
   sv: databas {db} · migreringar {migrations}
   machine: { fi: true, sv: true }
 
-smoke.status.app:
-  en: "App update {id}, published {date, date, short} {date, time, short}"
-  description: Smoke screen, under the API card. Which JavaScript the phone is running. {id} is the first eight characters of the EAS Update id (a code, not translated); {date} is the update's publish time.
-  fi: "Sovelluksen päivitys {id}, julkaistu {date, date, short} {date, time, short}"
-  sv: "Appuppdatering {id}, publicerad {date, date, short} {date, time, short}"
+smoke.app.update:
+  en: "update {id}, published {date, date, short} {date, time, short}"
+  description: Smoke screen, App card. Which update the phone is running. {id} is the first eight characters of the EAS Update id (a code, not translated); {date} is the update's publish time.
+  fi: "päivitys {id}, julkaistu {date, date, short} {date, time, short}"
+  sv: "uppdatering {id}, publicerad {date, date, short} {date, time, short}"
   machine: { fi: true, sv: true }
 
-smoke.status.embedded:
-  en: App code from the build, no update applied
-  description: Smoke screen, under the API card, when the phone runs the JavaScript embedded in the build rather than a downloaded update.
-  fi: Sovelluksen koodi on peräisin rakennuksesta, päivitystä ei ole otettu käyttöön
-  sv: Appens kod kommer från bygget, ingen uppdatering har hämtats
+smoke.app.embedded:
+  en: code from the build, no update applied
+  description: Smoke screen, App card, when the phone runs the JavaScript embedded in the build rather than a downloaded update.
+  fi: koodi rakennuksesta, päivitystä ei ole otettu käyttöön
+  sv: kod från bygget, ingen uppdatering har hämtats
   machine: { fi: true, sv: true }
 
 smoke.unreachable.title:
@@ -171,10 +221,10 @@ about.source.title:
   machine: { fi: true, sv: true }
 
 about.source.body:
-  en: "Kuutti is free software under the AGPL-3.0 licence. This service runs commit {commit}, and its source is published here:"
-  description: Source-code offer. {commit} is a short git hash and is never inflected. The web address follows on its own line.
-  fi: "Kuutti on vapaa ohjelmisto, jonka lisenssi on AGPL-3.0. Tämä palvelu on rakennettu versiosta {commit}, ja sen lähdekoodi on julkaistu täällä:"
-  sv: "Kuutti är fri programvara under licensen AGPL-3.0. Den här tjänsten kör commit {commit}, och dess källkod är publicerad här:"
+  en: "Kuutti is free software under the AGPL-3.0 licence. The API this app talks to runs commit {commit}; the source code of the API and of the app is published here:"
+  description: Source-code offer. {commit} is the API's short git hash (the app's own is in the App card) and is never inflected. The web address follows on its own line.
+  fi: "Kuutti on vapaa ohjelmisto, jonka lisenssi on AGPL-3.0. Rajapinta, johon tämä sovellus on yhteydessä, on rakennettu versiosta {commit}; rajapinnan ja sovelluksen lähdekoodi on julkaistu täällä:"
+  sv: "Kuutti är fri programvara under licensen AGPL-3.0. API:et som den här appen pratar med kör commit {commit}; källkoden för API:et och appen är publicerad här:"
   machine: { fi: true, sv: true }
 
 about.source.open:
@@ -256,8 +306,8 @@ admin.empty:
   description: Moderation panel, placeholder text until the queues arrive in M4.
 
 admin.source.offer:
-  en: "Source code (AGPL-3.0), commit {commit}:"
-  description: Moderation panel footer. The source-code offer of AGPL-3.0 section 13; the web address follows as a link.
+  en: "Source code (AGPL-3.0). The API this panel talks to runs commit {commit}:"
+  description: Moderation panel footer. The source-code offer of AGPL-3.0 section 13; {commit} is the API's short git hash; the web address follows as a link.
 
 admin.source.unavailable:
   en: Source code (AGPL-3.0). The API cannot be reached, so the address of this deployment's source is not known right now.

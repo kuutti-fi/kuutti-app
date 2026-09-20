@@ -1,4 +1,5 @@
 import type { HealthResponse } from "@kuutti/schema";
+import Constants from "expo-constants";
 import { Image } from "expo-image";
 import * as Updates from "expo-updates";
 import RotateCw from "lucide-react-native/icons/rotate-cw";
@@ -50,15 +51,29 @@ export function SmokeScreen() {
   const tap = useHapticTap();
   const { t } = useT();
 
-  // Which JavaScript the phone runs: the EAS Update it applied, or the bundle
-  // embedded in the build. The API's version in the card says nothing about
-  // it, and "did it really update?" is the first question asked on a device.
-  // A Metro session has updates disabled and shows nothing.
-  const bundle = !Updates.isEnabled
-    ? null
-    : Updates.isEmbeddedLaunch || !Updates.updateId || !Updates.createdAt
-      ? t("smoke.status.embedded")
-      : t("smoke.status.app", { id: Updates.updateId.slice(0, 8), date: Updates.createdAt });
+  // Which JavaScript the phone runs, as opposed to which API it reached: the
+  // commit app.config.ts stamped into the config at export or build time, and
+  // from expo-updates the update it applied, or the bundle embedded in the
+  // build. "Did it really update?" is the first question asked on a device.
+  const appVersion = Constants.nativeAppVersion ?? Constants.expoConfig?.version ?? "";
+  const appVersionLine = Constants.nativeBuildVersion
+    ? t("smoke.app.version", { version: appVersion, build: Constants.nativeBuildVersion })
+    : t("smoke.status.version", { version: appVersion });
+  const appCommit: unknown = Constants.expoConfig?.extra?.commit;
+  const appCommitLine =
+    typeof appCommit === "string" && appCommit.length > 0
+      ? t("smoke.status.commit", { commit: appCommit })
+      : t("smoke.app.noCommit");
+  // The web target says so (its expo-updates shim claims to be enabled, but
+  // updates exist only on phones); a dev client on Metro has them disabled.
+  const appBundleLine =
+    Platform.OS === "web"
+      ? t("smoke.app.web")
+      : !Updates.isEnabled
+        ? t("smoke.app.dev")
+        : Updates.isEmbeddedLaunch || !Updates.updateId || !Updates.createdAt
+          ? t("smoke.app.embedded")
+          : t("smoke.app.update", { id: Updates.updateId.slice(0, 8), date: Updates.createdAt });
 
   const load = useCallback(async () => {
     setState({ kind: "loading" });
@@ -100,14 +115,13 @@ export function SmokeScreen() {
           {state.kind === "ok" && (
             <View accessibilityLabel={t("smoke.status.label")} className="gap-6">
               <CardHeader>
-                <CardTitle>
-                  {t("smoke.status.version", { version: state.health.version })}
-                </CardTitle>
+                <CardTitle>{t("smoke.api.title")}</CardTitle>
                 <CardDescription>
-                  {t("smoke.status.commit", { commit: state.health.commit })}
+                  {t("smoke.status.version", { version: state.health.version })}
                 </CardDescription>
               </CardHeader>
-              <CardContent>
+              <CardContent className="gap-1">
+                <Text>{t("smoke.status.commit", { commit: state.health.commit })}</Text>
                 <Text variant="muted">
                   {t("smoke.status.database", {
                     db: state.health.db,
@@ -129,7 +143,18 @@ export function SmokeScreen() {
           )}
         </Card>
 
-        {bundle && <Text variant="muted">{bundle}</Text>}
+        <Card className="w-full max-w-md">
+          <View accessibilityLabel={t("smoke.app.label")} className="gap-6">
+            <CardHeader>
+              <CardTitle>{t("smoke.app.title")}</CardTitle>
+              <CardDescription>{appVersionLine}</CardDescription>
+            </CardHeader>
+            <CardContent className="gap-1">
+              <Text>{appCommitLine}</Text>
+              <Text variant="muted">{appBundleLine}</Text>
+            </CardContent>
+          </View>
+        </Card>
 
         <Button
           accessibilityLabel={t("smoke.retry")}
