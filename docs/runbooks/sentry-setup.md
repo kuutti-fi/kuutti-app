@@ -2,9 +2,9 @@
 
 Error reporting only (TD-19, #11): unhandled errors from the API and the app, with readable stack traces. No tracing, no session replay, no user data: the code strips request bodies, headers and breadcrumb data before anything leaves (`apps/api/src/lib/sentry.ts`, `apps/mobile/src/lib/sentry.ts`, both asserted by tests). Until a DSN is configured the SDK is off everywhere, which is today.
 
-The site is sentry.io. **The data region is chosen when the organisation is created and cannot be changed afterwards: choose the EU.** The organisation lives at `https://kuutti-fi.sentry.io` (slug `kuutti-fi`: `kuutti` was already taken on 2026-09-20) and its API at `https://de.sentry.io`. The upload step in `deploy.yml` names the organisation in `SENTRY_ORG`; the `app.json` plugin block still says `kuutti` until the next native change carries the correction (a fingerprint change), and until then `preview` builds skip their own upload (step 4).
+The site is sentry.io. **The data region is chosen when the organisation is created and cannot be changed afterwards: choose the EU.** The organisation lives at `https://kuutti-fi.sentry.io` (slug `kuutti-fi`: `kuutti` was already taken on 2026-09-20) and its API at `https://de.sentry.io`. The `app.json` plugin block and the upload step in `deploy.yml` (`SENTRY_ORG`) both name it.
 
-Done on 2026-09-20: sections 1 to 4 in full (Require 2FA on, both accounts had 2FA), and in section 5 the API's self-test booted with `reporting: true` on staging. Still open then: the app's test error with symbolicated frames (the first update published with the token in place carries readable maps), deleting the two test issues, and the `eas.json` stopgap, which stays until `app.json` names the organisation `kuutti-fi`.
+Done on 2026-09-20: every section. Both proofs of section 5 passed on staging (the API's self-test at boot; the app's test error from both phones with symbolicated frames), the test issues were deleted. What the events still carried afterwards, a per-install user id and a city, is #28: the app now strips the user before sending; the geo is an organisation-level scrubbing rule.
 
 ## 1. Account and organisation
 

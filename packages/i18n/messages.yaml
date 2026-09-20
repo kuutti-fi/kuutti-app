@@ -33,17 +33,40 @@ smoke.status.label:
   sv: API-status
   machine: { fi: true, sv: true }
 
-smoke.status.version:
-  en: API {version}
-  description: Smoke screen, card title. {version} is a version string such as 0.0.0-2b846b9.
-  fi: API {version}
-  sv: API {version}
+smoke.api.title:
+  en: API
+  description: Smoke screen, title of the card about the API the app talks to. Never translated.
+  fi: API
+  sv: API
 
 smoke.status.commit:
-  en: commit {commit}
-  description: Smoke screen, under the version. {commit} is a short git hash.
-  fi: commit {commit}
-  sv: commit {commit}
+  en: git commit {commit}
+  description: Smoke screen, in both cards. {commit} is a short git hash (a code, not translated); the card title says whose it is, the API's or the app's.
+  fi: git-commit {commit}
+  sv: git-commit {commit}
+  machine: { fi: true, sv: true }
+
+smoke.app.title:
+  en: App
+  description: Smoke screen, title of the card about the JavaScript this phone is running, as opposed to the API.
+  fi: Sovellus
+  sv: Appen
+  machine: { fi: true, sv: true }
+
+smoke.app.label:
+  en: App version
+  description: Smoke screen, screen-reader label of the card that shows the app's own commit and update.
+  fi: Sovelluksen versio
+  sv: Appens version
+  machine: { fi: true, sv: true }
+
+smoke.app.noCommit:
+  en: git commit not recorded in this build
+  description: Smoke screen, App card, when the running code was built before the commit was stamped into it.
+  fi: git-committia ei ole tallennettu tähän rakennukseen
+  sv: git-commit inte registrerad i det här bygget
+  machine: { fi: true, sv: true }
+
 
 smoke.status.database:
   en: database {db} · migrations {migrations}
@@ -52,19 +75,6 @@ smoke.status.database:
   sv: databas {db} · migreringar {migrations}
   machine: { fi: true, sv: true }
 
-smoke.status.app:
-  en: "App update {id}, published {date, date, short} {date, time, short}"
-  description: Smoke screen, under the API card. Which JavaScript the phone is running. {id} is the first eight characters of the EAS Update id (a code, not translated); {date} is the update's publish time.
-  fi: "Sovelluksen päivitys {id}, julkaistu {date, date, short} {date, time, short}"
-  sv: "Appuppdatering {id}, publicerad {date, date, short} {date, time, short}"
-  machine: { fi: true, sv: true }
-
-smoke.status.embedded:
-  en: App code from the build, no update applied
-  description: Smoke screen, under the API card, when the phone runs the JavaScript embedded in the build rather than a downloaded update.
-  fi: Sovelluksen koodi on peräisin rakennuksesta, päivitystä ei ole otettu käyttöön
-  sv: Appens kod kommer från bygget, ingen uppdatering har hämtats
-  machine: { fi: true, sv: true }
 
 smoke.unreachable.title:
   en: API unreachable
@@ -171,10 +181,10 @@ about.source.title:
   machine: { fi: true, sv: true }
 
 about.source.body:
-  en: "Kuutti is free software under the AGPL-3.0 licence. This service runs commit {commit}, and its source is published here:"
-  description: Source-code offer. {commit} is a short git hash and is never inflected. The web address follows on its own line.
-  fi: "Kuutti on vapaa ohjelmisto, jonka lisenssi on AGPL-3.0. Tämä palvelu on rakennettu versiosta {commit}, ja sen lähdekoodi on julkaistu täällä:"
-  sv: "Kuutti är fri programvara under licensen AGPL-3.0. Den här tjänsten kör commit {commit}, och dess källkod är publicerad här:"
+  en: "Kuutti is free software under the AGPL-3.0 licence, published at:"
+  description: Source-code offer (AGPL-3.0 section 13), the footer of the smoke screen. The commits of the API and of the app stand in their cards above; the web address follows on its own line.
+  fi: "Kuutti on vapaa ohjelmisto, jonka lisenssi on AGPL-3.0, ja se on julkaistu osoitteessa:"
+  sv: "Kuutti är fri programvara under licensen AGPL-3.0, publicerad på:"
   machine: { fi: true, sv: true }
 
 about.source.open:
@@ -256,8 +266,8 @@ admin.empty:
   description: Moderation panel, placeholder text until the queues arrive in M4.
 
 admin.source.offer:
-  en: "Source code (AGPL-3.0), commit {commit}:"
-  description: Moderation panel footer. The source-code offer of AGPL-3.0 section 13; the web address follows as a link.
+  en: "Source code (AGPL-3.0). The API this panel talks to runs commit {commit}:"
+  description: Moderation panel footer. The source-code offer of AGPL-3.0 section 13; {commit} is the API's short git hash; the web address follows as a link.
 
 admin.source.unavailable:
   en: Source code (AGPL-3.0). The API cannot be reached, so the address of this deployment's source is not known right now.

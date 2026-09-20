@@ -32,9 +32,11 @@ describe("SmokeScreen", () => {
   it("shows the API version and commit when the API answers", async () => {
     mockFetch(async () => jsonResponse(ok));
     await renderWithTheme(<SmokeScreen />);
-    await waitFor(() => expect(screen.getByText("API 0.0.0-test")).toBeTruthy());
-    expect(screen.getByText("commit abc1234")).toBeTruthy();
+    await waitFor(() => expect(screen.getByText("git commit abc1234")).toBeTruthy());
     expect(screen.getByText("database ok · migrations current")).toBeTruthy();
+    // The two cards say whose hash is whose.
+    expect(screen.getByText("API")).toBeTruthy();
+    expect(screen.getByText("App")).toBeTruthy();
   });
 
   it("shows an explicit error state when the API is unreachable, and retries", async () => {
@@ -56,7 +58,9 @@ describe("SmokeScreen", () => {
     await renderWithTheme(<SmokeScreen />);
     const link = await screen.findByRole("link", { name: "Open the source code in the browser" });
     expect(screen.getByText("https://github.com/kuutti-fi/kuutti-app")).toBeTruthy();
-    expect(screen.getByText(/This service runs commit abc1234/)).toBeTruthy();
+    expect(
+      screen.getByText("Kuutti is free software under the AGPL-3.0 licence, published at:"),
+    ).toBeTruthy();
     await fireEvent.press(link);
     expect(openURL).toHaveBeenCalledWith("https://github.com/kuutti-fi/kuutti-app");
   });

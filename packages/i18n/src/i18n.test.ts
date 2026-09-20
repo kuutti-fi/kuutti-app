@@ -18,7 +18,7 @@ describe("t()", () => {
 
   it("formats ICU arguments and plurals per locale", () => {
     const i18n = createI18n({ locale: "en" });
-    expect(typedT(i18n)("smoke.status.version", { version: "1.2.3" })).toBe("API 1.2.3");
+    expect(typedT(i18n)("smoke.status.commit", { commit: "abc1234" })).toBe("git commit abc1234");
     expect(typedT(i18n)("errors.rate_limited", { seconds: 1 })).toBe(
       "Too many requests. Try again in 1 second.",
     );
@@ -88,8 +88,30 @@ describe("formatting", () => {
   it("goes through Intl for dates and numbers", () => {
     const day = Date.UTC(2026, 8, 19, 12);
     expect(formatDate("fi", day, { dateStyle: "medium", timeZone: "UTC" })).toBe("19.9.2026");
-    expect(formatDate("en-XA", day, { dateStyle: "medium", timeZone: "UTC" })).toBe("Sep 19, 2026");
+    expect(formatDate("en-XA", day, { dateStyle: "medium", timeZone: "UTC" })).toBe("19 Sept 2026");
     expect(formatNumber("fi", 1234.5)).toBe("1\u00a0234,5");
+  });
+
+  it("formats in Finland's locale in every language: day first, 24-hour time, decimal comma", () => {
+    const at = Date.UTC(2026, 8, 19, 14, 14);
+    const short = { dateStyle: "short", timeStyle: "short", timeZone: "UTC" } as const;
+    expect(formatDate("en", at, short)).toBe("19/09/2026, 14.14");
+    expect(formatDate("sv", at, short)).toBe("19.9.2026 14.14");
+    expect(formatDate("fi", at, short)).toBe("19.9.2026 klo 14.14");
+    expect(formatNumber("en", 1234.5)).toBe("1\u00a0234,5");
+    expect(formatNumber("sv", 1234.5)).toBe("1\u00a0234,5");
+  });
+
+  it("formats ICU date arguments the same way, through i18next-icu", () => {
+    const at = Date.UTC(2026, 8, 19, 14, 14);
+    // The pseudo catalogue is the one catalogue a test may extend without messages.yaml.
+    const i18n = createI18n({
+      locale: "en-XA",
+      pseudo: { ...enXA, "test.when": "{at, date, short} {at, time, short}" },
+    });
+    // ICU's own "short" date is a two-digit year, and a message has no time
+    // zone, so the hour is the runner's: day first and the 24-hour dot are the point.
+    expect(i18n.t("test.when", { at })).toMatch(/^19\/09\/26 \d\d\.\d\d$/);
   });
 
   it("reads a pond's case form from the database and never builds one", () => {

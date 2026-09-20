@@ -34,6 +34,15 @@ export function stripBreadcrumb(crumb: Breadcrumb): Breadcrumb {
 }
 
 /**
+ * The SDK sets `user.id` to its per-installation id when the app sets no user.
+ * A stable device identifier that links every error from one phone is user
+ * data (#28, TD-19), and no stack trace needs it: the event goes out without.
+ */
+export function stripUser<E extends { user?: unknown }>(event: E): E {
+  return { ...event, user: undefined };
+}
+
+/**
  * Error reporting only (TD-19, #11, rules/mobile.md: no analytics SDK): no
  * PII, no tracing, no session replay, no screenshots, no session tracking.
  * The DSN is public by design (EXPO_PUBLIC_SENTRY_DSN); without one the SDK
@@ -57,5 +66,6 @@ export function sentryOptions(input: {
     // Default integrations minus anything that records the screen or asks the user for input.
     integrations: (defaults) => defaults.filter((i) => !/replay|feedback/i.test(i.name)),
     beforeBreadcrumb: stripBreadcrumb,
+    beforeSend: (event) => stripUser(event),
   };
 }

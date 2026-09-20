@@ -1,4 +1,5 @@
 import type { HealthResponse } from "@kuutti/schema";
+import Constants from "expo-constants";
 import { Image } from "expo-image";
 import * as Updates from "expo-updates";
 import RotateCw from "lucide-react-native/icons/rotate-cw";
@@ -50,15 +51,13 @@ export function SmokeScreen() {
   const tap = useHapticTap();
   const { t } = useT();
 
-  // Which JavaScript the phone runs: the EAS Update it applied, or the bundle
-  // embedded in the build. The API's version in the card says nothing about
-  // it, and "did it really update?" is the first question asked on a device.
-  // A Metro session has updates disabled and shows nothing.
-  const bundle = !Updates.isEnabled
-    ? null
-    : Updates.isEmbeddedLaunch || !Updates.updateId || !Updates.createdAt
-      ? t("smoke.status.embedded")
-      : t("smoke.status.app", { id: Updates.updateId.slice(0, 8), date: Updates.createdAt });
+  // The app's own git commit, as opposed to the API's: app.config.ts stamped
+  // it into the config when this JavaScript was exported or built.
+  const appCommit: unknown = Constants.expoConfig?.extra?.commit;
+  const appCommitLine =
+    typeof appCommit === "string" && appCommit.length > 0
+      ? t("smoke.status.commit", { commit: appCommit })
+      : t("smoke.app.noCommit");
 
   const load = useCallback(async () => {
     setState({ kind: "loading" });
@@ -100,9 +99,7 @@ export function SmokeScreen() {
           {state.kind === "ok" && (
             <View accessibilityLabel={t("smoke.status.label")} className="gap-6">
               <CardHeader>
-                <CardTitle>
-                  {t("smoke.status.version", { version: state.health.version })}
-                </CardTitle>
+                <CardTitle>{t("smoke.api.title")}</CardTitle>
                 <CardDescription>
                   {t("smoke.status.commit", { commit: state.health.commit })}
                 </CardDescription>
@@ -129,7 +126,14 @@ export function SmokeScreen() {
           )}
         </Card>
 
-        {bundle && <Text variant="muted">{bundle}</Text>}
+        <Card className="w-full max-w-md">
+          <View accessibilityLabel={t("smoke.app.label")} className="gap-6">
+            <CardHeader>
+              <CardTitle>{t("smoke.app.title")}</CardTitle>
+              <CardDescription>{appCommitLine}</CardDescription>
+            </CardHeader>
+          </View>
+        </Card>
 
         <Button
           accessibilityLabel={t("smoke.retry")}
@@ -142,9 +146,7 @@ export function SmokeScreen() {
           <Text>{t("smoke.retry")}</Text>
         </Button>
 
-        {state.kind === "ok" && (
-          <SourceOffer source={state.health.source} commit={state.health.commit} />
-        )}
+        {state.kind === "ok" && <SourceOffer source={state.health.source} />}
       </ScrollView>
     </SafeAreaView>
   );
