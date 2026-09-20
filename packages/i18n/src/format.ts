@@ -1,8 +1,24 @@
 import type { AnyLocale } from "./locales.ts";
 import { PSEUDO_LOCALE } from "./locales.ts";
 
-// Intl has no data for the pseudo-locale; it is English with odd letters.
-const intlLocale = (locale: AnyLocale): string => (locale === PSEUDO_LOCALE ? "en" : locale);
+/**
+ * The Intl locale for a catalogue locale: Finland's, in every language. Bare
+ * `en` is the United States (9/20/26, 5:14 PM) and bare `sv` is Sweden
+ * (2026-09-20); `en-FI` and `sv-FI` are Finland's conventions (20/09/2026,
+ * 20.9.2026, 24-hour time, space-grouped numbers with a decimal comma). The
+ * pseudo-locale has no Intl data; it is English with odd letters.
+ */
+export function intlLocale(locale: AnyLocale | string): string {
+  switch (locale) {
+    case "en":
+    case PSEUDO_LOCALE:
+      return "en-FI";
+    case "sv":
+      return "sv-FI";
+    default:
+      return locale;
+  }
+}
 
 /** Dates and numbers always go through Intl, never through string building (rules/i18n.md). */
 export function formatDate(

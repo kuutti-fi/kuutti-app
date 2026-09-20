@@ -1,5 +1,6 @@
 import i18next, { type i18n } from "i18next";
 import ICU from "i18next-icu";
+import { intlLocale } from "./format.ts";
 import { en } from "./generated/en.ts";
 import { fi } from "./generated/fi.ts";
 import type { MessageKey, MessageParams } from "./generated/keys.ts";
@@ -41,6 +42,8 @@ export function createI18n(options: CreateI18nOptions): i18n {
   for (const plugin of options.plugins ?? []) instance.use(plugin);
   void instance.init({
     lng: options.locale,
+    // ICU dates and numbers in Finland's locale for every language (format.ts).
+    i18nFormat: { parseLngForICU: intlLocale },
     fallbackLng: DEFAULT_LOCALE,
     supportedLngs: options.pseudo ? ["en", "fi", "sv", PSEUDO_LOCALE] : ["en", "fi", "sv"],
     resources: {
