@@ -22,3 +22,7 @@ Feature: Re-registration after deletion or ban
       | 0    | refused |
       | 29   | refused |
       | 30   | allowed |
+
+  Scenario: THROWAWAY orphan scenario without a test
+    Given nothing
+    Then the scenarios check is red
