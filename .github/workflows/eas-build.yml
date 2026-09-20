@@ -104,9 +104,14 @@ jobs:
             # are started by hand. Each platform is 15 free builds a month.
             changed=""
             for p in $PLATFORMS; do
+              # The newest development build that finished or is still queued
+              # or running: a build in flight for this fingerprint must not be
+              # started twice (seen 2026-09-20: a docs-only push right after a
+              # native merge spent a second pair while the first pair was running).
               last=$(pnpm exec eas build:list --platform "$p" --build-profile development \
-                --status finished --limit 1 --json --non-interactive | jq -r '.[0].id // empty')
-              if [ -z "$last" ]; then echo "$p: no finished development build yet"; changed="$changed $p"; continue; fi
+                --limit 10 --json --non-interactive | sed -n '/^[{[]/,$p' \
+                | jq -r '[.[] | select(.status == "FINISHED" or .status == "IN_PROGRESS" or .status == "IN_QUEUE" or .status == "NEW")][0].id // empty')
+              if [ -z "$last" ]; then echo "$p: no development build yet"; changed="$changed $p"; continue; fi
               # With --environment, eas-cli prints "Environment variables ...
               # loaded from the preview environment" on stdout ahead of the
               # JSON; keep only the document (run 35454488799).
@@ -139,7 +144,22 @@ jobs:
           PLATFORM: ${{ steps.plan.outputs.platform }}
         run: |
           : > "$RUNNER_TEMP/builds.json"
+          case "$PLATFORM" in all) platforms="android ios" ;; *) platforms="$PLATFORM" ;; esac
           for profile in $PROFILES; do
+            # A build of the same profile and platform that is still queued or
+            # running belongs to older code: cancel it, so the queue and the
+            # free tier go to what is current (maintainer's rule, 2026-09-20).
+            # A cancel that races a finish is harmless; the new build starts anyway.
+            for p in $platforms; do
+              pnpm exec eas build:list --platform "$p" --build-profile "$profile" --limit 5 --json --non-interactive \
+                | sed -n '/^[{[]/,$p' \
+                | jq -r '.[] | select(.status == "NEW" or .status == "IN_QUEUE" or .status == "IN_PROGRESS") | .id' \
+                | while read -r id; do
+                    [ -n "$id" ] || continue
+                    echo "cancelling obsolete $profile $p build $id"
+                    pnpm exec eas build:cancel "$id" --non-interactive || echo "could not cancel $id (finished meanwhile)"
+                  done
+            done
             pnpm exec eas build --profile "$profile" --platform "$PLATFORM" \
               --message "${GITHUB_REF_NAME} ${GITHUB_SHA::7}" --no-wait --json --non-interactive \
               | jq -c --arg profile "$profile" '.[] | {profile: $profile, id, platform, status}' >> "$RUNNER_TEMP/builds.json"

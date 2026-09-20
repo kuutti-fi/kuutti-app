@@ -8,7 +8,7 @@ Expo SDK 57, dev client, Expo Router, web target for previews. `app/` holds rout
 
 ## Builds and updates (EAS, #10)
 
-Native binaries come from EAS Build; JavaScript reaches installed binaries as EAS Updates. The split is the fingerprint rule: `runtimeVersion` follows the `fingerprint` policy, so a change to native code, a native dependency, `app.json` or a config plugin changes the fingerprint and needs a new build, while everything else is an update. `eas-build.yml` compares the fingerprint of `main` with the last finished `development` build and builds only when it differs; `deploy.yml` publishes an update for every deploy. Pull requests never build: the free tier is 15 builds per platform a month (TD-2); they get an update on branch `pr-<n>` instead (#9).
+Native binaries come from EAS Build; JavaScript reaches installed binaries as EAS Updates. The split is the fingerprint rule: `runtimeVersion` follows the `fingerprint` policy, so a change to native code, a native dependency, `app.json` or a config plugin changes the fingerprint and needs a new build, while everything else is an update. `eas-build.yml` compares the fingerprint of `main` with the newest `development` build that finished or is still running and builds only when it differs; before it starts a build it cancels a queued or running build of the same profile and platform, since that one belongs to older code; `deploy.yml` publishes an update for every deploy. Pull requests never build: the free tier is 15 builds per platform a month (TD-2); they get an update on branch `pr-<n>` instead (#9).
 
 | profile | what | channel | who |
 |---|---|---|---|
