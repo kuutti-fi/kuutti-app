@@ -29,7 +29,7 @@ Root `package.json` is the source of truth; keep this list in sync with it.
 - `pnpm env:up` starts the whole local environment: the database (docker compose once #5 lands, Homebrew PostgreSQL until then), migrate and seed, then the API on 3000, Metro on 8081 (app and web target), admin on 5173, with prefixed logs. It frees ports held by stale copies of our own processes and refuses to touch anything else. Ctrl+C stops the apps; `pnpm env:down` also stops the database; `pnpm env:status` shows who holds what.
 - One at a time: `pnpm dev` runs the API with tsx watch on port 3000. `pnpm dev:mobile` starts the Expo dev client; never Expo Go. `pnpm dev:admin` starts Vite.
 - `pnpm typecheck`, `pnpm lint` (Biome, including the slice import boundary, then the inline-string check), `pnpm format`, `pnpm test` (Vitest for api and packages, jest-expo for mobile).
-- `pnpm check:scenarios` verifies every Gherkin scenario has a same-named test.
+- `pnpm check:scenarios` verifies every Gherkin scenario has a same-named test. `pnpm check:licenses` holds every installed dependency to the licences of `scripts/license-policy.json`, or to a named exception with its reason; a pull request's new dependencies are also checked by the dependency review workflow.
 - `pnpm openapi` regenerates `apps/api/openapi.json` and the typed client paths in `packages/schema` from the route contracts (ADR-003); CI fails on drift.
 - API tests need Postgres: `DATABASE_URL`, or the local default `postgres://kuutti:kuutti@127.0.0.1:5432/kuutti_test`.
 - `pnpm --filter @kuutti/db generate --name <what>` after a schema change; commit the SQL and `drizzle/meta`, never edit them. `pnpm --filter @kuutti/db migrate` and `seed -- --env development`; seed refuses production. `pnpm check:schema-words` rejects columns for hetu, sex, or date of birth.
@@ -74,7 +74,7 @@ From TD-1, TD-6, TD-7. A change that violates one is wrong regardless of who ask
 
 - Secrets: SSM in deployed environments, a local `.env` for dev. Never print, echo, or commit a secret; never paste user data or secrets into any external service or LLM.
 - Logs: structured, carrying `account_id` and request id, never hetu, message text, email, or `seeks`.
-- New dependency: check it is maintained, pin it, and note any `postinstall` script in the PR. `pnpm audit` on high blocks CI.
+- New dependency: check it is maintained, pin it, and note any `postinstall` script in the PR. `pnpm audit` on high blocks CI. Its licence must be in the allow-list of `scripts/license-policy.json`: a copyleft library without a store permission conflicts with `LICENSE-EXCEPTION`, so anything else needs an exception there with the reason, and that is the maintainer's call.
 - GitHub Actions: pin to commit SHAs (enforced by repo settings), `permissions: contents: read` unless a step needs more, cloud access by OIDC only.
 - When a change touches the four security surfaces (Telia OIDC exchange, hetu HMAC, session tokens, signed URL issuance) run the `security-reviewer` agent on the diff before committing.
 

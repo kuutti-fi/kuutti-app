@@ -27,7 +27,8 @@
     "i18n:check": "pnpm --filter @kuutti/i18n run check",
     "i18n:translate": "pnpm --filter @kuutti/i18n translate",
     "openapi": "pnpm --filter @kuutti/api openapi",
-    "check:schema-words": "node scripts/check-schema-words.ts"
+    "check:schema-words": "node scripts/check-schema-words.ts",
+    "check:licenses": "node scripts/check-licenses.ts"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.13",

@@ -1,0 +1,35 @@
+# Pull-request check for new dependencies (#16 A.5). The licence list is `allow`
+# of scripts/license-policy.json; `pnpm check:licenses` fails when the two differ
+# and covers the whole installed tree, exceptions included.
+fail-on-severity: high
+comment-summary-in-pr: never
+allow-licenses:
+  - MIT
+  - ISC
+  - BSD-2-Clause
+  - BSD-3-Clause
+  - Apache-2.0
+  - 0BSD
+  - CC0-1.0
+  - Unlicense
+  - MPL-2.0
+  - Zlib
+  - BlueOak-1.0.0
+  - Python-2.0
+# The named exceptions of scripts/license-policy.json, as package URLs, so that a
+# version bump of eas-cli, Sentry or jsdom does not fail on a licence that is
+# already accepted there; check:licenses fails when the two lists differ.
+allow-dependencies-licenses:
+  - pkg:npm/%40csstools/color-helpers
+  - pkg:npm/%40csstools/css-syntax-patches-for-csstree
+  - pkg:npm/%40expo/logger
+  - pkg:npm/%40expo/steps
+  - pkg:npm/%40expo/turtle-spawn
+  - pkg:npm/%40sentry/cli
+  - pkg:npm/%40sentry/cli-darwin
+  - pkg:npm/%40sentry/cli-linux-arm64
+  - pkg:npm/%40sentry/cli-linux-x64
+  - pkg:npm/caniuse-lite
+  - pkg:npm/%40segment/loosely-validate-event
+  - pkg:npm/golden-fleece
+  - pkg:npm/qrcode-terminal
