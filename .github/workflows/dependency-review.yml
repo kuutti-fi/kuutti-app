@@ -2,8 +2,11 @@ name: Dependency review
 
 # What a pull request adds to the dependency graph (#16 A.5): a new dependency
 # with a known high vulnerability, or under a licence outside the policy, fails
-# here before it is installed anywhere. The whole tree, with the named
-# exceptions, is `pnpm check:licenses` in ci.yml.
+# here. It sees direct dependencies only: GitHub's graph of this repository is
+# built from the package.json files (116 packages on 2026-09-20), not from
+# pnpm-lock.yaml (1,372 installed). Everything a dependency brings with it is
+# covered by the two checks that read the installed tree in ci.yml:
+# `pnpm check:licenses` for licences and `pnpm audit` for vulnerabilities.
 
 on:
   pull_request:

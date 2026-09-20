@@ -1,6 +1,7 @@
 # Pull-request check for new dependencies (#16 A.5). The licence list is `allow`
 # of scripts/license-policy.json; `pnpm check:licenses` fails when the two differ
-# and covers the whole installed tree, exceptions included.
+# and covers the whole installed tree, exceptions included; this check sees the
+# direct dependencies of the package.json files only (dependency-review.yml).
 fail-on-severity: high
 comment-summary-in-pr: never
 allow-licenses:
