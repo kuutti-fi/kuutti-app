@@ -4,7 +4,7 @@ Error reporting only (TD-19, #11): unhandled errors from the API and the app, wi
 
 The site is sentry.io. **The data region is chosen when the organisation is created and cannot be changed afterwards: choose the EU.** The organisation lives at `https://kuutti-fi.sentry.io` (slug `kuutti-fi`: `kuutti` was already taken on 2026-09-20) and its API at `https://de.sentry.io`. The upload step in `deploy.yml` names the organisation in `SENTRY_ORG`; the `app.json` plugin block still says `kuutti` until the next native change carries the correction (a fingerprint change), and until then `preview` builds skip their own upload (step 4).
 
-Done on 2026-09-20: sections 1 (except Require 2FA), 2, the mobile half of 3. What remains is marked.
+Done on 2026-09-20: sections 1 to 4 in full (Require 2FA on, both accounts had 2FA), and in section 5 the API's self-test booted with `reporting: true` on staging. Still open then: the app's test error with symbolicated frames (the first update published with the token in place carries readable maps), deleting the two test issues, and the `eas.json` stopgap, which stays until `app.json` names the organisation `kuutti-fi`.
 
 ## 1. Account and organisation
 
