@@ -31,8 +31,10 @@ export type MessageParams = {
   "settings.title": Record<never, never>;
   "smoke.loading": Record<never, never>;
   "smoke.retry": Record<never, never>;
+  "smoke.status.app": { "id": string; "date": Date | number };
   "smoke.status.commit": { "commit": string };
   "smoke.status.database": { "db": string; "migrations": string };
+  "smoke.status.embedded": Record<never, never>;
   "smoke.status.label": Record<never, never>;
   "smoke.status.version": { "version": string };
   "smoke.title": Record<never, never>;

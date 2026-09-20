@@ -50,6 +50,16 @@ export function SmokeScreen() {
   const tap = useHapticTap();
   const { t } = useT();
 
+  // Which JavaScript the phone runs: the EAS Update it applied, or the bundle
+  // embedded in the build. The API's version in the card says nothing about
+  // it, and "did it really update?" is the first question asked on a device.
+  // A Metro session has updates disabled and shows nothing.
+  const bundle = !Updates.isEnabled
+    ? null
+    : Updates.isEmbeddedLaunch || !Updates.updateId || !Updates.createdAt
+      ? t("smoke.status.embedded")
+      : t("smoke.status.app", { id: Updates.updateId.slice(0, 8), date: Updates.createdAt });
+
   const load = useCallback(async () => {
     setState({ kind: "loading" });
     try {
@@ -118,6 +128,8 @@ export function SmokeScreen() {
             </View>
           )}
         </Card>
+
+        {bundle && <Text variant="muted">{bundle}</Text>}
 
         <Button
           accessibilityLabel={t("smoke.retry")}

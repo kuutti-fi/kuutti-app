@@ -52,6 +52,20 @@ smoke.status.database:
   sv: databas {db} · migreringar {migrations}
   machine: { fi: true, sv: true }
 
+smoke.status.app:
+  en: "App update {id}, published {date, date, short} {date, time, short}"
+  description: Smoke screen, under the API card. Which JavaScript the phone is running. {id} is the first eight characters of the EAS Update id (a code, not translated); {date} is the update's publish time.
+  fi: "Sovelluksen päivitys {id}, julkaistu {date, date, short} {date, time, short}"
+  sv: "Appuppdatering {id}, publicerad {date, date, short} {date, time, short}"
+  machine: { fi: true, sv: true }
+
+smoke.status.embedded:
+  en: App code from the build, no update applied
+  description: Smoke screen, under the API card, when the phone runs the JavaScript embedded in the build rather than a downloaded update.
+  fi: Sovelluksen koodi on peräisin rakennuksesta, päivitystä ei ole otettu käyttöön
+  sv: Appens kod kommer från bygget, ingen uppdatering har hämtats
+  machine: { fi: true, sv: true }
+
 smoke.unreachable.title:
   en: API unreachable
   description: Smoke screen, title of the error state when the request to the API failed. The technical reason follows untranslated.
