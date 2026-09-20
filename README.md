@@ -6,6 +6,32 @@ A free, open-source dating app for Finland. No ads, no premium tiers, no data sa
 
 Milestone 1 (the skeleton) is in progress: a Hono API on AWS (`infra/`), an Expo app (`apps/mobile`), a moderation panel (`apps/admin`), shared contracts and database packages, and the CI that deploys staging on every merge. `CLAUDE.md` carries the standing rules, `docs/adr/` the decisions, `CONTRIBUTING.md` the fifteen-minute local setup.
 
+## Run it locally
+
+You need git, Node 22.18 or newer, and Docker (Docker Desktop or OrbStack). Six commands, about fifteen minutes; [CONTRIBUTING.md](CONTRIBUTING.md#local-setup) has the detail.
+
+```bash
+git clone https://github.com/kuutti-fi/kuutti-app.git && cd kuutti-app
+corepack enable                    # pnpm, at the version the project pins
+cp env.example .env                # local values only, nothing secret
+pnpm install
+pnpm env:doctor                    # names anything missing, with the fix
+pnpm env:up                        # database, storage, mock bank login, API, app, admin
+```
+
+Then open http://localhost:3000/health (the API), http://localhost:8081 (the app, in a browser) and http://localhost:5173 (the moderation panel). Ctrl+C stops the apps; `pnpm env:down` also stops the database. On a phone, install the development build linked from the pinned builds issue and point it at Metro on this machine (`apps/mobile/README.md`).
+
+By hand, one piece at a time (this is what `env:up` does for you), each in its own terminal:
+
+```bash
+docker compose up -d --wait                              # Postgres, MinIO, mock bank login
+pnpm --filter @kuutti/db migrate                         # apply the migrations
+pnpm --filter @kuutti/db seed --env development          # ponds and matching_config
+pnpm dev                                                 # API on 3000, restarts on change
+pnpm dev:mobile                                          # Metro on 8081; press w for the browser
+pnpm dev:admin                                           # moderation panel on 5173
+```
+
 ## Licence
 
 AGPL-3.0 with App Store exception.
