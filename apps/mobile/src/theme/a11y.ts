@@ -2,9 +2,20 @@
  * The accessibility baseline as constants (#12, CLAUDE.md Accessibility), so
  * components and their tests agree on one number.
  */
+import { Platform } from "react-native";
 
 /** Minimum touch target edge in points. */
 export const TOUCH_TARGET = 44;
+
+/**
+ * Hides a purely decorative element (an icon beside its label, the logo above
+ * the name) from screen readers, with each platform's own props: on web,
+ * react-native-svg and expo-image hand unknown props straight to the DOM.
+ */
+export const DECORATIVE = Platform.select({
+  web: { "aria-hidden": true },
+  default: { accessibilityElementsHidden: true, importantForAccessibility: "no" as const },
+});
 
 /** Text follows the OS font size up to this factor; layouts must survive it. */
 export const MAX_FONT_SCALE = 2;

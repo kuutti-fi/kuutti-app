@@ -1,9 +1,9 @@
 import type { LucideIcon, LucideProps } from "lucide-react-native";
 import { cssInterop } from "nativewind";
 import * as React from "react";
-import { Platform } from "react-native";
 import { TextClassContext } from "@/components/ui/text";
 import { cn } from "@/lib/utils";
+import { DECORATIVE } from "@/theme/a11y";
 
 type IconProps = LucideProps & { as: LucideIcon } & React.RefAttributes<LucideIcon>;
 
@@ -13,13 +13,6 @@ function IconImpl({ as: IconComponent, ...props }: IconProps) {
 
 cssInterop(IconImpl, {
   className: { target: "style", nativeStyleToProp: { height: "size", width: "size" } },
-});
-
-// Hidden from screen readers with each platform's own props: react-native-svg
-// on web hands unknown props to the DOM.
-const DECORATIVE = Platform.select({
-  web: { "aria-hidden": true },
-  default: { accessibilityElementsHidden: true, importantForAccessibility: "no" as const },
 });
 
 /**
