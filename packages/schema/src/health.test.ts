@@ -6,6 +6,7 @@ const base = {
   version: "0.0.0-dev",
   commit: "abc1234",
   builtAt: "2026-09-13T00:00:00.000Z",
+  source: "https://github.com/kuutti-fi/kuutti-app",
   db: "ok",
   migrations: "current",
 };
@@ -19,6 +20,14 @@ describe("HealthResponse", () => {
     expect(
       HealthResponse.safeParse({ ...base, status: "degraded", db: "unreachable" }).success,
     ).toBe(true);
+  });
+
+  it("requires the source offer, and only as an https address a client may link", () => {
+    const { source: _source, ...withoutSource } = base;
+    expect(HealthResponse.safeParse(withoutSource).success).toBe(false);
+    for (const source of ["http://example.com/fork", "javascript:alert(1)", "not a url"]) {
+      expect(HealthResponse.safeParse({ ...base, source }).success).toBe(false);
+    }
   });
 
   it("rejects an unknown status", () => {

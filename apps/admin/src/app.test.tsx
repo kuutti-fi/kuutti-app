@@ -3,6 +3,7 @@ import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { App } from "./app.tsx";
 import { i18n } from "./i18n.ts";
+import { apiUrl } from "./source-offer.tsx";
 
 const health = {
   status: "ok",
@@ -51,6 +52,14 @@ describe("App", () => {
     renderApp(async () => json({ ...health, source: "javascript:alert(1)" }));
     expect(await screen.findByText(/The API cannot be reached/)).toBeInTheDocument();
     expect(screen.queryByRole("link")).toBeNull();
+  });
+
+  it("falls back to the local API on a development server only, never in a production build", () => {
+    expect(apiUrl({ PROD: false })).toBe("http://localhost:3000");
+    expect(apiUrl({ PROD: true })).toBeUndefined();
+    expect(apiUrl({ PROD: true, VITE_API_URL: "https://api.kuutti.app" })).toBe(
+      "https://api.kuutti.app",
+    );
   });
 
   it("makes an unknown key a type error", () => {
