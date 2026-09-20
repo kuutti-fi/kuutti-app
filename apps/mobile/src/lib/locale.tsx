@@ -17,6 +17,19 @@ const pseudo: Readonly<Record<string, string>> | undefined = __DEV__
 /** What the language picker offers: the three catalogues, and en-XA in dev builds. */
 export const OFFERED_LOCALES: readonly AnyLocale[] = pseudo ? [...LOCALES, PSEUDO_LOCALE] : LOCALES;
 
+/**
+ * The flag shown next to each language in the picker. A language is not a
+ * country, so each flag is where Kuutti's users speak it: Finland, Britain
+ * for English, and Åland for Swedish (the Swedish of Finland, not Sweden; the
+ * team's choice). Decorative: the accessible name stays the language's name.
+ */
+export const LOCALE_FLAGS: Readonly<Record<AnyLocale, string>> = {
+  en: "🇬🇧",
+  fi: "🇫🇮",
+  sv: "🇦🇽",
+  "en-XA": "",
+};
+
 const isOffered = (value: string | null): value is AnyLocale =>
   value !== null && (OFFERED_LOCALES as readonly string[]).includes(value);
 

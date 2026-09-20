@@ -16,7 +16,13 @@ import { Icon } from "@/components/ui/icon";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Text } from "@/components/ui/text";
-import { type LocalePreference, OFFERED_LOCALES, useLocaleSettings, useT } from "@/lib/locale";
+import {
+  LOCALE_FLAGS,
+  type LocalePreference,
+  OFFERED_LOCALES,
+  useLocaleSettings,
+  useT,
+} from "@/lib/locale";
 import { type SchemePreference, useTheme } from "@/theme/ThemeProvider";
 
 const SCHEMES: ReadonlyArray<{ value: SchemePreference; label: PlainMessageKey }> = [
@@ -25,9 +31,14 @@ const SCHEMES: ReadonlyArray<{ value: SchemePreference; label: PlainMessageKey }
   { value: "dark", label: "settings.theme.dark" },
 ];
 
-/** One option of a group. The chosen one is marked in text too, never by colour alone. */
-function Choice(props: { label: string; chosen: boolean; onPress: () => void }) {
+/**
+ * One option of a group. The chosen one is marked in text too, never by colour
+ * alone. A flag, when given, is decoration in front of the text: the accessible
+ * name is the text alone, so a screen reader never announces "flag: Åland".
+ */
+function Choice(props: { label: string; flag?: string; chosen: boolean; onPress: () => void }) {
   const { t } = useT();
+  const name = props.chosen ? t("settings.selected", { option: props.label }) : props.label;
   return (
     <Button
       variant={props.chosen ? "default" : "outline"}
@@ -35,10 +46,11 @@ function Choice(props: { label: string; chosen: boolean; onPress: () => void }) 
       accessibilityState={{ checked: props.chosen }}
       // react-native-web reads the ARIA prop, not accessibilityState.
       aria-checked={props.chosen}
+      accessibilityLabel={name}
       className="grow"
       onPress={props.onPress}
     >
-      {props.chosen ? t("settings.selected", { option: props.label }) : props.label}
+      {props.flag ? `${props.flag} ${name}` : name}
     </Button>
   );
 }
@@ -53,10 +65,14 @@ export function DevSettings() {
   const theme = useTheme();
   const locale = useLocaleSettings();
   const [errorSent, setErrorSent] = useState(false);
-  const languages: ReadonlyArray<{ value: LocalePreference; label: string }> = [
+  const languages: ReadonlyArray<{ value: LocalePreference; label: string; flag?: string }> = [
     { value: "system", label: t("settings.language.system") },
     // A language is listed under its own name, whatever the app's language is.
-    ...OFFERED_LOCALES.map((value) => ({ value, label: LOCALE_NAMES[value] })),
+    ...OFFERED_LOCALES.map((value) => ({
+      value,
+      label: LOCALE_NAMES[value],
+      flag: LOCALE_FLAGS[value],
+    })),
   ];
 
   return (
@@ -111,10 +127,11 @@ export function DevSettings() {
             accessibilityLabel={t("settings.language.label")}
             className="flex-row flex-wrap gap-2"
           >
-            {languages.map(({ value, label }) => (
+            {languages.map(({ value, label, flag }) => (
               <Choice
                 key={value}
                 label={label}
+                flag={flag}
                 chosen={locale.preference === value}
                 onPress={() => locale.setPreference(value)}
               />

@@ -63,6 +63,18 @@ describe("the app's language", () => {
     expect(store.get("kuutti.preference.locale")).toBe("sv");
   });
 
+  it("shows a flag in front of each language, but not in its accessible name", async () => {
+    await renderWithTheme(<SmokeScreen />);
+    await fireEvent.press(await screen.findByRole("button", { name: "Settings" }));
+    // Åland for Swedish: the Swedish of Finland, not Sweden.
+    expect(screen.getByText("🇫🇮 Suomi")).toBeTruthy();
+    expect(screen.getByText("🇦🇽 Svenska")).toBeTruthy();
+    expect(screen.getByText("🇬🇧 English")).toBeTruthy();
+    // A screen reader hears the language, never "flag: Åland".
+    expect(screen.getByRole("radio", { name: "Svenska" })).toBeTruthy();
+    expect(screen.queryByRole("radio", { name: "🇦🇽 Svenska" })).toBeNull();
+  });
+
   it("a stored override applies at the next start, and choosing the phone's language clears it", async () => {
     store.set("kuutti.preference.locale", "fi");
     await renderWithTheme(<SmokeScreen />);
