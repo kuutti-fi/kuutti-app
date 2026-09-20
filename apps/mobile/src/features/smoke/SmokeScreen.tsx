@@ -51,29 +51,13 @@ export function SmokeScreen() {
   const tap = useHapticTap();
   const { t } = useT();
 
-  // Which JavaScript the phone runs, as opposed to which API it reached: the
-  // commit app.config.ts stamped into the config at export or build time, and
-  // from expo-updates the update it applied, or the bundle embedded in the
-  // build. "Did it really update?" is the first question asked on a device.
-  const appVersion = Constants.nativeAppVersion ?? Constants.expoConfig?.version ?? "";
-  const appVersionLine = Constants.nativeBuildVersion
-    ? t("smoke.app.version", { version: appVersion, build: Constants.nativeBuildVersion })
-    : t("smoke.status.version", { version: appVersion });
+  // The app's own git commit, as opposed to the API's: app.config.ts stamped
+  // it into the config when this JavaScript was exported or built.
   const appCommit: unknown = Constants.expoConfig?.extra?.commit;
   const appCommitLine =
     typeof appCommit === "string" && appCommit.length > 0
       ? t("smoke.status.commit", { commit: appCommit })
       : t("smoke.app.noCommit");
-  // The web target says so (its expo-updates shim claims to be enabled, but
-  // updates exist only on phones); a dev client on Metro has them disabled.
-  const appBundleLine =
-    Platform.OS === "web"
-      ? t("smoke.app.web")
-      : !Updates.isEnabled
-        ? t("smoke.app.dev")
-        : Updates.isEmbeddedLaunch || !Updates.updateId || !Updates.createdAt
-          ? t("smoke.app.embedded")
-          : t("smoke.app.update", { id: Updates.updateId.slice(0, 8), date: Updates.createdAt });
 
   const load = useCallback(async () => {
     setState({ kind: "loading" });
@@ -117,11 +101,10 @@ export function SmokeScreen() {
               <CardHeader>
                 <CardTitle>{t("smoke.api.title")}</CardTitle>
                 <CardDescription>
-                  {t("smoke.status.version", { version: state.health.version })}
+                  {t("smoke.status.commit", { commit: state.health.commit })}
                 </CardDescription>
               </CardHeader>
-              <CardContent className="gap-1">
-                <Text>{t("smoke.status.commit", { commit: state.health.commit })}</Text>
+              <CardContent>
                 <Text variant="muted">
                   {t("smoke.status.database", {
                     db: state.health.db,
@@ -147,12 +130,8 @@ export function SmokeScreen() {
           <View accessibilityLabel={t("smoke.app.label")} className="gap-6">
             <CardHeader>
               <CardTitle>{t("smoke.app.title")}</CardTitle>
-              <CardDescription>{appVersionLine}</CardDescription>
+              <CardDescription>{appCommitLine}</CardDescription>
             </CardHeader>
-            <CardContent className="gap-1">
-              <Text>{appCommitLine}</Text>
-              <Text variant="muted">{appBundleLine}</Text>
-            </CardContent>
           </View>
         </Card>
 
