@@ -16,6 +16,8 @@ export const en: Readonly<Record<string, string>> = {
   "errors.validation_failed": "The request was not valid.",
   "settings.close": "Close settings",
   "settings.devOnly": "Shown in development builds only.",
+  "settings.errorTest.send": "Send a test error",
+  "settings.errorTest.sent": "Test error sent. It shows up in the error tracker within a minute if reporting is on in this build.",
   "settings.highContrast": "High contrast",
   "settings.language.label": "Language",
   "settings.language.system": "Phone's language",

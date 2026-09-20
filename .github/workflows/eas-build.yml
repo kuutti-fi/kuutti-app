@@ -112,8 +112,10 @@ jobs:
               # JSON; keep only the document (run 35454488799).
               cmp=$(pnpm exec eas fingerprint:compare --build-id "$last" --environment preview --json --non-interactive \
                 | sed -n '/^[{[]/,$p')
-              a=$(jq -r '.fingerprint1.hash' <<< "$cmp"); b=$(jq -r '.fingerprint2.hash' <<< "$cmp")
-              if [ "$a" = "$b" ]; then echo "$p: fingerprint $a matches build $last"; else echo "$p: fingerprint $a differs from build $last ($b)"; changed="$changed $p"; fi
+              # fingerprint1 is the build's, fingerprint2 the project's (seen on
+              # 2026-09-20: the log had them the other way round).
+              built=$(jq -r '.fingerprint1.hash' <<< "$cmp"); now=$(jq -r '.fingerprint2.hash' <<< "$cmp")
+              if [ "$now" = "$built" ]; then echo "$p: fingerprint $now matches build $last"; else echo "$p: fingerprint $now differs from build $last ($built)"; changed="$changed $p"; fi
             done
             changed=$(echo $changed)
             if [ -n "$changed" ]; then

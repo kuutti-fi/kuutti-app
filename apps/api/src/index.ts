@@ -32,6 +32,12 @@ async function main(): Promise<void> {
   // Error reporting is on exactly when a DSN is configured (#11).
   const reporting = initSentry(config);
   logger.info({ reporting, environment: config.APP_ENV }, "error reporting");
+  if (reporting && config.SENTRY_SELF_TEST) {
+    sentryReporter()(new Error("Sentry self-test: the API booted with SENTRY_SELF_TEST=true"), {
+      requestId: "self-test",
+    });
+    logger.warn("Sentry self-test event sent; unset SENTRY_SELF_TEST and redeploy");
+  }
 
   // A pull-request preview serves from its own kuutti_pr_<n> on the staging
   // instance, created here on first boot and dropped by preview-cleanup.yml

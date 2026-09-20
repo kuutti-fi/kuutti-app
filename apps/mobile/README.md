@@ -18,6 +18,8 @@ Native binaries come from EAS Build; JavaScript reaches installed binaries as EA
 
 Channels follow the deploy promotion (#8): a merge to `main` deploys the staging API and publishes to `staging`; a `v*` tag deploys prod behind the reviewer and publishes to `production`. Updates are not code-signed for now: Expo sells update signing with its paid plans only, so what may publish is whatever holds `EXPO_TOKEN`, and that token is guarded accordingly (ADR-004, which also says when signing returns). Turning signing on later adds a certificate to `app.json`, hence a new fingerprint and new builds for everyone.
 
+Phones, step by step (Android without a cable, the iPhone's registration and first build, the dev client against a Mac): `docs/runbooks/devices.md`.
+
 ### Installing the dev client
 
 Build links are posted as sticky comments on the pinned builds issue (repository variable `EAS_BUILDS_ISSUE`), one comment per profile, replaced on every new build.

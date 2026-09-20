@@ -12,6 +12,8 @@ export const sv: Readonly<Record<string, string>> = {
   "errors.validation_failed": "Begäran var inte giltig.",
   "settings.close": "Stäng inställningarna",
   "settings.devOnly": "Visas bara i utvecklingsversioner.",
+  "settings.errorTest.send": "Skicka ett testfel",
+  "settings.errorTest.sent": "Testfelet har skickats. Det syns i felspårningen inom en minut om rapportering är på i den här versionen.",
   "settings.highContrast": "Hög kontrast",
   "settings.language.label": "Språk",
   "settings.language.system": "Telefonens språk",

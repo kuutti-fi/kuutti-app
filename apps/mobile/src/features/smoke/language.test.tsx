@@ -83,6 +83,17 @@ describe("the app's language", () => {
     await waitFor(() => expect(screen.getByText("［Réétrýý］")).toBeTruthy());
   });
 
+  it("sends one marked test error from the settings sheet, and says so", async () => {
+    const Sentry = jest.requireMock("@sentry/react-native") as { captureException: jest.Mock };
+    Sentry.captureException.mockClear();
+    await renderWithTheme(<SmokeScreen />);
+    await fireEvent.press(await screen.findByRole("button", { name: "Settings" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Send a test error" }));
+    expect(Sentry.captureException).toHaveBeenCalledTimes(1);
+    expect(String(Sentry.captureException.mock.calls[0]?.[0])).toContain("Sentry test");
+    expect(screen.getByText(/Test error sent/)).toBeTruthy();
+  });
+
   it("makes an unknown key a type error", () => {
     const probe = (t: import("@kuutti/i18n").TFunction) => {
       // @ts-expect-error not a key of messages.yaml

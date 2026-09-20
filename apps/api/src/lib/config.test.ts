@@ -42,6 +42,14 @@ describe("parseConfig", () => {
     expect(config.corsAllowedOrigins.size).toBe(0);
   });
 
+  it("keeps the Sentry self-test off unless it is asked for by name", () => {
+    expect(parseConfig({ DATABASE_URL: "postgres://x" }).SENTRY_SELF_TEST).toBe(false);
+    expect(
+      parseConfig({ DATABASE_URL: "postgres://x", SENTRY_SELF_TEST: "true" }).SENTRY_SELF_TEST,
+    ).toBe(true);
+    expect(() => parseConfig({ DATABASE_URL: "postgres://x", SENTRY_SELF_TEST: "1" })).toThrow();
+  });
+
   it("allows the Metro and admin dev origins in development only, and named origins when set", () => {
     expect([...parseConfig({ DATABASE_URL: "postgres://x" }).corsAllowedOrigins]).toEqual([
       "http://localhost:8081",

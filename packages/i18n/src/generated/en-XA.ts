@@ -16,6 +16,8 @@ export const enXA: Readonly<Record<string, string>> = {
   "errors.validation_failed": "［Théé rééqúúééšt wááš ñóót váálííd.］",
   "settings.close": "［Çlóóšéé šééttííñgš］",
   "settings.devOnly": "［Šhóówñ ííñ déévéélóópmééñt búúííldš óóñlýý.］",
+  "settings.errorTest.send": "［Šééñd áá tééšt éérróór］",
+  "settings.errorTest.sent": "［Tééšt éérróór šééñt. ÍÍt šhóówš úúp ííñ théé éérróór trááçkéér wííthííñ áá mííñúútéé ííf réépóórtííñg ííš óóñ ííñ thííš búúííld.］",
   "settings.highContrast": "［Híígh çóóñtráášt］",
   "settings.language.label": "［Lááñgúúáágéé］",
   "settings.language.system": "［Phóóñéé'š lááñgúúáágéé］",

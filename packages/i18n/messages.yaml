@@ -170,6 +170,20 @@ about.source.open:
   sv: Öppna källkoden i webbläsaren
   machine: { fi: true, sv: true }
 
+settings.errorTest.send:
+  en: Send a test error
+  description: Settings sheet of non-production builds. Button that reports one marked error to the error tracker, to check that reporting works. Short, on a button.
+  fi: Lähetä testivirhe
+  sv: Skicka ett testfel
+  machine: { fi: true, sv: true }
+
+settings.errorTest.sent:
+  en: Test error sent. It shows up in the error tracker within a minute if reporting is on in this build.
+  description: Settings sheet, shown under the button after it was pressed.
+  fi: Testivirhe lähetetty. Se näkyy virheseurannassa minuutin kuluessa, jos raportointi on päällä tässä versiossa.
+  sv: Testfelet har skickats. Det syns i felspårningen inom en minut om rapportering är på i den här versionen.
+  machine: { fi: true, sv: true }
+
 errors.validation_failed:
   en: The request was not valid.
   description: API error message (400) when the request body, query or parameters fail validation. Details are never returned.

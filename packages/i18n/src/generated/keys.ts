@@ -17,6 +17,8 @@ export type MessageParams = {
   "errors.validation_failed": Record<never, never>;
   "settings.close": Record<never, never>;
   "settings.devOnly": Record<never, never>;
+  "settings.errorTest.send": Record<never, never>;
+  "settings.errorTest.sent": Record<never, never>;
   "settings.highContrast": Record<never, never>;
   "settings.language.label": Record<never, never>;
   "settings.language.system": Record<never, never>;

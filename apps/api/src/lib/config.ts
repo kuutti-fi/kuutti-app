@@ -57,6 +57,14 @@ const Env = z.object({
   // Error reporting (#11). A DSN is public by design: /kuutti/<env>/sentry-dsn
   // is a plain String parameter. Unset means the SDK stays off.
   SENTRY_DSN: z.url().optional(),
+  // Set to "true" for one deploy to prove the Sentry wiring end to end: the
+  // process reports a single marked error at boot and carries on (#11). Not a
+  // route: nothing outside the box can trigger it (security checklist, no
+  // debug routes outside development).
+  SENTRY_SELF_TEST: z
+    .enum(["true", "false"])
+    .default("false")
+    .transform((v) => v === "true"),
   // AGPL-3.0 section 13 (#16): whoever runs a modified version as a service owes
   // its users the corresponding source. /health offers this URL with the running
   // commit, and the app and the admin panel show both. A fork that deploys

@@ -1,5 +1,7 @@
 import { LOCALE_NAMES, type PlainMessageKey } from "@kuutti/i18n";
+import * as Sentry from "@sentry/react-native";
 import Settings from "lucide-react-native/icons/settings";
+import { useState } from "react";
 import { View } from "react-native";
 import { Button } from "@/components/ui/button";
 import {
@@ -50,6 +52,7 @@ export function DevSettings() {
   const { t } = useT();
   const theme = useTheme();
   const locale = useLocaleSettings();
+  const [errorSent, setErrorSent] = useState(false);
   const languages: ReadonlyArray<{ value: LocalePreference; label: string }> = [
     { value: "system", label: t("settings.language.system") },
     // A language is listed under its own name, whatever the app's language is.
@@ -117,6 +120,21 @@ export function DevSettings() {
               />
             ))}
           </View>
+        </View>
+
+        {/* Proves error reporting end to end (#11): a real JS error with a stack
+            for Sentry to symbolicate. A no-op in a build without a DSN. */}
+        <View className="gap-2">
+          <Button
+            variant="outline"
+            onPress={() => {
+              Sentry.captureException(new Error("Sentry test from the settings sheet"));
+              setErrorSent(true);
+            }}
+          >
+            {t("settings.errorTest.send")}
+          </Button>
+          {errorSent && <Text variant="muted">{t("settings.errorTest.sent")}</Text>}
         </View>
       </DialogContent>
     </Dialog>

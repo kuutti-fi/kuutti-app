@@ -12,6 +12,8 @@ export const fi: Readonly<Record<string, string>> = {
   "errors.validation_failed": "Pyyntö ei ollut kelvollinen.",
   "settings.close": "Sulje asetukset",
   "settings.devOnly": "Näkyy vain kehitysversioissa.",
+  "settings.errorTest.send": "Lähetä testivirhe",
+  "settings.errorTest.sent": "Testivirhe lähetetty. Se näkyy virheseurannassa minuutin kuluessa, jos raportointi on päällä tässä versiossa.",
   "settings.highContrast": "Suuri kontrasti",
   "settings.language.label": "Kieli",
   "settings.language.system": "Puhelimen kieli",
