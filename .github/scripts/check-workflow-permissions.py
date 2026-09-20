@@ -3,7 +3,8 @@
 
 - no pull_request_target or workflow_run triggers;
 - every workflow's top-level permissions are exactly contents: read;
-- packages: write only in build.yml, contents: write only in release.yml,
+- packages: write and attestations: write only in build.yml, contents: write
+  only in release.yml, security-events: write only in scorecard.yml,
   id-token: write only in jobs that exchange the OIDC token;
 - every checkout sets persist-credentials: false;
 - every third-party action is pinned to a 40-character commit SHA.
@@ -40,10 +41,30 @@ for path in sorted(ROOT.glob("*.yml")):
         perms = job.get("permissions") or {}
         if perms.get("packages") == "write" and name != "build.yml":
             problems.append(f"{name}/{job_id}: packages: write belongs only in build.yml")
+        if perms.get("attestations") == "write" and name != "build.yml":
+            problems.append(f"{name}/{job_id}: attestations: write belongs only in build.yml")
+        if perms.get("security-events") == "write" and name != "scorecard.yml":
+            problems.append(f"{name}/{job_id}: security-events: write belongs only in scorecard.yml")
         if perms.get("contents") == "write" and name != "release.yml":
             problems.append(f"{name}/{job_id}: contents: write belongs only in release.yml")
         text = steps_text(job)
-        exchanges_token = "aws-oidc.sh" in text or "ACTIONS_ID_TOKEN_REQUEST_URL" in text
+        # Two actions use the job's OIDC token themselves (#16): Scorecard to
+        # publish its result, attest-build-provenance to sign the attestation.
+        attests = name == "build.yml" and any(
+            str(step.get("uses", "")).startswith("actions/attest-build-provenance@")
+            for step in job.get("steps", []) or []
+        )
+        publishes_scorecard = name == "scorecard.yml" and any(
+            str(step.get("uses", "")).startswith("ossf/scorecard-action@")
+            and (step.get("with") or {}).get("publish_results") is True
+            for step in job.get("steps", []) or []
+        )
+        exchanges_token = (
+            "aws-oidc.sh" in text
+            or "ACTIONS_ID_TOKEN_REQUEST_URL" in text
+            or publishes_scorecard
+            or attests
+        )
         if perms.get("id-token") == "write" and not exchanges_token:
             problems.append(f"{name}/{job_id}: id-token: write without an OIDC exchange step")
         if exchanges_token and perms.get("id-token") != "write":

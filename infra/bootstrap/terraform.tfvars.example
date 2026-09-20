@@ -9,3 +9,11 @@ github_repository_id = "000000000"
 billing_alert_email = "billing@example.invalid"
 
 # monthly_budget_usd = 55   # TD-4: 50 EUR, in USD because Budgets are USD
+
+# GitHub organisation domain verification (#16 B.1). Settings of the
+# organisation, Verified and approved domains, Add a domain: copy the record
+# name (without the domain) and the code here, apply, then press Verify.
+# github_domain_verification = {
+#   name = "_gh-kuutti-fi-o"
+#   code = "0123abcdef"
+# }

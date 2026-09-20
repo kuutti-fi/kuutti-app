@@ -1,0 +1,84 @@
+name: Export
+
+# What exists only on GitHub, copied out weekly (#16 D.2): issues with their
+# comments, milestones, labels, rulesets, environment protection rules, and
+# the repository itself as a git bundle. On 2026-09-17 a machine was wiped and
+# what lived in one place was lost; this is the same lesson for the repository.
+# Written to s3://<state bucket>/github-export/<date>/ through a role of its
+# own that trusts the main branch only and may put objects under that prefix
+# and nothing else (infra/bootstrap): the plan role is assumable from any pull
+# request and must not be able to replace what a recovery restores from.
+# Restore steps: infra/README.md, "Restoring from an export".
+
+on:
+  schedule:
+    - cron: "41 3 * * 0"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  export:
+    name: export
+    # The role refuses every ref but main; this only saves a failed run.
+    # Dormant until the bootstrap with the export role is applied and its ARN is a
+    # repository variable (infra/README.md): no red run every Sunday before that.
+    if: github.ref == 'refs/heads/main' && vars.AWS_EXPORT_ROLE_ARN != ''
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: read
+      id-token: write
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION }}
+      AWS_ROLE_ARN: ${{ vars.AWS_EXPORT_ROLE_ARN }}
+      AWS_ROLE_SESSION_NAME: gha-export-${{ github.run_id }}
+      BUCKET: ${{ vars.TF_STATE_BUCKET }}
+      GH_TOKEN: ${{ github.token }}
+      REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Issues, milestones, labels, rulesets, environments
+        run: |
+          out="$RUNNER_TEMP/export"; mkdir -p "$out"
+          gh api --paginate "repos/$REPO/issues?state=all&per_page=100" | jq -s 'add' > "$out/issues.json"
+          gh api --paginate "repos/$REPO/issues/comments?per_page=100" | jq -s 'add' > "$out/issue-comments.json"
+          gh api --paginate "repos/$REPO/milestones?state=all&per_page=100" | jq -s 'add' > "$out/milestones.json"
+          gh api --paginate "repos/$REPO/labels?per_page=100" | jq -s 'add' > "$out/labels.json"
+          # The list has no rules in it: fetch each ruleset for its full definition.
+          gh api "repos/$REPO/rulesets" --jq '.[].id' | while read -r id; do gh api "repos/$REPO/rulesets/$id"; done | jq -s '.' > "$out/rulesets.json"
+          gh api "repos/$REPO/environments" > "$out/environments.json"
+          # Which refs an environment admits is a list of its own, and the part
+          # that matters: staging admits main, prod admits v* tags.
+          jq -r '.environments[].name' "$out/environments.json" | while read -r name; do
+            gh api "repos/$REPO/environments/$name/deployment-branch-policies" 2>/dev/null \
+              | jq --arg name "$name" '{environment: $name, policies: .branch_policies}' || true
+          done | jq -s '.' > "$out/environment-branch-policies.json"
+          jq -n --arg repo "$REPO" --arg commit "$GITHUB_SHA" --arg at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            '{repository: $repo, commit: $commit, exportedAt: $at}' > "$out/manifest.json"
+          for f in "$out"/*.json; do echo "$(basename "$f"): $(jq 'if type == "array" then length else 1 end' "$f")"; done
+          # An export with no issues in it is a broken export, not an empty repository.
+          [ "$(jq length "$out/issues.json")" -gt 0 ]
+
+      - name: The repository as a bundle
+        run: |
+          git bundle create "$RUNNER_TEMP/export/repository.bundle" --all
+          git bundle verify "$RUNNER_TEMP/export/repository.bundle"
+
+      - run: .github/scripts/aws-oidc.sh
+
+      - name: Upload under the date
+        run: |
+          : "${BUCKET:?set the repository variable TF_STATE_BUCKET}"
+          prefix="github-export/$(date -u +%Y-%m-%d)"
+          aws s3 cp "$RUNNER_TEMP/export" "s3://$BUCKET/$prefix/" --recursive --only-show-errors
+          echo "s3://$BUCKET/$prefix/"

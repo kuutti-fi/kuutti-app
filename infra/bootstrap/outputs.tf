@@ -21,6 +21,11 @@ output "ci_plan_role_arn" {
   value       = aws_iam_role.ci_plan.arn
 }
 
+output "ci_export_role_arn" {
+  description = "Assumed by export.yml, from the main branch only; may put objects under github-export/ in the state bucket."
+  value       = aws_iam_role.ci_export.arn
+}
+
 output "ci_apply_role_arn" {
   description = "Assumed by the apply job, only from a GitHub environment."
   value       = aws_iam_role.ci_apply.arn
