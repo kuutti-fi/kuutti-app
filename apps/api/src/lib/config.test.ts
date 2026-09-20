@@ -42,10 +42,15 @@ describe("parseConfig", () => {
     expect(config.corsAllowedOrigins.size).toBe(0);
   });
 
-  it("allows the Metro origin in development only, and named origins when set", () => {
+  it("allows the Metro and admin dev origins in development only, and named origins when set", () => {
     expect([...parseConfig({ DATABASE_URL: "postgres://x" }).corsAllowedOrigins]).toEqual([
       "http://localhost:8081",
+      "http://localhost:5173",
     ]);
+    // A deployed environment allows nothing it was not told to.
+    expect([
+      ...parseConfig({ DATABASE_URL: "postgres://x", APP_ENV: "staging" }).corsAllowedOrigins,
+    ]).toEqual([]);
     const named = parseConfig({
       DATABASE_URL: "postgres://x",
       CORS_ALLOWED_ORIGINS: "https://admin.kuutti.fi, https://kuutti.fi",

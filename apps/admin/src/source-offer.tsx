@@ -2,8 +2,16 @@ import { useT } from "@kuutti/i18n/react";
 import { HealthResponse } from "@kuutti/schema";
 import { useEffect, useState } from "react";
 
-/** Set at build time for a deployed panel; the local API otherwise. */
-const API_URL: string = import.meta.env.VITE_API_URL ?? "http://localhost:3000";
+/**
+ * Set at build time for a deployed panel. Only a development server falls back
+ * to the local API: a production build without the variable asks nobody, so
+ * this constant can never send a moderator's browser to localhost.
+ */
+export function apiUrl(env: { VITE_API_URL?: string; PROD: boolean }): string | undefined {
+  return env.VITE_API_URL ?? (env.PROD ? undefined : "http://localhost:3000");
+}
+
+const API_URL = apiUrl(import.meta.env);
 
 type State = { kind: "loading" } | { kind: "ok"; health: HealthResponse } | { kind: "unknown" };
 
@@ -17,6 +25,10 @@ export function SourceOffer() {
   const [state, setState] = useState<State>({ kind: "loading" });
 
   useEffect(() => {
+    if (API_URL === undefined) {
+      setState({ kind: "unknown" });
+      return;
+    }
     const controller = new AbortController();
     fetch(`${API_URL}/health`, { signal: controller.signal })
       .then(async (response) => HealthResponse.parse(await response.json()))
