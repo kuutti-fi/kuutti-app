@@ -109,11 +109,18 @@ jobs:
       # The update's source maps, so Sentry symbolises the JavaScript it just
       # published (#11). dist is eas update's export directory. Skipped, not
       # failed, while the environment has no token: the update is already out.
+      # The organisation is named here because the uploader reads these
+      # variables before the app.json plugin block, and the slug `kuutti` was
+      # taken when the organisation was created (2026-09-20): it is kuutti-fi.
+      # app.json follows with the next native change (a fingerprint change).
       - name: Upload the update's source maps to Sentry
         if: steps.ready.outputs.ready == 'true' && vars.EAS_ENABLED == 'true'
         working-directory: apps/mobile
         env:
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: kuutti-fi
+          SENTRY_PROJECT: mobile
+          SENTRY_URL: https://de.sentry.io/
         run: |
           if [ -z "$SENTRY_AUTH_TOKEN" ]; then
             echo "SENTRY_AUTH_TOKEN is not set in this environment; source maps not uploaded"
