@@ -23,6 +23,8 @@ The four surfaces that matter most, in order: the OIDC exchange with Telia, the 
 - [ ] `pnpm-lock.yaml` committed and installs use the frozen lockfile.
 - [ ] `pnpm audit` blocks on high and critical.
 - [ ] A new dependency with a `postinstall` script is called out in the PR description.
+- [ ] Every dependency's licence is in `scripts/license-policy.json` or a named exception there (`pnpm check:licenses`); dependency review is green on the pull request.
+- [ ] Images deployed by hand are verified first, against the workflow and the ref and not only the repository: `gh attestation verify oci://ghcr.io/kuutti-fi/kuutti-api:<ref> --repo kuutti-fi/kuutti-app --signer-workflow kuutti-fi/kuutti-app/.github/workflows/build.yml --source-ref refs/heads/main` (`refs/tags/vX.Y.Z` for a release).
 - [ ] GitHub Actions are pinned to commit SHAs (repo settings enforce it) and run with `contents: read` unless a step needs more.
 
 ## Cryptographic failures

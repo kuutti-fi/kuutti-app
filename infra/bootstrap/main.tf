@@ -79,6 +79,26 @@ resource "aws_s3_bucket_lifecycle_configuration" "state" {
     }
   }
 
+  # Weekly GitHub exports (#16 D.2): a year of them is a long enough memory. A
+  # replaced version lives as long, so an overwrite never outlasts the original;
+  # more than one version under a date is a sign of tampering (infra/README.md).
+  rule {
+    id     = "expire-github-exports"
+    status = "Enabled"
+
+    filter {
+      prefix = "github-export/"
+    }
+
+    expiration {
+      days = 365
+    }
+
+    noncurrent_version_expiration {
+      noncurrent_days = 365
+    }
+  }
+
   # Nightly Dokploy backups from the API boxes (#7) land under this prefix;
   # ninety days is plenty for a rebuild and keeps the bucket bounded.
   rule {
@@ -326,6 +346,71 @@ data "aws_iam_policy_document" "ci_plan_preview_cleanup" {
       values   = ["${var.project}-staging"]
     }
   }
+}
+
+# The weekly export of what exists only on GitHub (#16 D.2, export.yml) has a
+# role of its own. The plan role is assumable from any pull request, and a
+# pull request that could write under github-export/ could replace the bundle
+# a recovery would restore from. This role trusts the main branch only, may put
+# objects under that one prefix and nothing else, and cannot delete them; the
+# bucket is versioned, and the lifecycle rule keeps replaced versions as long
+# as the exports themselves.
+data "aws_iam_policy_document" "github_assume_export" {
+  statement {
+    effect  = "Allow"
+    actions = ["sts:AssumeRoleWithWebIdentity"]
+
+    principals {
+      type        = "Federated"
+      identifiers = [aws_iam_openid_connect_provider.github.arn]
+    }
+
+    condition {
+      test     = "StringEquals"
+      variable = "token.actions.githubusercontent.com:aud"
+      values   = ["sts.amazonaws.com"]
+    }
+
+    condition {
+      test     = "StringEquals"
+      variable = "token.actions.githubusercontent.com:repository_id"
+      values   = [var.github_repository_id]
+    }
+
+    condition {
+      test     = "StringEquals"
+      variable = "token.actions.githubusercontent.com:repository_owner_id"
+      values   = [var.github_owner_id]
+    }
+
+    condition {
+      test     = "StringLike"
+      variable = "token.actions.githubusercontent.com:sub"
+      values   = [local.sub_main_branch]
+    }
+  }
+}
+
+data "aws_iam_policy_document" "ci_export" {
+  statement {
+    sid       = "GithubExportPrefixOnly"
+    effect    = "Allow"
+    actions   = ["s3:PutObject"]
+    resources = ["${aws_s3_bucket.state.arn}/github-export/*"]
+  }
+}
+
+resource "aws_iam_role" "ci_export" {
+  name                 = "${var.project}-ci-export"
+  path                 = local.iam_path
+  assume_role_policy   = data.aws_iam_policy_document.github_assume_export.json
+  max_session_duration = 3600
+}
+
+resource "aws_iam_role_policy" "ci_export" {
+  name   = "github-export"
+  role   = aws_iam_role.ci_export.id
+  policy = data.aws_iam_policy_document.ci_export.json
 }
 
 resource "aws_iam_role_policy" "ci_plan_preview_cleanup" {

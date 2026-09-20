@@ -72,3 +72,17 @@ resource "aws_route53_record" "null_mx" {
   ttl     = 3600
   records = ["0 ."]
 }
+
+# GitHub organisation domain verification (#16 B.1): the organisation shows
+# kuutti.app as verified once this record answers. An owner starts the
+# verification in the organisation's settings (Verified and approved domains),
+# which shows the record name and its code; both go into terraform.tfvars.
+# The code is a proof of control, not a secret. Empty until then: no record.
+resource "aws_route53_record" "github_org_verification" {
+  count   = var.github_domain_verification == null ? 0 : 1
+  zone_id = aws_route53_zone.main.zone_id
+  name    = "${var.github_domain_verification.name}.${var.domain}"
+  type    = "TXT"
+  ttl     = 300
+  records = [var.github_domain_verification.code]
+}

@@ -53,3 +53,17 @@ variable "monthly_budget_usd" {
   type        = number
   default     = 55
 }
+
+variable "github_domain_verification" {
+  description = "GitHub organisation domain verification (#16 B.1): the record name GitHub shows, without the domain (for example _gh-kuutti-fi-o), and its code. Null until an owner has started the verification."
+  type = object({
+    name = string
+    code = string
+  })
+  default = null
+
+  validation {
+    condition     = var.github_domain_verification == null || !strcontains(var.github_domain_verification.name, ".")
+    error_message = "name is the record's first label only (for example _gh-kuutti-fi-o): the domain is appended here."
+  }
+}

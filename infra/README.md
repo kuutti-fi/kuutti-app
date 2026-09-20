@@ -143,7 +143,74 @@ gh api -X PUT repos/kuutti-fi/kuutti-app/rulesets/23053522 --input - <<'JSON'
 JSON
 ```
 
-`i18n` joins the list when #13 lands. Then update `CLAUDE.md` (Git) and `CONTRIBUTING.md` through the first pull request.
+`i18n` (#13), `licenses` and `dependency review` (#16) join the list: add `{"context":"i18n"},{"context":"licenses"},{"context":"dependency review"}`. Then update `CLAUDE.md` (Git) and `CONTRIBUTING.md` through the first pull request.
+
+### Hardening settings (#16), maintainer only
+
+Settings of the repository and the organisation exist only on GitHub, so the commands live here; `export.yml` copies the results out weekly. An agent never runs these (CLAUDE.md, Git).
+
+**Tag ruleset.** A `v*` tag deploys production, so creating, moving and deleting one is for repository admins only:
+
+```sh
+gh api -X POST repos/kuutti-fi/kuutti-app/rulesets --input - <<'JSON'
+{"name":"Protect release tags","target":"tag","enforcement":"active",
+ "bypass_actors":[{"actor_id":5,"actor_type":"RepositoryRole","bypass_mode":"always"}],
+ "conditions":{"ref_name":{"include":["refs/tags/v*"],"exclude":[]}},
+ "rules":[{"type":"creation"},{"type":"update"},{"type":"deletion"}]}
+JSON
+```
+
+`actor_id` 5 is the built-in repository admin role. Check: a member with write access and no bypass is refused when pushing `v0.0.0-test`, with the rule named in the error.
+
+**Code scanning, secret scanning, Actions allow-list:**
+
+```sh
+R=repos/kuutti-fi/kuutti-app
+gh api -X PATCH "$R/code-scanning/default-setup" -f state=configured -f 'languages[]=actions' -f 'languages[]=javascript-typescript'
+gh api -X PATCH "$R" --input - <<'JSON'
+{"security_and_analysis":{"secret_scanning_non_provider_patterns":{"status":"enabled"},"secret_scanning_validity_checks":{"status":"enabled"}}}
+JSON
+gh api -X PUT "$R/actions/permissions/selected-actions" --input - <<'JSON'
+{"github_owned_allowed":true,"verified_allowed":false,"patterns_allowed":[
+ "docker/build-push-action@*","docker/setup-buildx-action@*","docker/metadata-action@*","docker/login-action@*",
+ "trufflesecurity/trufflehog@*","ossf/scorecard-action@*"]}
+JSON
+```
+
+"Any verified creator" is a far larger set than the six we run. `actions/*` and `github/*` (checkout, cache, setup-python, dependency-review, attest-build-provenance, codeql-action) stay allowed as GitHub-owned. After the change every workflow must still run green on `main`; a workflow that names an action outside the list fails at start-up with the action named.
+
+**Organisation** (an owner; `gh auth refresh -s admin:org` to read these through the API). Verify `kuutti.app`: Settings, Verified and approved domains, Add a domain; put the record name and code into `infra/bootstrap/terraform.tfvars` (`github_domain_verification`), `tofu apply` in `infra/bootstrap`, then press Verify. New-repository security defaults (Dependabot alerts, secret scanning, push protection) on. Third-party application access restricted, applications approved by an owner. Fine-grained personal access tokens require approval; classic tokens have no access to the organisation. Organisation Actions policy equal to the repository's. Review the six members: role in the organisation, role on this repository, nobody holding more than the work needs; write the result into #16.
+
+**Build provenance.** `build.yml` signs a provenance attestation for every image it pushes from `main`, and again under the tag when a release retags that digest (job `attest`). Before deploying an image by hand, in a recovery, check that it is one of ours, built by that workflow from that ref:
+
+```sh
+gh attestation verify oci://ghcr.io/kuutti-fi/kuutti-api:<sha> --repo kuutti-fi/kuutti-app \
+  --signer-workflow kuutti-fi/kuutti-app/.github/workflows/build.yml --source-ref refs/heads/main
+# a release: oci://...:vX.Y.Z with --source-ref refs/tags/vX.Y.Z
+```
+
+`--repo` alone is not enough: a pull request from this repository runs its own copy of `build.yml` and could push and attest an image under any tag. Its certificate carries `refs/pull/<n>/merge`, so `--source-ref` refuses it, and `--signer-workflow` refuses any other workflow file. Images built before #16 landed have no attestation.
+
+### Restoring from an export
+
+`export.yml` writes `s3://<state bucket>/github-export/<date>/` every Sunday: `issues.json`, `issue-comments.json`, `milestones.json`, `labels.json`, `rulesets.json`, `environments.json`, `environment-branch-policies.json`, `manifest.json` and `repository.bundle`. Its role (`kuutti-ci-export`) trusts the `main` branch only, can add objects under that prefix and nothing else, and cannot delete; the bucket is versioned and replaced versions are kept a year. After applying the bootstrap, once: `gh variable set AWS_EXPORT_ROLE_ARN --body "$(cd infra/bootstrap && tofu output -raw ci_export_role_arn)"`; the workflow stays dormant until then. To restore into a new or scratch repository (`NEW=owner/name`, signed in with `pnpm aws:login`):
+
+```sh
+B=$(cd infra/bootstrap && tofu output -raw state_bucket)
+# One version per object is the rule: a second version under a date means something overwrote the export.
+aws s3api list-object-versions --bucket "$B" --prefix "github-export/<date>/" --query 'Versions[].[Key,VersionId,IsLatest,LastModified]' --output table
+aws s3 cp "s3://$B/github-export/<date>/" export/ --recursive
+git clone export/repository.bundle restored && git -C restored remote set-url origin "https://github.com/$NEW.git" && git -C restored push --all origin && git -C restored push --tags origin
+jq -c '.[] | {name, color, description}' export/labels.json | while read -r l; do gh api -X POST "repos/$NEW/labels" --input - <<< "$l" || true; done
+jq -c '.[] | {title, state, description, due_on}' export/milestones.json | while read -r m; do gh api -X POST "repos/$NEW/milestones" --input - <<< "$m"; done
+# Issues in number order, so that #n stays #n while nothing else has been created. Pull requests are in
+# the list too (they have a pull_request key): create a placeholder issue for each to keep the numbering.
+jq -c 'sort_by(.number) | .[] | {title, body: ((.body // "") + "\n\n_Restored from the export; originally #\(.number) by @\(.user.login), \(.created_at)._"), labels: [.labels[].name]}' export/issues.json \
+  | while read -r i; do gh api -X POST "repos/$NEW/issues" --input - <<< "$i" --jq .number; sleep 1; done
+jq -c '.[] | del(.id, .source, .source_type, .node_id, ._links, .created_at, .updated_at, .current_user_can_bypass)' export/rulesets.json | while read -r r; do gh api -X POST "repos/$NEW/rulesets" --input - <<< "$r"; done
+```
+
+Comments (`issue-comments.json`, each with its `issue_url`) are posted the same way through `repos/$NEW/issues/<n>/comments`; closed issues are closed afterwards with `gh issue close`. Environment protection rules are re-created with the `PUT .../environments/<name>` commands of this file; `environments.json` is the record of what they were. Secrets are not in the export and never can be: they are re-entered from the password manager (`docs/runbooks/custody.md`).
 
 ## Verify
 

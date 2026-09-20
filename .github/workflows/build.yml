@@ -210,6 +210,36 @@ jobs:
           echo "digest=$digest" >> "$GITHUB_OUTPUT"
           echo "$IMAGE@$digest"
 
+  # A signed statement, kept by GitHub and next to the image, that this digest
+  # was built by this workflow from this ref (#16 A.7). BuildKit's provenance in
+  # the image job is unsigned metadata in the registry; this is what
+  # `gh attestation verify` checks before a manual recovery deploy
+  # (infra/README.md). A job of its own: the deploys do not wait for Sigstore,
+  # and the job that builds and runs a pull request's code holds neither the
+  # OIDC token nor the right to attest. It runs for main and for tags, so a
+  # release that retags main's digest is attested under its tag as well.
+  attest:
+    name: attest
+    needs: image
+    if: github.event_name == 'push' && needs.image.outputs.digest != ''
+    runs-on: ubuntu-24.04-arm
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: ${{ env.IMAGE }}
+          subject-digest: ${{ needs.image.outputs.digest }}
+          push-to-registry: true
+
   deploy-staging:
     name: deploy staging
     needs: image
