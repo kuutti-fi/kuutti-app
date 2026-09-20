@@ -1,8 +1,10 @@
 import type { HealthResponse } from "@kuutti/schema";
+import { Image } from "expo-image";
 import * as Updates from "expo-updates";
 import RotateCw from "lucide-react-native/icons/rotate-cw";
+import { cssInterop } from "nativewind";
 import { useCallback, useEffect, useState } from "react";
-import { ScrollView, View } from "react-native";
+import { Platform, ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -11,6 +13,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Text } from "@/components/ui/text";
 import { apiBaseUrl, fetchHealth } from "@/lib/api";
 import { useT } from "@/lib/locale";
+import { cn } from "@/lib/utils";
+import { DECORATIVE } from "@/theme/a11y";
 import { useHapticTap } from "@/theme/haptics";
 import { DevSettings } from "./DevSettings";
 import { SourceOffer } from "./SourceOffer";
@@ -22,6 +26,18 @@ type State =
 
 // The appearance sheet is for the team: every build except the store's.
 const SHOW_DEV_SETTINGS = Updates.channel !== "production";
+
+// The mark is black ink on transparency (assets/logo-mark.png, made by
+// scripts/logo from docs/design/logo), tinted with the foreground token so it
+// follows all four theme sets: the text colour class is handed over as
+// tintColor, the way Icon does it for lucide. That hand-over is native only;
+// on the web target the ink is inverted under the dark class instead, and both
+// dark foregrounds are near white.
+const Mark = cssInterop(Image, {
+  className: { target: "style", nativeStyleToProp: { color: "tintColor" } },
+});
+const MARK = require("../../../assets/logo-mark.png");
+const MARK_CLASS = cn("h-24 w-24 text-foreground", Platform.select({ web: "dark:invert" }));
 
 /**
  * M1 smoke screen: proves the app boots and reaches the API, and is the first
@@ -56,6 +72,7 @@ export function SmokeScreen() {
         </View>
       )}
       <ScrollView contentContainerClassName="flex-grow items-center justify-center gap-4 p-6">
+        <Mark source={MARK} contentFit="contain" className={MARK_CLASS} {...DECORATIVE} />
         <Text variant="h1" accessibilityRole="header">
           {t("smoke.title")}
         </Text>
