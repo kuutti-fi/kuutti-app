@@ -13,7 +13,7 @@ Build links land as comments on the pinned issue #17. `main` builds `development
 gh workflow run eas-build.yml -f profile=preview -f platform=android
 ```
 
-Each build counts against Expo's free tier (30 a month, at most 15 iOS).
+Each build counts against Expo's free tier (30 a month, at most 15 iOS). Until Sentry is set up, the `preview` profile skips Sentry's source-map upload (`SENTRY_DISABLE_AUTO_UPLOAD` in `eas.json`); `production` does not, on purpose: a release without readable stack traces should fail, not ship.
 
 ## Android (any phone, no cable needed)
 

@@ -46,6 +46,8 @@ cd apps/mobile && pnpm exec eas env:create --environment preview --name SENTRY_A
 
 Add the token to the password manager entry. Production's copies are part of #25.
 
+**Then remove the stopgap:** delete the line `"env": { "SENTRY_DISABLE_AUTO_UPLOAD": "true" }` from the `preview` profile in `apps/mobile/eas.json`. It exists because a release-style build runs Sentry's upload step, and without a token that step fails the whole build (`Auth token is required`, seen on the first `preview` build, 2026-09-20). With the token in the EAS environment, `preview` builds upload their source maps like production ones will.
+
 ## 5. Prove it
 
 1. Redeploy staging (any push to `main`, or re-run the latest Build workflow). `aws logs tail /kuutti/staging/api --since 10m | grep "error reporting"` must show `"reporting":true`.
