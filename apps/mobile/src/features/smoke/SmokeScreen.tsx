@@ -13,6 +13,7 @@ import { apiBaseUrl, fetchHealth } from "@/lib/api";
 import { useT } from "@/lib/locale";
 import { useHapticTap } from "@/theme/haptics";
 import { DevSettings } from "./DevSettings";
+import { SourceOffer } from "./SourceOffer";
 
 type State =
   | { kind: "loading" }
@@ -111,6 +112,10 @@ export function SmokeScreen() {
           <Icon as={RotateCw} />
           <Text>{t("smoke.retry")}</Text>
         </Button>
+
+        {state.kind === "ok" && (
+          <SourceOffer source={state.health.source} commit={state.health.commit} />
+        )}
       </ScrollView>
     </SafeAreaView>
   );

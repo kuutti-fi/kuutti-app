@@ -42,6 +42,7 @@ export function healthRoutes(deps: Deps) {
       version: info.version,
       commit: info.commit,
       builtAt: info.builtAt,
+      source: deps.config.SOURCE_URL,
       db,
       migrations,
     };

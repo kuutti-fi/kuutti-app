@@ -33,6 +33,11 @@
             "minLength": 1,
             "description": "ISO 8601 build timestamp."
           },
+          "source": {
+            "type": "string",
+            "format": "uri",
+            "description": "Where the source of the running service is published (AGPL-3.0 section 13), to be read with `commit`. A modified deployment points this at its own source."
+          },
           "db": {
             "type": "string",
             "enum": [
@@ -55,6 +60,7 @@
           "version",
           "commit",
           "builtAt",
+          "source",
           "db",
           "migrations"
         ]

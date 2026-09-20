@@ -67,6 +67,11 @@ export interface components {
             /** @description ISO 8601 build timestamp. */
             builtAt: string;
             /**
+             * Format: uri
+             * @description Where the source of the running service is published (AGPL-3.0 section 13), to be read with `commit`. A modified deployment points this at its own source.
+             */
+            source: string;
+            /**
              * @description SELECT 1 answered within 500 ms.
              * @enum {string}
              */
