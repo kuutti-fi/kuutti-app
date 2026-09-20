@@ -67,4 +67,4 @@ Add the token to the password manager entry. Production's copies are part of #25
 
 ## What Sentry must never receive
 
-Message text, hetu, email, `seeks`, request bodies, query strings, cookies, IP addresses. The code strips them and tests assert it; the organisation settings of step 1 are the second layer. If an event ever shows any of these, turn the DSN off first (`aws ssm delete-parameter --name /kuutti/<env>/sentry-dsn`, redeploy) and ask questions afterwards.
+Message text, hetu, email, `seeks`, request bodies, query strings, cookies, IP addresses, the SDK's per-installation user id (the app strips `user` in `beforeSend`, #28), and geolocation derived from the IP (an organisation-level Advanced Data Scrubbing rule removing `$user.geo`; Sentry infers it at ingest even when the IP is not stored). The code strips them and tests assert it; the organisation settings of step 1 are the second layer. If an event ever shows any of these, turn the DSN off first (`aws ssm delete-parameter --name /kuutti/<env>/sentry-dsn`, redeploy) and ask questions afterwards.
