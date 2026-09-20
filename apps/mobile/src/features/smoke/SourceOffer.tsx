@@ -7,13 +7,14 @@ import { useT } from "@/lib/locale";
 
 /**
  * The source-code offer of AGPL-3.0 section 13 (#16): the address the running
- * service names in /health, with its commit. It is shown to every user, in
- * every build, so it sits on the screen and not in the dev settings sheet; it
- * moves to the About screen when product screens arrive (M3). The address is
- * text as well as a link, so the offer stands where no browser opens. The
- * contract only admits https URLs.
+ * service names in /health. The commits of the API and of the app stand in
+ * the cards above it. It is shown to every user, in every build, so it sits
+ * on the screen and not in the dev settings sheet; it moves to the About
+ * screen when product screens arrive (M3). The address is text as well as a
+ * link, so the offer stands where no browser opens. The contract only admits
+ * https URLs.
  */
-export function SourceOffer({ source, commit }: { source: string; commit: string }) {
+export function SourceOffer({ source }: { source: string }) {
   const { t } = useT();
   return (
     <View className="w-full max-w-md items-center gap-2">
@@ -21,7 +22,7 @@ export function SourceOffer({ source, commit }: { source: string; commit: string
         {t("about.source.title")}
       </Text>
       <Text variant="muted" className="text-center">
-        {t("about.source.body", { commit })}
+        {t("about.source.body")}
       </Text>
       <Button
         variant="ghost"

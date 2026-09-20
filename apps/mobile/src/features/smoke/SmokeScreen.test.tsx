@@ -59,7 +59,9 @@ describe("SmokeScreen", () => {
     await renderWithTheme(<SmokeScreen />);
     const link = await screen.findByRole("link", { name: "Open the source code in the browser" });
     expect(screen.getByText("https://github.com/kuutti-fi/kuutti-app")).toBeTruthy();
-    expect(screen.getByText(/The API this app talks to runs commit abc1234/)).toBeTruthy();
+    expect(
+      screen.getByText("Kuutti is free software under the AGPL-3.0 licence, published here:"),
+    ).toBeTruthy();
     await fireEvent.press(link);
     expect(openURL).toHaveBeenCalledWith("https://github.com/kuutti-fi/kuutti-app");
   });

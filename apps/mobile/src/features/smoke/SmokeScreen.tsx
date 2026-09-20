@@ -167,9 +167,7 @@ export function SmokeScreen() {
           <Text>{t("smoke.retry")}</Text>
         </Button>
 
-        {state.kind === "ok" && (
-          <SourceOffer source={state.health.source} commit={state.health.commit} />
-        )}
+        {state.kind === "ok" && <SourceOffer source={state.health.source} />}
       </ScrollView>
     </SafeAreaView>
   );

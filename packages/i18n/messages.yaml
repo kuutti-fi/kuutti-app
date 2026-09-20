@@ -221,10 +221,10 @@ about.source.title:
   machine: { fi: true, sv: true }
 
 about.source.body:
-  en: "Kuutti is free software under the AGPL-3.0 licence. The API this app talks to runs commit {commit}; the source code of the API and of the app is published here:"
-  description: Source-code offer. {commit} is the API's short git hash (the app's own is in the App card) and is never inflected. The web address follows on its own line.
-  fi: "Kuutti on vapaa ohjelmisto, jonka lisenssi on AGPL-3.0. Rajapinta, johon tämä sovellus on yhteydessä, on rakennettu versiosta {commit}; rajapinnan ja sovelluksen lähdekoodi on julkaistu täällä:"
-  sv: "Kuutti är fri programvara under licensen AGPL-3.0. API:et som den här appen pratar med kör commit {commit}; källkoden för API:et och appen är publicerad här:"
+  en: "Kuutti is free software under the AGPL-3.0 licence, published here:"
+  description: Source-code offer (AGPL-3.0 section 13), the footer of the smoke screen. The commits of the API and of the app stand in their cards above; the web address follows on its own line.
+  fi: "Kuutti on vapaa ohjelmisto, jonka lisenssi on AGPL-3.0, ja se on julkaistu täällä:"
+  sv: "Kuutti är fri programvara under licensen AGPL-3.0, publicerad här:"
   machine: { fi: true, sv: true }
 
 about.source.open:
