@@ -61,7 +61,7 @@ describe("migrate", () => {
         const tables = await pool.query<{ table_name: string }>(
           "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' ORDER BY 1",
         );
-        expect(tables.rows.map((r) => r.table_name)).toEqual(["matching_config", "ponds"]);
+        expect(tables.rows.map((r) => r.table_name)).toEqual(["account", "identity", "matching_config", "ponds"]);
       } finally {
         await pool.end();
       }
