@@ -10,5 +10,6 @@ output "alarm_names" {
     aws_cloudwatch_metric_alarm.db_storage.alarm_name,
     aws_cloudwatch_metric_alarm.db_credits.alarm_name,
     aws_cloudwatch_metric_alarm.five_xx.alarm_name,
+    aws_cloudwatch_metric_alarm.api_unreachable.alarm_name,
   ]
 }

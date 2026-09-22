@@ -34,3 +34,8 @@ variable "five_xx_per_five_minutes" {
   type        = number
   default     = 5
 }
+
+variable "api_fqdn" {
+  description = "The API's public host name (api.staging.<domain> or api.<domain>): what the outside probe calls."
+  type        = string
+}

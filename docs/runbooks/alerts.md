@@ -11,7 +11,9 @@ Every alarm of `infra/modules/observability` (#11) publishes to the environment'
 | `kuutti-<env>-api-5xx` | Five or more 5xx answers in five minutes. The API is up (it logged them); something behind it is not, or a deploy shipped a bug. | Logs Insights saved query `kuutti-<env>/errors-by-route` · `aws logs tail /kuutti/<env>/api --since 30m --filter-pattern '{ $.status >= 500 }'` · Sentry, project `api`, filter by `requestId` from the log line |
 | `kuutti-estimated-charges`, budget 80 % / 100 % | Spend is past the budget (TD-4). | Cost Explorer by service · `aws ce get-cost-and-usage` for the month · check nothing runs outside eu-central-1 (`aws ec2 describe-instances --region <r>` per region) |
 
-Not covered (issue #11, out of scope): a stopped API container that logs nothing. The instance check catches a dead box, not a dead container; an outside probe of `/health` is the later, cheap addition.
+| `kuutti-<env>-api-unreachable` (us-east-1) | Route 53's checkers cannot get `"status":"ok"` from `https://api.<env>.<domain>/health` for two minutes: the container is stopped, Traefik is not routing, or the box is down. The one alarm that sees a dead container (#29). | `curl -sS https://api.<env>.kuutti.app/health` · `aws ssm start-session --target <id>` then `docker ps --filter name=api` and `docker logs --tail 100 <container>` · in Dokploy, redeploy the application; if the instance itself is down, the status-check row applies |
+
+The probe's alarm and topic live in us-east-1 because that is where Route 53 publishes health-check metrics; its email subscription is confirmed separately from the regional one. `aws cloudwatch describe-alarms --region us-east-1 --alarm-name-prefix kuutti-<env>` shows it.
 
 ## Logs
 
