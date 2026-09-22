@@ -49,8 +49,13 @@ module "compute" {
 # Alarms, the alert topic and the saved log queries (#11).
 module "observability" {
   source = "../../modules/observability"
+  providers = {
+    aws           = aws
+    aws.us_east_1 = aws.us_east_1
+  }
 
   environment    = local.environment
+  api_fqdn       = "api.staging.${var.domain}"
   instance_id    = module.compute.instance_id
   db_identifier  = module.data.identifier
   log_group_name = module.compute.log_group_name

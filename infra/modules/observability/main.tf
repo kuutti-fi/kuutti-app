@@ -9,9 +9,9 @@
 #
 # Cost: five standard alarms at 0.10 USD and one custom metric at 0.30 USD, so
 # about 0.80 USD a month per environment; query definitions and the topic are
-# free. Not here: uptime probing from outside the box (issue #11 keeps it out
-# of scope), so a stopped container that logs nothing is caught only when the
-# instance itself fails its status check.
+# free. The probe from outside the box, which is what catches a stopped
+# container, is probe.tf (#29): a Route 53 health check with its alarm and
+# topic in us-east-1.
 # ---------------------------------------------------------------------------
 
 data "aws_caller_identity" "current" {}

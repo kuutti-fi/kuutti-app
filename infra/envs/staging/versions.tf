@@ -29,3 +29,18 @@ provider "aws" {
     }
   }
 }
+
+# Route 53 health-check metrics and the alarm on them exist only in us-east-1
+# (modules/observability/probe.tf).
+provider "aws" {
+  alias  = "us_east_1"
+  region = "us-east-1"
+
+  default_tags {
+    tags = {
+      Project     = "kuutti"
+      ManagedBy   = "opentofu"
+      Environment = "staging"
+    }
+  }
+}
