@@ -85,7 +85,11 @@ export function SmokeScreen() {
         <Text variant="h1" accessibilityRole="header">
           {t("smoke.title")}
         </Text>
-        <Text variant="muted">{apiBaseUrl()}</Text>
+        {/* An address has no spaces to wrap at; centred with its own width it runs
+            off the screen at the largest font size (#31). Full width lets it break. */}
+        <Text variant="muted" className="w-full max-w-md text-center">
+          {apiBaseUrl()}
+        </Text>
 
         <Card className="w-full max-w-md">
           {state.kind === "loading" && (
