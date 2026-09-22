@@ -2,6 +2,7 @@ import { resolve } from "node:path";
 import { serve } from "@hono/node-server";
 import { createPool, migrate, seed } from "@kuutti/db";
 import { createApp } from "./app.ts";
+import { DiscoveryError, discoverProvider, isTeliaIssuer } from "./identity/index.ts";
 import { type Config, ConfigError, loadConfig } from "./lib/config.ts";
 import { createLogger } from "./lib/logger.ts";
 import { ensurePreviewDatabase } from "./lib/preview-database.ts";
@@ -37,6 +38,43 @@ async function main(): Promise<void> {
       requestId: "self-test",
     });
     logger.warn("Sentry self-test event sent; unset SENTRY_SELF_TEST and redeploy");
+  }
+
+  // Bank identification (#32): the broker's endpoints and keys come from its
+  // discovery document, read here so that a wrong issuer, a broker outage or a
+  // misconfigured environment is a failed boot on staging and production, and
+  // a warning locally, never a failed login later. Telia offers private_key_jwt
+  // only; a broker that does not is the wrong one.
+  if (config.OIDC_ISSUER) {
+    try {
+      const provider = await discoverProvider(config.OIDC_ISSUER);
+      const methods = provider.token_endpoint_auth_methods_supported ?? [];
+      if (isTeliaIssuer(config.OIDC_ISSUER) && !methods.includes("private_key_jwt")) {
+        throw new DiscoveryError(config.OIDC_ISSUER, "no private_key_jwt at the token endpoint");
+      }
+      logger.info(
+        {
+          issuer: provider.issuer,
+          authorizationEndpoint: provider.authorization_endpoint,
+          tokenEndpoint: provider.token_endpoint,
+          jwksUri: provider.jwks_uri,
+          acrValues: config.OIDC_ACR_VALUES ?? null,
+          keys: {
+            signing: config.TELIA_SIGNING_KEY !== undefined,
+            encryption: config.TELIA_ENCRYPTION_KEY !== undefined,
+          },
+        },
+        "bank identification",
+      );
+    } catch (error) {
+      if (config.APP_ENV === "development" || config.APP_ENV === "test") {
+        logger.warn({ err: error }, "bank identification unavailable; is the mock IdP running?");
+      } else {
+        throw error;
+      }
+    }
+  } else {
+    logger.warn("bank identification off: OIDC_ISSUER is not set");
   }
 
   // A pull-request preview serves from its own kuutti_pr_<n> on the staging
