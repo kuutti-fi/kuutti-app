@@ -1,7 +1,8 @@
-import { eq } from "drizzle-orm";
+import { createHash } from "node:crypto";
+import { and, eq, ne } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import type { Pool } from "./pool.ts";
-import { matchingConfig, ponds } from "./schema/index.ts";
+import { account, identity, matchingConfig, ponds } from "./schema/index.ts";
 
 /** Otaniemi first, then the city, then the region (project context §1). */
 export const SEED_PONDS = [
@@ -34,7 +35,27 @@ export const MATCHING_CONFIG_V1 = {
   silent_match_archive_days: 7, // TD-13
 } as const;
 
-export type SeedResult = { ponds: number; matchingConfig: number };
+/**
+ * Identities that make the re-registration rule reachable through the mock
+ * IdP (#34): one banned, one inside its deletion cooldown, one active with a
+ * live account. Their hetu_hmac is a hash of the label, not of any code, so
+ * no bank login ever maps to them: they exist for the seeded environments only.
+ */
+export const SEED_IDENTITIES = [
+  { label: "seed-banned", standing: "banned", cooldownDaysLeft: null, account: null },
+  { label: "seed-cooldown", standing: "ok", cooldownDaysLeft: 29, account: null },
+  {
+    label: "seed-active",
+    standing: "ok",
+    cooldownDaysLeft: null,
+    account: { birthYear: 1990, birthMonth: 1 },
+  },
+] as const;
+
+export const seedHetuHmac = (label: string): string =>
+  createHash("sha256").update(`kuutti seed identity: ${label}`).digest("hex");
+
+export type SeedResult = { ponds: number; matchingConfig: number; identities: number };
 
 /** Idempotent: upserts keyed by slug and by (key, version). Safe to run on every boot of a preview. */
 export async function seed(pool: Pool, createdBy = "seed"): Promise<SeedResult> {
@@ -73,5 +94,40 @@ export async function seed(pool: Pool, createdBy = "seed"): Promise<SeedResult> 
       });
   }
 
-  return { ponds: SEED_PONDS.length, matchingConfig: Object.keys(MATCHING_CONFIG_V1).length };
+  const now = Date.now();
+  for (const person of SEED_IDENTITIES) {
+    const reregisterAfter =
+      person.cooldownDaysLeft === null
+        ? null
+        : new Date(now + person.cooldownDaysLeft * 24 * 60 * 60 * 1000);
+    const [row] = await db
+      .insert(identity)
+      .values({ hetuHmac: seedHetuHmac(person.label), standing: person.standing, reregisterAfter })
+      .onConflictDoUpdate({
+        target: identity.hetuHmac,
+        set: { standing: person.standing, reregisterAfter },
+      })
+      .returning({ id: identity.id });
+    if (!row) throw new Error(`seed: identity ${person.label} not written`);
+    if (person.account) {
+      const live = await db
+        .select({ id: account.id })
+        .from(account)
+        .where(and(eq(account.identityId, row.id), ne(account.state, "deleted")));
+      if (live.length === 0) {
+        await db.insert(account).values({
+          identityId: row.id,
+          state: "active",
+          birthYear: person.account.birthYear,
+          birthMonth: person.account.birthMonth,
+        });
+      }
+    }
+  }
+
+  return {
+    ponds: SEED_PONDS.length,
+    matchingConfig: Object.keys(MATCHING_CONFIG_V1).length,
+    identities: SEED_IDENTITIES.length,
+  };
 }

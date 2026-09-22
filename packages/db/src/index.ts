@@ -17,4 +17,11 @@ export {
   type Queryable,
 } from "./pool.ts";
 export * from "./schema/index.ts";
-export { MATCHING_CONFIG_V1, SEED_PONDS, type SeedResult, seed } from "./seed.ts";
+export {
+  MATCHING_CONFIG_V1,
+  SEED_IDENTITIES,
+  SEED_PONDS,
+  type SeedResult,
+  seed,
+  seedHetuHmac,
+} from "./seed.ts";
