@@ -257,6 +257,55 @@ errors.internal_error:
   sv: Något gick fel hos oss.
   machine: { fi: true, sv: true }
 
+errors.auth_state_mismatch:
+  en: This login attempt is unknown or has expired. Start again.
+  description: Bank login, callback with an unknown or expired state.
+  fi: Tätä kirjautumisyritystä ei tunnisteta tai se on vanhentunut. Aloita alusta.
+  sv: Det här inloggningsförsöket är okänt eller har gått ut. Börja om.
+  machine: { fi: true, sv: true }
+
+errors.auth_code_used:
+  en: This code is unknown, already used or expired. Sign in again.
+  description: Bank login, the one-time code the app exchanges is not valid.
+  fi: Tämä koodi on tuntematon, jo käytetty tai vanhentunut. Kirjaudu uudelleen.
+  sv: Den här koden är okänd, redan använd eller har gått ut. Logga in igen.
+  machine: { fi: true, sv: true }
+
+errors.auth_under_18:
+  en: Kuutti is for adults only.
+  description: Bank login, the identification says the person is under 18. Nothing is stored.
+  fi: Kuutti on vain täysi-ikäisille.
+  sv: Kuutti är bara för vuxna.
+  machine: { fi: true, sv: true }
+
+errors.auth_provider_error:
+  en: The identification service did not complete the login. Try again in a moment.
+  description: Bank login, the broker returned an error or an unusable answer.
+  fi: Tunnistuspalvelu ei saanut kirjautumista valmiiksi. Yritä hetken kuluttua uudelleen.
+  sv: Identifieringstjänsten slutförde inte inloggningen. Försök igen om en stund.
+  machine: { fi: true, sv: true }
+
+errors.auth_banned:
+  en: This account has been closed and cannot be reopened.
+  description: Bank login refused because the identity is banned (TD-7). Says nothing about why.
+  fi: Tämä tili on suljettu, eikä sitä voi avata uudelleen.
+  sv: Det här kontot har stängts och kan inte öppnas igen.
+  machine: { fi: true, sv: true }
+
+errors.auth_suspended:
+  en: This account is suspended for now.
+  description: Bank login refused because the identity is suspended.
+  fi: Tämä tili on toistaiseksi jäädytetty.
+  sv: Det här kontot är tills vidare avstängt.
+  machine: { fi: true, sv: true }
+
+errors.auth_cooldown:
+  en: You deleted your account recently. A new one is possible after the waiting time.
+  description: Bank login refused because the identity is inside the deletion cooldown; the date is in the API log, not in the envelope.
+  fi: Poistit tilisi äskettäin. Uuden tilin voi luoda odotusajan jälkeen.
+  sv: Du raderade ditt konto nyligen. Ett nytt konto är möjligt efter väntetiden.
+  machine: { fi: true, sv: true }
+
 admin.title:
   en: Kuutti admin
   description: Moderation panel, page heading. The panel is English only (TD-17), so admin.* keys need no fi or sv.

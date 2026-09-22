@@ -65,6 +65,13 @@ export const ERROR_MESSAGE_KEYS = {
   payload_too_large: "errors.payload_too_large",
   http_error: "errors.http_error",
   internal_error: "errors.internal_error",
+  auth_state_mismatch: "errors.auth_state_mismatch",
+  auth_code_used: "errors.auth_code_used",
+  auth_under_18: "errors.auth_under_18",
+  auth_provider_error: "errors.auth_provider_error",
+  auth_banned: "errors.auth_banned",
+  auth_suspended: "errors.auth_suspended",
+  auth_cooldown: "errors.auth_cooldown",
 } as const satisfies Record<string, MessageKey>;
 
 export type LocalisedErrorCode = keyof typeof ERROR_MESSAGE_KEYS;

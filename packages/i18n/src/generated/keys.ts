@@ -8,6 +8,13 @@ export type MessageParams = {
   "admin.source.offer": { "commit": string };
   "admin.source.unavailable": Record<never, never>;
   "admin.title": Record<never, never>;
+  "errors.auth_banned": Record<never, never>;
+  "errors.auth_code_used": Record<never, never>;
+  "errors.auth_cooldown": Record<never, never>;
+  "errors.auth_provider_error": Record<never, never>;
+  "errors.auth_state_mismatch": Record<never, never>;
+  "errors.auth_suspended": Record<never, never>;
+  "errors.auth_under_18": Record<never, never>;
   "errors.http_error": Record<never, never>;
   "errors.internal_error": Record<never, never>;
   "errors.not_found": Record<never, never>;

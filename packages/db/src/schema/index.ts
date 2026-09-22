@@ -1,3 +1,4 @@
+export { type AuthRequest, authRequest, type NewAuthRequest } from "./auth-request.ts";
 export {
   type Account,
   type AccountState,
