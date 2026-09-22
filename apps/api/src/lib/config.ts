@@ -50,10 +50,25 @@ const Env = z.object({
     .default("false")
     .transform((v) => v === "true"),
 
-  // Bank identification (M2): the mock IdP locally, the Telia broker on staging and production.
-  OIDC_ISSUER: z.string().min(1).optional(),
+  // Bank identification (M2, docs/vendors/telia.md): the mock IdP locally, the
+  // Telia broker on staging and production. The issuer's endpoints and keys come
+  // from discovery at boot, never from configuration: Telia rotates its keys on
+  // its own schedule and nothing is pinned (rules/api.md).
+  OIDC_ISSUER: z.url().optional(),
   OIDC_CLIENT_ID: z.string().min(1).optional(),
-  OIDC_REDIRECT_URI: z.string().min(1).optional(),
+  OIDC_REDIRECT_URI: z.url().optional(),
+  // acr_values of the signed request object, mandatory under Traficom 213/2023 S:
+  // loa2 in production, loatest2 in Telia's pre-production; the mock accepts any.
+  OIDC_ACR_VALUES: z.string().min(1).optional(),
+  // How long the broker's JWKS may be reused before it is fetched again; a key
+  // that is not in the cached set triggers a fetch regardless (openid-client).
+  OIDC_JWKS_MAX_AGE_SECONDS: z.coerce.number().int().min(60).max(86_400).default(3600),
+  // Our two RSA private keys (PEM), from /kuutti/<env>/telia-signing-key and
+  // /kuutti/<env>/telia-encryption-key: the first signs request objects and
+  // client assertions, the second decrypts the ID token Telia encrypts to us.
+  // Optional until the exchange lands (#33); never logged, never in .env.example.
+  TELIA_SIGNING_KEY: z.string().min(1).optional(),
+  TELIA_ENCRYPTION_KEY: z.string().min(1).optional(),
   // Error reporting (#11). A DSN is public by design: /kuutti/<env>/sentry-dsn
   // is a plain String parameter. Unset means the SDK stays off.
   SENTRY_DSN: z.url().optional(),

@@ -9,8 +9,8 @@
           "requestParam": "scope",
           "match": "*",
           "claims": {
-            "acr": "urn:oid:1.2.246.517.3002.110.5",
-            "amr": ["bank"]
+            "acr": "http://ftn.ficora.fi/2017/loatest2",
+            "amr": ["https://tunnistus-pp.telia.fi/uas/saml2/names/ac/oidc.mock.1"]
           }
         }
       ]

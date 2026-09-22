@@ -12,12 +12,17 @@ const issuer = (process.argv[2] ?? process.env.OIDC_ISSUER ?? "http://127.0.0.1:
 );
 const clientId = "kuutti-local";
 const redirectUri = "http://localhost:3000/auth/callback";
+// The claim names the Telia broker uses for a Finnish user (docs/vendors/telia.md,
+// guide 2.6.4): the hetu and the date of birth under their OIDs, the FTN
+// pre-production acr, the bank as an amr URI. A generated test code, never a real one.
 const claims = {
-  personal_identity_code: "010190-123A",
-  name: "Testi Henkilö",
-  birthdate: "1990-01-01",
-  acr: "urn:oid:1.2.246.517.3002.110.5",
-  amr: ["bank"],
+  "urn:oid:1.2.246.21": "010190-123A",
+  "urn:oid:1.3.6.1.5.5.7.9.1": "1990-01-01",
+  "urn:oid:2.5.4.4": "Henkilö",
+  "urn:oid:1.2.246.575.1.14": "Testi",
+  "urn:oid:2.16.840.1.113730.3.1.241": "Testi Henkilö",
+  acr: "http://ftn.ficora.fi/2017/loatest2",
+  amr: ["https://tunnistus-pp.telia.fi/uas/saml2/names/ac/oidc.mock.1"],
 };
 
 function fail(msg: string): never {
