@@ -69,6 +69,13 @@ const Env = z.object({
   // Optional until the exchange lands (#33); never logged, never in .env.example.
   TELIA_SIGNING_KEY: z.string().min(1).optional(),
   TELIA_ENCRYPTION_KEY: z.string().min(1).optional(),
+  // The key of HMAC-SHA256(hetu), 32 bytes as hex, from /kuutti/<env>/hetu-hmac-key
+  // (rule 2: fetched at boot, never rotated, one offline copy). Without it the
+  // auth routes answer 503; the login never runs with a key from anywhere else.
+  HETU_HMAC_KEY: z
+    .string()
+    .regex(/^[0-9a-f]{64}$/i, "32 bytes as hex")
+    .optional(),
   // Error reporting (#11). A DSN is public by design: /kuutti/<env>/sentry-dsn
   // is a plain String parameter. Unset means the SDK stays off.
   SENTRY_DSN: z.url().optional(),
@@ -150,6 +157,16 @@ export function parseConfig(raw: Record<string, string | undefined>): Config {
           : "DATABASE_URL: set it, or set DB_HOST, DB_NAME, DB_USER and DB_APP_PASSWORD",
       ],
     );
+  }
+  // env.example's all-zero key is for the mock IdP only; a deployed process
+  // that sees it has an env file where SSM should be (rule 2).
+  if (
+    env.HETU_HMAC_KEY !== undefined &&
+    /^0+$/.test(env.HETU_HMAC_KEY) &&
+    env.APP_ENV !== "development" &&
+    env.APP_ENV !== "test"
+  ) {
+    throw new ConfigError([], ["HETU_HMAC_KEY: the development placeholder is not a key"]);
   }
   const rateLimit =
     env.RATE_LIMIT_PER_MINUTE ??

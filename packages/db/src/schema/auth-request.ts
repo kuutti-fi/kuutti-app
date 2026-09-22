@@ -1,0 +1,33 @@
+import { index, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { account } from "./identity.ts";
+
+/**
+ * One row per login attempt (#33): the state and nonce the API generated for
+ * the broker, the platform to send the person back to, and, once the bank
+ * has answered, the one-time code (hashed) the app exchanges. Rows live ten
+ * minutes; the sweep of expired rows lands with the nightly jobs. Nothing in
+ * them names the person.
+ */
+export const authRequest = pgTable(
+  "auth_request",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    state: text("state").notNull().unique(),
+    nonce: text("nonce").notNull(),
+    platform: text("platform").notNull(),
+    locale: text("locale"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    // Set by the callback: sha256 of the code, its own short lifetime, and the
+    // account it resolves to; used_at makes the code single-use.
+    codeHash: text("code_hash").unique(),
+    codeExpiresAt: timestamp("code_expires_at", { withTimezone: true }),
+    codeUsedAt: timestamp("code_used_at", { withTimezone: true }),
+    accountId: uuid("account_id").references(() => account.id),
+    outcome: text("outcome"),
+  },
+  (table) => [index("auth_request_expires_at_idx").on(table.expiresAt)],
+);
+
+export type AuthRequest = typeof authRequest.$inferSelect;
+export type NewAuthRequest = typeof authRequest.$inferInsert;

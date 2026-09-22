@@ -65,6 +65,21 @@ describe("parseConfig", () => {
     });
     expect([...named.corsAllowedOrigins]).toEqual(["https://admin.kuutti.fi", "https://kuutti.fi"]);
   });
+
+  it("takes the placeholder HMAC key in development only", () => {
+    const zeros = "0".repeat(64);
+    expect(parseConfig({ DATABASE_URL: "postgres://x", HETU_HMAC_KEY: zeros }).HETU_HMAC_KEY).toBe(
+      zeros,
+    );
+    for (const APP_ENV of ["staging", "production"]) {
+      expect(() =>
+        parseConfig({ DATABASE_URL: "postgres://x", APP_ENV, HETU_HMAC_KEY: zeros }),
+      ).toThrow(/placeholder/);
+    }
+    expect(() =>
+      parseConfig({ DATABASE_URL: "postgres://x", HETU_HMAC_KEY: "ab".repeat(31) }),
+    ).toThrow(/32 bytes/);
+  });
 });
 
 describe("parseConfig for a pull-request preview", () => {

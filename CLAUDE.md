@@ -45,6 +45,7 @@ Before pushing: typecheck, lint, and tests pass locally. Do not push red.
 - Every commit is signed off (`git commit -s`). Enable the hook once per clone: `git config core.hooksPath .githooks`. The DCO workflow fails on unsigned commits.
 - Linear history: no merge commits, no force-push, never touch the branch ruleset or repository settings.
 - Subject line imperative and under 72 characters; the body says what and why. Cite the TD or ADR when a change follows one.
+- Every pull request body carries `Refs #n` for each issue it works on, so GitHub links the issue and the pull request both ways. Never a closing keyword (`Closes`, `Fixes`, `Resolves`): an issue closes when the maintainer has tested it, not when a merge happens. The `issue-link` CI job refuses both a missing reference and a closing keyword.
 - Commit only what was asked. No generated artefacts, no unrelated lockfile churn, no `.env*`.
 
 ## Session handoff

@@ -50,6 +50,205 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/auth/start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Begin a bank login
+         * @description Opened in the system browser by the app. Redirects to the identification broker's bank chooser; the person comes back through /auth/callback and the app receives a one-time code by deep link.
+         */
+        get: {
+            parameters: {
+                query: {
+                    /** @description The app that will receive the one-time code by deep link. */
+                    platform: "ios" | "android";
+                    /** @description The language of the bank chooser (ui_locales); defaults to the request's. */
+                    locale?: "fi" | "sv" | "en";
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Redirect to the broker. */
+                302: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Validation failed. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description No identification broker is configured. */
+                503: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/callback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The broker's return
+         * @description The registered redirect URI. Exchanges the code with the broker, derives the identity, applies the re-registration rule and redirects to the app's deep link with a one-time code. Never called by the app itself.
+         */
+        get: {
+            parameters: {
+                query: {
+                    code?: string;
+                    state: string;
+                    error?: string;
+                    error_description?: string;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Redirect to kuutti://auth?code=… . */
+                302: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Unknown or expired login attempt (auth_state_mismatch). */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description Refused: auth_under_18, auth_banned, auth_suspended or auth_cooldown. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description The broker did not complete the login (auth_provider_error). */
+                502: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description No identification broker is configured. */
+                503: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/exchange": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Exchange the one-time code
+         * @description Single use, within 60 seconds of the callback. Sessions (#35) will answer with tokens.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["AuthExchangeRequest"];
+                };
+            };
+            responses: {
+                /** @description The account this login resolved to. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["AuthExchangeResponse"];
+                    };
+                };
+                /** @description Validation failed. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description Unknown, used or expired code (auth_code_used). */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -81,6 +280,29 @@ export interface components {
              * @enum {string}
              */
             migrations: "current" | "pending";
+        };
+        ErrorResponse: {
+            error: {
+                /** @description Stable machine-readable code. */
+                code: string;
+                /** @description Short, generic, safe to show. */
+                message: string;
+                /** @description Matches the API log line. */
+                requestId: string;
+            };
+        };
+        AuthExchangeResponse: {
+            /** Format: uuid */
+            accountId: string;
+            /**
+             * @description created: a fresh account (first login or after a cooldown); resumed: the live account.
+             * @enum {string}
+             */
+            outcome: "created" | "resumed";
+        };
+        AuthExchangeRequest: {
+            /** @description The one-time code the deep link carried. */
+            code: string;
         };
     };
     responses: never;

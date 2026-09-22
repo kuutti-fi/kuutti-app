@@ -63,6 +63,7 @@ describe("migrate", () => {
         );
         expect(tables.rows.map((r) => r.table_name)).toEqual([
           "account",
+          "auth_request",
           "identity",
           "matching_config",
           "ponds",

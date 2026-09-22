@@ -2,7 +2,14 @@ import { resolve } from "node:path";
 import { serve } from "@hono/node-server";
 import { createPool, migrate, seed } from "@kuutti/db";
 import { createApp } from "./app.ts";
-import { DiscoveryError, discoverProvider, isTeliaIssuer } from "./identity/index.ts";
+import {
+  brokerOptionsFromConfig,
+  DiscoveryError,
+  discoverProvider,
+  type IdentityBroker,
+  isTeliaIssuer,
+  OidcBroker,
+} from "./identity/index.ts";
 import { type Config, ConfigError, loadConfig } from "./lib/config.ts";
 import { createLogger } from "./lib/logger.ts";
 import { ensurePreviewDatabase } from "./lib/preview-database.ts";
@@ -45,6 +52,7 @@ async function main(): Promise<void> {
   // misconfigured environment is a failed boot on staging and production, and
   // a warning locally, never a failed login later. Telia offers private_key_jwt
   // only; a broker that does not is the wrong one.
+  let broker: IdentityBroker | undefined;
   if (config.OIDC_ISSUER) {
     try {
       const provider = await discoverProvider(config.OIDC_ISSUER);
@@ -66,6 +74,15 @@ async function main(): Promise<void> {
         },
         "bank identification",
       );
+      const options = brokerOptionsFromConfig(config);
+      if (options && config.HETU_HMAC_KEY) broker = await OidcBroker.create(options);
+      else {
+        // Half a configuration is a misnamed parameter, not a choice: a
+        // deployed box must not boot healthy with the login answering 503.
+        throw new Error(
+          "bank identification off: OIDC_CLIENT_ID, OIDC_REDIRECT_URI or HETU_HMAC_KEY is not set",
+        );
+      }
     } catch (error) {
       if (config.APP_ENV === "development" || config.APP_ENV === "test") {
         logger.warn({ err: error }, "bank identification unavailable; is the mock IdP running?");
@@ -123,6 +140,7 @@ async function main(): Promise<void> {
     logger,
     db: pool,
     ...(reporting ? { report: sentryReporter() } : {}),
+    ...(broker ? { broker } : {}),
   });
   const server = serve({ fetch: app.fetch, port: config.PORT, hostname: "0.0.0.0" }, (address) => {
     logger.info(

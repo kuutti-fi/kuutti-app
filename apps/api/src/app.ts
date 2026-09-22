@@ -4,6 +4,7 @@ import { bodyLimit } from "hono/body-limit";
 import { requestId } from "hono/request-id";
 import { secureHeaders } from "hono/secure-headers";
 import { healthRoutes } from "./health/index.ts";
+import { authRoutes, type IdentityBroker } from "./identity/index.ts";
 import type { Config } from "./lib/config.ts";
 import { corsAllowlist } from "./lib/cors.ts";
 import type { AppEnv } from "./lib/env.ts";
@@ -28,6 +29,8 @@ export type Deps = {
   db: Queryable;
   /** Unhandled-error sink (#11); absent in tests and local runs. */
   report?: ErrorReporter;
+  /** The bank-login broker (#33); absent when OIDC is not configured, and the auth routes answer 503. */
+  broker?: IdentityBroker;
 };
 
 const UNLIMITED_PATHS = new Set(["/health", "/openapi.json"]);
@@ -69,6 +72,7 @@ export function createApp(deps: Deps) {
   app.notFound(notFound<AppEnv>());
 
   app.route("/", healthRoutes(deps));
+  app.route("/", authRoutes(deps));
 
   if (deps.config.APP_ENV !== "production") {
     app.doc("/openapi.json", openApiDocument(deps.config.APP_VERSION));

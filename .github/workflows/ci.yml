@@ -217,6 +217,28 @@ jobs:
         if: failure()
         run: docker compose logs --no-color | tail -100
 
+  issue-link:
+    name: issue-link
+    # Every pull request names the issue it works on ("Refs #n"), so the issue's
+    # timeline links to the pull request and back. A closing keyword is refused:
+    # an issue closes when the maintainer has tested it, not when a merge
+    # happens (CLAUDE.md, Git). Dependabot has no issue and is exempt.
+    if: github.event_name == 'pull_request' && github.actor != 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    env:
+      PR_BODY: ${{ github.event.pull_request.body }}
+    steps:
+      - name: the body references an issue without closing it
+        run: |
+          if ! grep -Eq '#[0-9]+' <<< "$PR_BODY"; then
+            echo '::error::The pull request body names no issue. Add "Refs #<n>".'
+            exit 1
+          fi
+          if grep -Eiq '\b(close|closes|closed|fix|fixes|fixed|resolve|resolves|resolved)\b[[:space:]]*(kuutti-fi/kuutti-app)?#[0-9]+' <<< "$PR_BODY"; then
+            echo '::error::A closing keyword would close the issue on merge. Write "Refs #<n>"; the maintainer closes the issue after testing.'
+            exit 1
+          fi
+
   workflows:
     name: workflows
     # Static checks of the workflows themselves: zizmor for injection,

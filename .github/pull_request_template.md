@@ -1,4 +1,10 @@
-<!-- What changes and why. Link the issue: "Closes #n". -->
+<!-- What changes and why. -->
+
+Refs #
+
+<!-- One "Refs #n" per issue this touches: it links the issue and the pull request
+     both ways without closing anything. Never "Closes/Fixes/Resolves #n": the
+     maintainer closes an issue after testing it, not a merge (CI checks this). -->
 
 ## Checklist
 
