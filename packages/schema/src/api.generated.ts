@@ -135,48 +135,12 @@ export interface paths {
             };
             requestBody?: never;
             responses: {
-                /** @description Redirect to kuutti://auth?code=… . */
+                /** @description Redirect to kuutti://auth?code=… on success, or to kuutti://auth?error=<code> (auth_state_mismatch, auth_under_18, auth_banned, auth_suspended, auth_cooldown with &until=<date>, auth_provider_error) so the app shows the refusal. */
                 302: {
                     headers: {
                         [name: string]: unknown;
                     };
                     content?: never;
-                };
-                /** @description Unknown or expired login attempt (auth_state_mismatch). */
-                400: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["ErrorResponse"];
-                    };
-                };
-                /** @description Refused: auth_under_18, auth_banned, auth_suspended or auth_cooldown. */
-                403: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["ErrorResponse"];
-                    };
-                };
-                /** @description The broker did not complete the login (auth_provider_error). */
-                502: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["ErrorResponse"];
-                    };
-                };
-                /** @description No identification broker is configured. */
-                503: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["ErrorResponse"];
-                    };
                 };
             };
         };

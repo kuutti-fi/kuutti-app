@@ -49,8 +49,10 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const signIn = React.useCallback(async (code: string) => {
-    const { data, response } = await api.POST("/auth/exchange", { body: { code } });
-    if (!data) throw new ApiError(`sign-in answered ${response.status}`, response.status);
+    const { data, error, response } = await api.POST("/auth/exchange", { body: { code } });
+    if (!data) {
+      throw new ApiError(`sign-in answered ${response.status}`, response.status, error?.error.code);
+    }
     const { outcome, ...tokens } = AuthExchangeResponse.parse(data);
     await saveSession(tokens);
     setState({ status: "signed-in", sessionId: tokens.sessionId, outcome });

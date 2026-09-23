@@ -16,6 +16,7 @@ import { Icon } from "@/components/ui/icon";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Text } from "@/components/ui/text";
+import { useSession } from "@/features/identity";
 import {
   LOCALE_FLAGS,
   type LocalePreference,
@@ -64,6 +65,7 @@ export function DevSettings() {
   const { t } = useT();
   const theme = useTheme();
   const locale = useLocaleSettings();
+  const session = useSession();
   const [errorSent, setErrorSent] = useState(false);
   const languages: ReadonlyArray<{ value: LocalePreference; label: string; flag?: string }> = [
     { value: "system", label: t("settings.language.system") },
@@ -137,6 +139,35 @@ export function DevSettings() {
               />
             ))}
           </View>
+        </View>
+
+        {/* This device's session (#35): log out here, or everywhere, which is
+            the recovery for a lost phone. Errors are swallowed: the local
+            session is cleared either way, and the row expires on its own. */}
+        <View className="gap-2">
+          <Text variant="small">{t("settings.session.label")}</Text>
+          {session.status === "signed-in" ? (
+            <View className="flex-row flex-wrap gap-2">
+              <Button
+                variant="outline"
+                className="grow"
+                accessibilityLabel={t("settings.logout")}
+                onPress={() => void session.signOut()}
+              >
+                <Text>{t("settings.logout")}</Text>
+              </Button>
+              <Button
+                variant="destructive"
+                className="grow"
+                accessibilityLabel={t("settings.logoutAll")}
+                onPress={() => void session.signOutEverywhere().catch(() => undefined)}
+              >
+                <Text>{t("settings.logoutAll")}</Text>
+              </Button>
+            </View>
+          ) : (
+            <Text variant="muted">{t("settings.session.none")}</Text>
+          )}
         </View>
 
         {/* Proves error reporting end to end (#11): a real JS error with a stack

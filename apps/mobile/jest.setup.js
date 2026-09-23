@@ -26,3 +26,10 @@ jest.mock("@sentry/react-native", () => ({
   wrap: (component) => component,
   captureException: jest.fn(),
 }));
+
+// Expo Router's navigation is native-backed; tests see one router object they
+// can assert on (src/features/identity/SignInScreen.test.tsx) and no params.
+jest.mock("expo-router", () => {
+  const router = { push: jest.fn(), replace: jest.fn(), back: jest.fn() };
+  return { __router: router, useRouter: () => router, useLocalSearchParams: () => ({}) };
+});

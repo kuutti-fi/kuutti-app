@@ -9,6 +9,8 @@ export class ApiError extends Error {
   constructor(
     message: string,
     readonly status?: number,
+    /** The envelope's stable code, when the API answered with one. */
+    readonly code?: string,
   ) {
     super(message);
     this.name = "ApiError";

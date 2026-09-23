@@ -19,3 +19,16 @@ export function hashOneTimeCode(code: string): string {
 export function appReturnUrl(code: string): string {
   return `kuutti://auth?code=${encodeURIComponent(code)}`;
 }
+
+/**
+ * Where a refused login sends the browser: back into the app with the error's
+ * code, which the app has a text for, rather than a JSON envelope left in a
+ * browser tab. The code is one of ours (never text from the request); the
+ * cooldown's date rides along for the message.
+ */
+export function appErrorUrl(code: string, until?: string): string {
+  const url = new URL("kuutti://auth");
+  url.searchParams.set("error", code);
+  if (until) url.searchParams.set("until", until);
+  return url.toString();
+}

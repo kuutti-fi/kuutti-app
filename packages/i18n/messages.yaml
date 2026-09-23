@@ -320,6 +320,188 @@ errors.session_revoked:
   sv: Du har loggats ut från den här enheten. Logga in med din bank för att fortsätta.
   machine: { fi: true, sv: true }
 
+signIn.title:
+  en: Sign in
+  description: Sign-in screen heading.
+  fi: Kirjaudu sisään
+  sv: Logga in
+  machine: { fi: true, sv: true }
+
+signIn.explain:
+  en: Kuutti verifies every account through a Finnish bank. Your bank confirms who you are; Kuutti keeps only your year and month of birth and a code that cannot be turned back into you.
+  description: Sign-in screen, the paragraph above the button; what the bank login is for and what is kept (rules 1 and 3).
+  fi: Kuutti varmentaa jokaisen tilin suomalaisen pankin kautta. Pankkisi vahvistaa, kuka olet; Kuutti säilyttää vain syntymävuotesi ja -kuukautesi sekä koodin, josta sinua ei voi tunnistaa.
+  sv: Kuutti verifierar varje konto via en finländsk bank. Din bank bekräftar vem du är; Kuutti sparar bara ditt födelseår och din födelsemånad samt en kod som inte kan spåras tillbaka till dig.
+  machine: { fi: true, sv: true }
+
+signIn.button:
+  en: Sign in with your bank
+  description: Sign-in screen, the button that opens the bank chooser in the system browser.
+  fi: Kirjaudu pankkitunnuksilla
+  sv: Logga in med din bank
+  machine: { fi: true, sv: true }
+
+signIn.opening:
+  en: Your bank opens in the browser. Come back here when it is done.
+  description: Sign-in screen, shown after the button was pressed and the browser opened.
+  fi: Pankkisi avautuu selaimessa. Palaa tänne, kun olet valmis.
+  sv: Din bank öppnas i webbläsaren. Kom tillbaka hit när det är klart.
+  machine: { fi: true, sv: true }
+
+signIn.exchanging:
+  en: Signing you in…
+  description: Sign-in screen, while the one-time code from the deep link is exchanged for a session.
+  fi: Kirjaudutaan sisään…
+  sv: Loggar in dig…
+  machine: { fi: true, sv: true }
+
+signIn.done:
+  en: You are signed in.
+  description: Sign-in screen, after the exchange succeeded.
+  fi: Olet kirjautunut sisään.
+  sv: Du är inloggad.
+  machine: { fi: true, sv: true }
+
+signIn.error.title:
+  en: Sign-in did not complete
+  description: Sign-in screen, heading of the error state (the text below says why).
+  fi: Kirjautuminen ei onnistunut
+  sv: Inloggningen slutfördes inte
+  machine: { fi: true, sv: true }
+
+signIn.error.auth_code_used:
+  en: That sign-in link was already used or has expired. Start again.
+  description: Sign-in screen, the deep link's code was used, unknown or older than a minute.
+  fi: Tämä kirjautumislinkki on jo käytetty tai vanhentunut. Aloita alusta.
+  sv: Den här inloggningslänken har redan använts eller gått ut. Börja om.
+  machine: { fi: true, sv: true }
+
+signIn.error.auth_state_mismatch:
+  en: That sign-in attempt is unknown or has expired. Start again.
+  description: Sign-in screen, the bank came back for an attempt the API does not know (older than ten minutes, or forged).
+  fi: Tätä kirjautumisyritystä ei tunnisteta tai se on vanhentunut. Aloita alusta.
+  sv: Det här inloggningsförsöket är okänt eller har gått ut. Börja om.
+  machine: { fi: true, sv: true }
+
+signIn.error.auth_under_18:
+  en: Kuutti is for adults. You are welcome once you are 18.
+  description: Sign-in screen, the bank says the person is under 18 (nothing was stored).
+  fi: Kuutti on aikuisille. Olet tervetullut täytettyäsi 18 vuotta.
+  sv: Kuutti är för vuxna. Du är välkommen när du fyllt 18.
+  machine: { fi: true, sv: true }
+
+signIn.error.auth_banned:
+  en: This person may not use Kuutti.
+  description: Sign-in screen, the identity is banned (TD-7).
+  fi: Tämä henkilö ei voi käyttää Kuuttia.
+  sv: Den här personen får inte använda Kuutti.
+  machine: { fi: true, sv: true }
+
+signIn.error.auth_suspended:
+  en: This account is suspended for now.
+  description: Sign-in screen, the identity is suspended.
+  fi: Tämä tili on toistaiseksi jäädytetty.
+  sv: Det här kontot är tills vidare avstängt.
+  machine: { fi: true, sv: true }
+
+signIn.error.auth_cooldown:
+  en: "You deleted your account recently. The earliest day for a new one: {date}"
+  description: Sign-in screen, inside the deletion cooldown; {date} is the day the cooldown ends, formatted for the locale (after a colon, so no language inflects it).
+  fi: "Poistit tilisi äskettäin. Uuden tilin voi luoda aikaisintaan: {date}"
+  sv: "Du raderade ditt konto nyligen. Tidigaste dagen för ett nytt konto: {date}"
+  machine: { fi: true, sv: true }
+
+signIn.error.auth_provider_error:
+  en: The identification service did not complete the sign-in. Try again in a moment.
+  description: Sign-in screen, the broker (Telia) failed or is not configured.
+  fi: Tunnistuspalvelu ei saanut kirjautumista valmiiksi. Yritä hetken kuluttua uudelleen.
+  sv: Identifieringstjänsten slutförde inte inloggningen. Försök igen om en stund.
+  machine: { fi: true, sv: true }
+
+signIn.error.unexpected_link:
+  en: This sign-in link was not requested from this phone. Start the sign-in here, with the button.
+  description: Sign-in screen, a deep link with a code arrived although this device did not open the bank login (or is already signed in); the link is refused.
+  fi: Tätä kirjautumislinkkiä ei pyydetty tältä puhelimelta. Aloita kirjautuminen tästä painikkeella.
+  sv: Den här inloggningslänken begärdes inte från den här telefonen. Starta inloggningen här med knappen.
+  machine: { fi: true, sv: true }
+
+signIn.error.generic:
+  en: Something went wrong. Try again.
+  description: Sign-in screen, any other failure (network, an unexpected answer).
+  fi: Jokin meni pieleen. Yritä uudelleen.
+  sv: Något gick fel. Försök igen.
+  machine: { fi: true, sv: true }
+
+signIn.tryAgain:
+  en: Try again
+  description: Sign-in screen, the button in the error state; returns to the start.
+  fi: Yritä uudelleen
+  sv: Försök igen
+  machine: { fi: true, sv: true }
+
+smoke.session.title:
+  en: Session
+  description: Smoke screen, title of the card that shows whether this device is signed in.
+  fi: Istunto
+  sv: Session
+  machine: { fi: true, sv: true }
+
+smoke.session.label:
+  en: Session status
+  description: Screen-reader label of the smoke screen's session card.
+  fi: Istunnon tila
+  sv: Sessionens status
+  machine: { fi: true, sv: true }
+
+smoke.session.signedIn:
+  en: Signed in · session {session}
+  description: Smoke screen, the device holds a session; {session} is the first characters of its id (a device id, never the person).
+  fi: Kirjautunut · istunto {session}
+  sv: Inloggad · session {session}
+  machine: { fi: true, sv: true }
+
+smoke.session.signedOut:
+  en: Not signed in
+  description: Smoke screen, the device holds no session.
+  fi: Ei kirjautunut
+  sv: Inte inloggad
+  machine: { fi: true, sv: true }
+
+smoke.session.signIn:
+  en: Sign in
+  description: Smoke screen, the button that opens the sign-in screen.
+  fi: Kirjaudu sisään
+  sv: Logga in
+  machine: { fi: true, sv: true }
+
+settings.session.label:
+  en: This device
+  description: Settings sheet, heading of the sign-out controls.
+  fi: Tämä laite
+  sv: Den här enheten
+  machine: { fi: true, sv: true }
+
+settings.session.none:
+  en: No session on this device.
+  description: Settings sheet, shown instead of the sign-out controls when the device is not signed in.
+  fi: Tällä laitteella ei ole istuntoa.
+  sv: Ingen session på den här enheten.
+  machine: { fi: true, sv: true }
+
+settings.logout:
+  en: Log out
+  description: Settings sheet, ends this device's session.
+  fi: Kirjaudu ulos
+  sv: Logga ut
+  machine: { fi: true, sv: true }
+
+settings.logoutAll:
+  en: Log out everywhere
+  description: Settings sheet, ends every device's session; the recovery for a lost phone.
+  fi: Kirjaudu ulos kaikkialta
+  sv: Logga ut överallt
+  machine: { fi: true, sv: true }
+
 admin.title:
   en: Kuutti admin
   description: Moderation panel, page heading. The panel is English only (TD-17), so admin.* keys need no fi or sv.

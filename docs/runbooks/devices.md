@@ -54,3 +54,17 @@ Phone and Mac on the same network. `pnpm env:up` on the Mac; open the `developme
 ## Simulators and emulators
 
 `pnpm env:up`, then `npx expo run:ios` or `npx expo run:android` in `apps/mobile` once per native change (agent shells need `export LANG=en_US.UTF-8` for CocoaPods). Screenshots and video without touching the window: `xcrun simctl io booted screenshot shot.png`, `xcrun simctl io booted recordVideo demo.mp4` (Ctrl+C stops), `adb exec-out screencap -p > shot.png`, `adb shell screenrecord /sdcard/demo.mp4`. Appearance, contrast, font size and language: `docs/design/README.md` has the commands.
+
+## Verified links (App Links and Universal Links, #36)
+
+The bank login returns to the app by deep link. Today that link is the custom scheme `kuutti://auth?code=…`, which both platforms open in the app without a dialog (iOS through the scheme, Android through the intent filter Expo derives from `scheme`). The https form `https://api.<env>.kuutti.app/auth/return?code=…` needs verified links, which are a native change (`ios.associatedDomains` and `android.intentFilters` with `autoVerify` in `app.json`): batch it with the next fingerprint move. The API already serves the two files from configuration:
+
+- `https://api.<env>.kuutti.app/.well-known/assetlinks.json` from `ANDROID_CERT_FINGERPRINTS`. The fingerprint is the release keystore's SHA-256: `eas credentials --platform android` prints it under the keystore. List the `development` and the `preview` build's fingerprints while they differ, comma separated.
+- `https://api.<env>.kuutti.app/.well-known/apple-app-site-association` from `IOS_TEAM_ID` (`HM4J7X495K`).
+
+Both are SSM parameters of those names under `/kuutti/<env>/` (plain String; the values are public). Until they are set the files answer 404 and nothing else changes.
+
+Checking, once the native batch is installed:
+
+- Android: `adb shell pm get-app-links fi.kuutti.app` shows `verified` for the API's host; `adb shell pm verify-app-links --re-verify fi.kuutti.app` asks again. Google's checker: `https://digitalassetlinks.googleapis.com/v1/statements:list?source.web.site=https://api.staging.kuutti.app&relation=delegate_permission/common.handle_all_urls`.
+- iOS: Apple's CDN fetches the AASA on install; `curl -s https://app-site-association.cdn-apple.com/a/v1/api.staging.kuutti.app` shows what Apple has. Settings → Developer → Universal Links → Diagnostics names the reason when a link does not open.

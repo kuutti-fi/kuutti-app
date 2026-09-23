@@ -1,6 +1,7 @@
 import type { HealthResponse } from "@kuutti/schema";
 import Constants from "expo-constants";
 import { Image } from "expo-image";
+import { useRouter } from "expo-router";
 import * as Updates from "expo-updates";
 import RotateCw from "lucide-react-native/icons/rotate-cw";
 import { cssInterop } from "nativewind";
@@ -12,6 +13,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Icon } from "@/components/ui/icon";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Text } from "@/components/ui/text";
+import { useSession } from "@/features/identity";
 import { apiBaseUrl, fetchHealth } from "@/lib/api";
 import { useT } from "@/lib/locale";
 import { cn } from "@/lib/utils";
@@ -50,6 +52,8 @@ export function SmokeScreen() {
   const [state, setState] = useState<State>({ kind: "loading" });
   const tap = useHapticTap();
   const { t } = useT();
+  const session = useSession();
+  const router = useRouter();
 
   // The app's own git commit, as opposed to the API's: app.config.ts stamped
   // it into the config when this JavaScript was exported or built.
@@ -136,6 +140,37 @@ export function SmokeScreen() {
               <CardTitle>{t("smoke.app.title")}</CardTitle>
               <CardDescription>{appCommitLine}</CardDescription>
             </CardHeader>
+          </View>
+        </Card>
+
+        {/* Whether this device holds a session (#35, #36): the session's id
+            names the device, never the person. */}
+        <Card className="w-full max-w-md">
+          <View accessibilityLabel={t("smoke.session.label")} className="gap-6">
+            <CardHeader>
+              <CardTitle>{t("smoke.session.title")}</CardTitle>
+              <CardDescription>
+                {session.status === "signed-in"
+                  ? t("smoke.session.signedIn", { session: session.sessionId.slice(0, 8) })
+                  : session.status === "loading"
+                    ? t("smoke.loading")
+                    : t("smoke.session.signedOut")}
+              </CardDescription>
+            </CardHeader>
+            {session.status === "signed-out" && (
+              <CardContent>
+                <Button
+                  variant="outline"
+                  accessibilityLabel={t("smoke.session.signIn")}
+                  onPress={() => {
+                    tap();
+                    router.push("/sign-in");
+                  }}
+                >
+                  <Text>{t("smoke.session.signIn")}</Text>
+                </Button>
+              </CardContent>
+            )}
           </View>
         </Card>
 

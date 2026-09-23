@@ -14,6 +14,8 @@ import type { Deps } from "../app.ts";
 import { callerOf } from "../lib/auth-middleware.ts";
 import type { AppEnv } from "../lib/env.ts";
 import { AppError } from "../lib/errors.ts";
+import { isLocalisedErrorCode } from "../lib/i18n.ts";
+import { appErrorUrl } from "./codes.ts";
 import { hmacKeyFromHex } from "./hetu.ts";
 import { completeLogin, exchangeCode, type LoginDeps, startLogin } from "./login.ts";
 import {
@@ -31,6 +33,12 @@ const errorContent = (description: string) => ({
 });
 const json = <T>(schema: T) => ({ content: { "application/json": { schema } } });
 const bearer = { security: [{ session: [] }] };
+
+/** The cooldown's date, when the refusal carries one. */
+function untilOf(detail: unknown): string | undefined {
+  const until = (detail as { until?: unknown } | undefined)?.until;
+  return typeof until === "string" ? until : undefined;
+}
 
 /** What the device is called in its own list: the platform plus a bounded user agent. */
 const USER_AGENT_MAX = 200;
@@ -57,11 +65,10 @@ const callbackRoute = createRoute({
     "The registered redirect URI. Exchanges the code with the broker, derives the identity, applies the re-registration rule and redirects to the app's deep link with a one-time code. Never called by the app itself.",
   request: { query: AuthCallbackQuery },
   responses: {
-    302: { description: "Redirect to kuutti://auth?code=… ." },
-    400: errorContent("Unknown or expired login attempt (auth_state_mismatch)."),
-    403: errorContent("Refused: auth_under_18, auth_banned, auth_suspended or auth_cooldown."),
-    502: errorContent("The broker did not complete the login (auth_provider_error)."),
-    503: errorContent("No identification broker is configured."),
+    302: {
+      description:
+        "Redirect to kuutti://auth?code=… on success, or to kuutti://auth?error=<code> (auth_state_mismatch, auth_under_18, auth_banned, auth_suspended, auth_cooldown with &until=<date>, auth_provider_error) so the app shows the refusal.",
+    },
   },
 });
 
@@ -151,11 +158,24 @@ export function authRoutes(deps: Deps, requireSession: MiddlewareHandler<AppEnv>
 
   app.openapi(callbackRoute, async (c) => {
     const query = c.req.valid("query");
-    const target = await completeLogin(loginDeps(), {
-      callbackUrl: new URL(c.req.url),
-      query,
-    });
-    return c.redirect(target.toString(), 302);
+    try {
+      const target = await completeLogin(loginDeps(), {
+        callbackUrl: new URL(c.req.url),
+        query,
+      });
+      return c.redirect(target.toString(), 302);
+    } catch (error) {
+      // The browser is on its way back to the app either way: a refusal lands
+      // there as a code the app has a text for, not as a JSON page in a tab.
+      if (error instanceof AppError && isLocalisedErrorCode(error.code)) {
+        deps.logger.warn(
+          { requestId: c.get("requestId"), code: error.code, detail: error.detail },
+          error.message,
+        );
+        return c.redirect(appErrorUrl(error.code, untilOf(error.detail)), 302);
+      }
+      throw error;
+    }
   });
 
   app.openapi(exchangeRoute, async (c) => {

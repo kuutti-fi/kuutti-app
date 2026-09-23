@@ -69,6 +69,21 @@ const Env = z.object({
   // Optional until the exchange lands (#33); never logged, never in .env.example.
   TELIA_SIGNING_KEY: z.string().min(1).optional(),
   TELIA_ENCRYPTION_KEY: z.string().min(1).optional(),
+  // Verified links (#36): the release keystore's SHA-256 fingerprints (comma
+  // separated, colon form as `eas credentials` prints them) for
+  // /.well-known/assetlinks.json, and the Apple team id for the AASA. Public
+  // values; unset means the file answers 404 and the return uses the scheme.
+  ANDROID_CERT_FINGERPRINTS: z
+    .string()
+    .regex(
+      /^[0-9A-Fa-f]{2}(:[0-9A-Fa-f]{2}){31}(\s*,\s*[0-9A-Fa-f]{2}(:[0-9A-Fa-f]{2}){31})*$/,
+      "comma-separated SHA-256 fingerprints with colons",
+    )
+    .optional(),
+  IOS_TEAM_ID: z
+    .string()
+    .regex(/^[A-Z0-9]{10}$/, "ten characters")
+    .optional(),
   // The key of HMAC-SHA256(hetu), 32 bytes as hex, from /kuutti/<env>/hetu-hmac-key
   // (rule 2: fetched at boot, never rotated, one offline copy). Without it the
   // auth routes answer 503; the login never runs with a key from anywhere else.

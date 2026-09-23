@@ -4,7 +4,12 @@ import { bodyLimit } from "hono/body-limit";
 import { requestId } from "hono/request-id";
 import { secureHeaders } from "hono/secure-headers";
 import { healthRoutes } from "./health/index.ts";
-import { authRoutes, type IdentityBroker, sessionStore } from "./identity/index.ts";
+import {
+  authRoutes,
+  type IdentityBroker,
+  sessionStore,
+  wellKnownRoutes,
+} from "./identity/index.ts";
 import { requireSession } from "./lib/auth-middleware.ts";
 import type { Config } from "./lib/config.ts";
 import { corsAllowlist } from "./lib/cors.ts";
@@ -44,6 +49,8 @@ export const PUBLIC_ROUTES = new Set([
   "GET /auth/callback",
   "POST /auth/exchange",
   "POST /auth/refresh",
+  "GET /.well-known/assetlinks.json",
+  "GET /.well-known/apple-app-site-association",
 ]);
 
 export function createApp(deps: Deps) {
@@ -88,6 +95,7 @@ export function createApp(deps: Deps) {
 
   app.route("/", healthRoutes(deps));
   app.route("/", authRoutes(deps, guard));
+  app.route("/", wellKnownRoutes(deps));
 
   // The bearer scheme the session routes declare (#35); the tokens themselves
   // are opaque, so the scheme is all the contract says about them.
