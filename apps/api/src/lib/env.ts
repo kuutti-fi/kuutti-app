@@ -2,7 +2,18 @@ import type { Locale, TFunction } from "@kuutti/i18n";
 import type { RequestIdVariables } from "hono/request-id";
 
 /**
- * Hono environment shared by every route and middleware: the request id, and
- * the request's locale with a t() fixed to it (#13).
+ * Hono environment shared by every route and middleware: the request id, the
+ * request's locale with a t() fixed to it (#13), and, after the session
+ * middleware, the caller's account and session (#35, rule 6).
  */
-export type AppEnv = { Variables: RequestIdVariables & { locale: Locale; t: TFunction } };
+export type AppEnv = {
+  Variables: RequestIdVariables & {
+    locale: Locale;
+    t: TFunction;
+    accountId?: string;
+    sessionId?: string;
+  };
+};
+
+/** The caller the session middleware established; a route reads it through this, never a header. */
+export type Caller = { accountId: string; sessionId: string };

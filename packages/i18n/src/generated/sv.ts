@@ -15,6 +15,8 @@ export const sv: Readonly<Record<string, string>> = {
   "errors.not_found": "Hittades inte.",
   "errors.payload_too_large": "Begäran är för stor.",
   "errors.rate_limited": "För många förfrågningar. Försök igen om {seconds, plural, one {# sekund} other {# sekunder}}.",
+  "errors.session_expired": "Din session har gått ut. Fortsätt; den förnyas av sig själv.",
+  "errors.session_revoked": "Du har loggats ut från den här enheten. Logga in med din bank för att fortsätta.",
   "errors.unauthenticated": "Logga in för att fortsätta.",
   "errors.validation_failed": "Begäran var inte giltig.",
   "settings.close": "Stäng inställningarna",

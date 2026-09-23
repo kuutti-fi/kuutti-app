@@ -9,7 +9,9 @@ import {
   type IdentityBroker,
   isTeliaIssuer,
   OidcBroker,
+  sweepSessions,
 } from "./identity/index.ts";
+import { scheduleNightly } from "./jobs/nightly.ts";
 import { type Config, ConfigError, loadConfig } from "./lib/config.ts";
 import { createLogger } from "./lib/logger.ts";
 import { ensurePreviewDatabase } from "./lib/preview-database.ts";
@@ -142,6 +144,13 @@ async function main(): Promise<void> {
     ...(reporting ? { report: sentryReporter() } : {}),
     ...(broker ? { broker } : {}),
   });
+  // Nightly housekeeping inside the process (rules/api.md): ended sessions and
+  // stale login attempts (#35). The round builder and the research export join here.
+  scheduleNightly(
+    [{ name: "sweep-sessions", run: () => sweepSessions({ db: pool, now: () => new Date() }) }],
+    logger,
+  );
+
   const server = serve({ fetch: app.fetch, port: config.PORT, hostname: "0.0.0.0" }, (address) => {
     logger.info(
       { port: address.port, appEnv: config.APP_ENV, version: info.version, commit: info.commit },

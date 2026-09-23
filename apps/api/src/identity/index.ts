@@ -1,5 +1,6 @@
 // The identity slice's public surface (rules/layout.md). Discovery is what
-// index.ts runs at boot (#32); routes, sessions and the exchange follow (#33-#35).
+// index.ts runs at boot (#32); the routes carry the login (#33) and the
+// sessions (#35); the store is what the session middleware in lib/ reads through.
 
 export { BrokerError, type BrokerIdentity, type IdentityBroker } from "./broker.ts";
 export { DiscoveryError, discoverProvider, isTeliaIssuer } from "./discovery.ts";
@@ -12,3 +13,5 @@ export {
   recordDeletion,
 } from "./registration.ts";
 export { authRoutes } from "./routes.ts";
+export { sessionStore } from "./session-store.ts";
+export { sweepSessions } from "./sessions.ts";

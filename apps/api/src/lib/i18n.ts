@@ -72,6 +72,8 @@ export const ERROR_MESSAGE_KEYS = {
   auth_banned: "errors.auth_banned",
   auth_suspended: "errors.auth_suspended",
   auth_cooldown: "errors.auth_cooldown",
+  session_expired: "errors.session_expired",
+  session_revoked: "errors.session_revoked",
 } as const satisfies Record<string, MessageKey>;
 
 export type LocalisedErrorCode = keyof typeof ERROR_MESSAGE_KEYS;

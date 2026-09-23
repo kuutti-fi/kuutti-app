@@ -67,6 +67,7 @@ describe("migrate", () => {
           "identity",
           "matching_config",
           "ponds",
+          "session",
         ]);
       } finally {
         await pool.end();

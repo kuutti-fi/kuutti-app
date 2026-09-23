@@ -190,7 +190,11 @@ async function deriveFromBroker(
 export async function exchangeCode(
   deps: Pick<LoginDeps, "db" | "now">,
   code: string,
-): Promise<AuthExchangeResponse> {
+): Promise<{
+  accountId: string;
+  platform: AuthPlatform;
+  outcome: AuthExchangeResponse["outcome"];
+}> {
   const now = deps.now();
   const request = await repo.findAuthRequestByCodeHash(deps.db, hashOneTimeCode(code));
   const valid =
@@ -204,6 +208,7 @@ export async function exchangeCode(
   }
   return {
     accountId: request.accountId,
+    platform: request.platform === "android" ? "android" : "ios",
     outcome: request.outcome === "resumed" ? "resumed" : "created",
   };
 }

@@ -3,6 +3,7 @@ import * as Sentry from "@sentry/react-native";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import * as Updates from "expo-updates";
+import { SessionProvider } from "@/features/identity";
 import { LocaleProvider } from "@/lib/locale";
 import { sentryOptions } from "@/lib/sentry";
 import { ThemeProvider } from "@/theme/ThemeProvider";
@@ -16,10 +17,12 @@ function RootLayout() {
   return (
     <LocaleProvider>
       <ThemeProvider>
-        <Stack
-          screenOptions={{ headerShown: false, contentStyle: { backgroundColor: "transparent" } }}
-        />
-        <StatusBar style="auto" />
+        <SessionProvider>
+          <Stack
+            screenOptions={{ headerShown: false, contentStyle: { backgroundColor: "transparent" } }}
+          />
+          <StatusBar style="auto" />
+        </SessionProvider>
       </ThemeProvider>
     </LocaleProvider>
   );
