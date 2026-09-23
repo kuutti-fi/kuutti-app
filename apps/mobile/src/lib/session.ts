@@ -100,3 +100,36 @@ export function refreshSession(): Promise<StoredSession | null> {
   })();
   return inFlight;
 }
+
+/**
+ * Only a login this device started may end in a session here: the browser's
+ * return carries a one-time code, and a code an attacker minted with their
+ * own bank login and sent as a link would otherwise sign this phone into
+ * their account. The mark outlives the app process (Android may end it
+ * while the browser is open) and a login attempt's ten minutes.
+ */
+const PENDING_KEY = "kuutti.session.pending";
+const PENDING_TTL_MS = 10 * 60 * 1000;
+let pendingInMemory: string | null = null;
+
+export async function markLoginStarted(now = Date.now()): Promise<void> {
+  const value = String(now);
+  pendingInMemory = value;
+  if (Platform.OS !== "web") await SecureStore.setItemAsync(PENDING_KEY, value);
+}
+
+/** True once per started login: reading it clears it. */
+export async function takeLoginStarted(now = Date.now()): Promise<boolean> {
+  let value = pendingInMemory;
+  if (Platform.OS !== "web") {
+    try {
+      value = (await SecureStore.getItemAsync(PENDING_KEY)) ?? value;
+      await SecureStore.deleteItemAsync(PENDING_KEY);
+    } catch {
+      // Unreadable is the same as absent: the link is refused, the person taps the button again.
+    }
+  }
+  pendingInMemory = null;
+  const started = Number(value);
+  return Number.isFinite(started) && now - started >= 0 && now - started <= PENDING_TTL_MS;
+}

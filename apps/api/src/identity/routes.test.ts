@@ -105,6 +105,14 @@ async function errorCode(res: Response): Promise<string> {
   return ErrorResponse.parse(await res.json()).error.code;
 }
 
+/** A refused callback sends the browser back into the app with the code. */
+function refusal(res: Response): { error: string | null; until: string | null } {
+  expect(res.status).toBe(302);
+  const location = new URL(res.headers.get("location") ?? "");
+  expect(location.protocol).toBe("kuutti:");
+  return { error: location.searchParams.get("error"), until: location.searchParams.get("until") };
+}
+
 describe("bank login", () => {
   test("start: validates the platform and remembers the attempt", async ({ ctx }) => {
     const { app, broker } = await appWith(ctx, ADULT_HETU);
@@ -185,31 +193,25 @@ describe("bank login", () => {
     ctx,
   }) => {
     const { app } = await appWith(ctx, ADULT_HETU);
-    const unknown = await callback(app, "not-a-state");
-    expect(unknown.status).toBe(400);
-    expect(await errorCode(unknown)).toBe("auth_state_mismatch");
+    expect(refusal(await callback(app, "not-a-state")).error).toBe("auth_state_mismatch");
 
     const state = await start(app);
     await codeFrom(await callback(app, state));
-    const replay = await callback(app, state);
-    expect(replay.status).toBe(400);
-    expect(await errorCode(replay)).toBe("auth_state_mismatch");
+    expect(refusal(await callback(app, state)).error).toBe("auth_state_mismatch");
 
-    const broken = await callback(app, await start(app), "broken");
-    expect(broken.status).toBe(502);
-    expect(await errorCode(broken)).toBe("auth_provider_error");
+    expect(refusal(await callback(app, await start(app), "broken")).error).toBe(
+      "auth_provider_error",
+    );
 
     const denied = await app.request(
       `/auth/callback?error=access_denied&state=${encodeURIComponent(await start(app))}`,
     );
-    expect(denied.status).toBe(502);
+    expect(refusal(denied).error).toBe("auth_provider_error");
   });
 
   test("a minor is refused and nothing is stored", async ({ ctx }) => {
     const { app } = await appWith(ctx, MINOR_HETU);
-    const res = await callback(app, await start(app));
-    expect(res.status).toBe(403);
-    expect(await errorCode(res)).toBe("auth_under_18");
+    expect(refusal(await callback(app, await start(app))).error).toBe("auth_under_18");
     const rows = await ctx.client.query("SELECT count(*) AS n FROM identity");
     expect(Number(rows.rows[0]?.n)).toBe(0);
   });
@@ -220,9 +222,7 @@ describe("bank login", () => {
     await ctx.client.query("INSERT INTO identity (hetu_hmac, standing) VALUES ($1, 'banned')", [
       hetuHmac,
     ]);
-    const res = await callback(app, await start(app));
-    expect(res.status).toBe(403);
-    expect(await errorCode(res)).toBe("auth_banned");
+    expect(refusal(await callback(app, await start(app))).error).toBe("auth_banned");
     const rows = await ctx.client.query(
       "SELECT refused_attempts, (SELECT count(*) FROM account) AS accounts FROM identity",
     );
@@ -239,9 +239,9 @@ describe("bank login", () => {
       "INSERT INTO identity (hetu_hmac, deletion_count, reregister_after) VALUES ($1, 1, $2)",
       [hetuHmac, until],
     );
-    const refused = await callback(app, await start(app));
-    expect(refused.status).toBe(403);
-    expect(await errorCode(refused)).toBe("auth_cooldown");
+    const refused = refusal(await callback(app, await start(app)));
+    expect(refused.error).toBe("auth_cooldown");
+    expect(refused.until).toBe(until.toISOString());
 
     await ctx.client.query("UPDATE identity SET reregister_after = now() - interval '1 second'");
     const fresh = await exchange(app, await codeFrom(await callback(app, await start(app))));
