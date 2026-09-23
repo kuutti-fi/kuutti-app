@@ -51,11 +51,18 @@ export async function completeLogin(
 ): Promise<URL> {
   const now = deps.now();
   const request = await repo.findAuthRequestByState(deps.db, input.query.state);
-  if (!request || request.codeHash !== null || request.expiresAt.getTime() < now.getTime()) {
+  if (!request || request.codeHash !== null || request.expiresAt.getTime() <= now.getTime()) {
     throw new AppError(400, "auth_state_mismatch", "This login attempt is unknown or has expired");
   }
   if (input.query.error) {
-    // The code reaches the log (OAuth codes are snake_case words); free text does not.
+    // The person backed out at the bank (guide 2.5.2: access_denied, no code):
+    // not a failure of anything. Any other code reaches the log (OAuth codes
+    // are snake_case words); free text does not.
+    if (input.query.error === "access_denied") {
+      // The attempt is over: its state cannot be completed with a code later.
+      await repo.expireAuthRequest(deps.db, request.id, now);
+      throw new AppError(400, "auth_cancelled", "The person cancelled at the bank");
+    }
     const code = /^[a-z_]+$/.test(input.query.error) ? input.query.error : "unnamed error";
     throw new BrokerError(`broker answered ${code}`);
   }

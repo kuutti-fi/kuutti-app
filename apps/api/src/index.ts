@@ -10,6 +10,7 @@ import {
   isTeliaIssuer,
   OidcBroker,
   sweepSessions,
+  teliaKeyIds,
 } from "./identity/index.ts";
 import { scheduleNightly } from "./jobs/nightly.ts";
 import { type Config, ConfigError, loadConfig } from "./lib/config.ts";
@@ -69,10 +70,9 @@ async function main(): Promise<void> {
           tokenEndpoint: provider.token_endpoint,
           jwksUri: provider.jwks_uri,
           acrValues: config.OIDC_ACR_VALUES ?? null,
-          keys: {
-            signing: config.TELIA_SIGNING_KEY !== undefined,
-            encryption: config.TELIA_ENCRYPTION_KEY !== undefined,
-          },
+          // The kids (RFC 7638 thumbprints) of our two keys: what the JWKs
+          // given to Telia must carry. Public values.
+          keys: teliaKeyIds(config),
         },
         "bank identification",
       );

@@ -60,9 +60,6 @@ const Env = z.object({
   // acr_values of the signed request object, mandatory under Traficom 213/2023 S:
   // loa2 in production, loatest2 in Telia's pre-production; the mock accepts any.
   OIDC_ACR_VALUES: z.string().min(1).optional(),
-  // How long the broker's JWKS may be reused before it is fetched again; a key
-  // that is not in the cached set triggers a fetch regardless (openid-client).
-  OIDC_JWKS_MAX_AGE_SECONDS: z.coerce.number().int().min(60).max(86_400).default(3600),
   // Our two RSA private keys (PEM), from /kuutti/<env>/telia-signing-key and
   // /kuutti/<env>/telia-encryption-key: the first signs request objects and
   // client assertions, the second decrypts the ID token Telia encrypts to us.

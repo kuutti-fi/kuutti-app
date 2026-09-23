@@ -34,6 +34,7 @@ const REFUSALS: ReadonlyMap<string, PlainMessageKey> = new Map([
   ["auth_banned", "signIn.error.auth_banned"],
   ["auth_suspended", "signIn.error.auth_suspended"],
   ["auth_provider_error", "signIn.error.auth_provider_error"],
+  ["auth_cancelled", "signIn.error.auth_cancelled"],
   ["unexpected_link", "signIn.error.unexpected_link"],
 ]);
 

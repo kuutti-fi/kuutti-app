@@ -1,3 +1,4 @@
+import { createHash, createPrivateKey, createPublicKey } from "node:crypto";
 import { importPKCS8 } from "jose";
 import * as client from "openid-client";
 import type { Config } from "../lib/config.ts";
@@ -10,18 +11,48 @@ import { isTeliaIssuer } from "./discovery.ts";
  * request object with `acr_values`, the token request authenticates with
  * private_key_jwt, and the ID token arrives encrypted to our second key; against
  * the mock IdP it is plain OIDC over http. Both are decided by the issuer at
- * boot, never per request.
+ * boot, never per request. Telia's signing keys rotate (guide 2.7): the
+ * library keeps the JWKS for five minutes and fetches it again when a token
+ * names a kid it does not hold (once the set is a minute old), so a key
+ * published in advance is picked up without a restart; nothing is pinned.
  */
 export type OidcBrokerOptions = {
   issuer: string;
   clientId: string;
   redirectUri: string;
   acrValues: string | null;
-  jwksMaxAgeSeconds: number;
   /** PEM (PKCS#8). Both required for a Telia issuer, both ignored for the mock. */
   signingKeyPem: string | null;
   encryptionKeyPem: string | null;
+  /**
+   * The HTTP client for discovery, JWKS and the token endpoint. Tests hand in
+   * an in-process fake of Telia (src/test/fake-telia.ts) so the Telia dialect
+   * runs under the real issuer without a network; production leaves it unset.
+   */
+  fetch?: client.CustomFetch;
 };
+
+/**
+ * The `kid` of one of our keys is its RFC 7638 thumbprint: the JWK handed to
+ * Telia carries it (infra/README.md, Secrets), Telia names it in the JWE
+ * header of every ID token (guide 2.6.3), and the library decrypts only with
+ * the key whose kid the header names. Computed from the private key, so no
+ * configuration can disagree with the key.
+ */
+export function keyIdOf(privateKeyPem: string): string {
+  const jwk = createPublicKey(createPrivateKey(privateKeyPem)).export({ format: "jwk" });
+  if (jwk.kty !== "RSA" || !jwk.n || !jwk.e) throw new Error("a Telia key is RSA (guide 2.1.1)");
+  const canonical = JSON.stringify({ e: jwk.e, kty: jwk.kty, n: jwk.n });
+  return createHash("sha256").update(canonical).digest("base64url");
+}
+
+/** The kids the maintainer compares with what Telia registered; public values, logged at boot. */
+export function teliaKeyIds(config: Config): { signing: string | null; encryption: string | null } {
+  return {
+    signing: config.TELIA_SIGNING_KEY ? keyIdOf(config.TELIA_SIGNING_KEY) : null,
+    encryption: config.TELIA_ENCRYPTION_KEY ? keyIdOf(config.TELIA_ENCRYPTION_KEY) : null,
+  };
+}
 
 export function brokerOptionsFromConfig(config: Config): OidcBrokerOptions | null {
   if (!config.OIDC_ISSUER || !config.OIDC_CLIENT_ID || !config.OIDC_REDIRECT_URI) return null;
@@ -30,7 +61,6 @@ export function brokerOptionsFromConfig(config: Config): OidcBrokerOptions | nul
     clientId: config.OIDC_CLIENT_ID,
     redirectUri: config.OIDC_REDIRECT_URI,
     acrValues: config.OIDC_ACR_VALUES ?? null,
-    jwksMaxAgeSeconds: config.OIDC_JWKS_MAX_AGE_SECONDS,
     signingKeyPem: config.TELIA_SIGNING_KEY ?? null,
     encryptionKeyPem: config.TELIA_ENCRYPTION_KEY ?? null,
   };
@@ -44,6 +74,7 @@ export class OidcBroker implements IdentityBroker {
     private readonly configuration: client.Configuration,
     private readonly options: OidcBrokerOptions,
     private readonly signingKey: CryptoKey | null,
+    private readonly expectsEncryptedIdToken: boolean,
   ) {
     const values = options.acrValues?.split(/\s+/).filter((v) => v.length > 0) ?? [];
     this.expectedAcr = values.length > 0 ? new Set(values) : null;
@@ -78,12 +109,26 @@ export class OidcBroker implements IdentityBroker {
       telia && signingKey ? client.PrivateKeyJwt(signingKey, assertionAudience) : client.None(),
       {
         execute: telia ? [] : [client.allowInsecureRequests],
+        ...(options.fetch ? { [client.customFetch]: options.fetch } : {}),
       },
     );
-    if (encryptionKey) {
-      client.enableDecryptingResponses(configuration, ["A128CBC-HS256", "A256GCM"], encryptionKey);
+    // The library trusts a token it fetched itself over TLS and skips the JWS
+    // signature by default; the guide (2.6.3) and rules/api.md want it verified
+    // against the issuer's JWKS, which is also what makes a rotated key visible.
+    client.enableNonRepudiationChecks(configuration);
+    if (encryptionKey && options.encryptionKeyPem) {
+      client.enableDecryptingResponses(configuration, ["A128CBC-HS256", "A256GCM"], {
+        key: encryptionKey,
+        kid: keyIdOf(options.encryptionKeyPem),
+      });
     }
-    return new OidcBroker(options.issuer, configuration, options, signingKey);
+    return new OidcBroker(
+      options.issuer,
+      configuration,
+      options,
+      signingKey,
+      encryptionKey !== null,
+    );
   }
 
   async startLogin(input: { state: string; nonce: string; locale: string | null }): Promise<URL> {
@@ -98,8 +143,16 @@ export class OidcBroker implements IdentityBroker {
     if (input.locale) parameters.ui_locales = input.locale;
     if (this.signingKey) {
       // Telia: the request is a signed JWT (RFC 9101) with our sig key; iss,
-      // aud, jti and exp are added by the library.
-      return client.buildAuthorizationUrlWithJAR(this.configuration, parameters, this.signingKey);
+      // aud, client_id, jti, iat and exp are added by the library. The header
+      // and lifetime follow the guide's sample (2.4.3–2.4.4): typ JWT, ten
+      // minutes; nbf is not in the guide and would trip a slow broker clock.
+      return client.buildAuthorizationUrlWithJAR(this.configuration, parameters, this.signingKey, {
+        [client.modifyAssertion]: (header, payload) => {
+          header.typ = "JWT";
+          if (typeof payload.iat === "number") payload.exp = payload.iat + 600;
+          delete payload.nbf;
+        },
+      });
     }
     return client.buildAuthorizationUrl(this.configuration, parameters);
   }
@@ -117,8 +170,14 @@ export class OidcBroker implements IdentityBroker {
         expectedNonce: input.nonce,
         idTokenExpected: true,
       });
+      // Telia always encrypts the ID token to our key (guide 2.6.3); one that
+      // arrives in the clear is not from Telia, whatever its signature says.
+      if (this.expectsEncryptedIdToken && (tokens.id_token ?? "").split(".").length !== 5) {
+        throw new BrokerError("ID token was not encrypted");
+      }
       claims = tokens.claims();
     } catch (error) {
+      if (error instanceof BrokerError) throw error;
       // The library's messages name codes and checks, never claims.
       throw new BrokerError(error instanceof Error ? error.message : "token exchange failed");
     }

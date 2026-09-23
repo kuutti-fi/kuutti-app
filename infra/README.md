@@ -406,7 +406,7 @@ aws ssm put-parameter --name /kuutti/prod/hetu-hmac-key --type SecureString \
 
 `<offline-medium>` is an encrypted volume whose passphrase the association holds separately. Eject it afterwards; the association keeps it, not the maintainer's desk drawer.
 
-The two Telia keys are RSA, 3072 bits (Telia's minimum is 2048), one for signing (`sig`) and one for encryption (`enc`), generated onto the same offline medium; the private halves go to SSM, the public halves to Telia as JWKs (`docs/vendors/telia.md`, section 2.1 of the guide). The `kid` values are ours to choose and go into the JWKs and, later, into `app.config` of the API; keep them in `docs/vendors/telia.md` when Telia has registered them.
+The two Telia keys are RSA, 3072 bits (Telia's minimum is 2048), one for signing (`sig`) and one for encryption (`enc`), generated onto the same offline medium; the private halves go to SSM, the public halves to Telia as JWKs (`docs/vendors/telia.md`, section 2.1 of the guide). The `kid` of each JWK is the key's RFC 7638 thumbprint, nothing chosen: Telia names our `enc` key by it in every ID token's JWE header (guide 2.6.3) and the API computes the same value from the private key at boot (`keyIdOf`) and logs both kids under "bank identification", so what Telia registered and what the API decrypts with cannot disagree. Keep the registered kids in `docs/vendors/telia.md`.
 
 ```sh
 for use in sig enc; do
@@ -415,8 +415,8 @@ for use in sig enc; do
 done
 aws ssm put-parameter --name /kuutti/staging/telia-signing-key --type SecureString --value "$(cat /Volumes/<offline-medium>/kuutti-staging-telia-sig.pem)"
 aws ssm put-parameter --name /kuutti/staging/telia-encryption-key --type SecureString --value "$(cat /Volumes/<offline-medium>/kuutti-staging-telia-enc.pem)"
-# The public keys as JWKs for Telia (kid of your choice, e.g. kuutti-staging-sig-2026):
-node -e 'const {createPublicKey}=require("node:crypto");const [pem,use,kid]=process.argv.slice(1);console.log(JSON.stringify({...createPublicKey(require("node:fs").readFileSync(pem)).export({format:"jwk"}),use,kid,alg:use==="sig"?"RS256":"RSA-OAEP"}))' /Volumes/<offline-medium>/kuutti-staging-telia-sig.pub.pem sig kuutti-staging-sig-2026
+# The public keys as JWKs for Telia; the kid is the RFC 7638 thumbprint (the API logs the same value at boot):
+node -e 'const c=require("node:crypto");const [pem,use]=process.argv.slice(1);const j=c.createPublicKey(require("node:fs").readFileSync(pem)).export({format:"jwk"});const kid=c.createHash("sha256").update(JSON.stringify({e:j.e,kty:j.kty,n:j.n})).digest("base64url");console.log(JSON.stringify({...j,use,kid,alg:use==="sig"?"RS256":"RSA-OAEP"}))' /Volumes/<offline-medium>/kuutti-staging-telia-sig.pub.pem sig
 ```
 
 `db-app-password` is created by `scripts/db-app-role.sh`; rotating it is `ALTER ROLE kuutti_app PASSWORD '…'` through the same tunnel, `put-parameter --overwrite`, and a restart of the API. The two signing keys are not random bytes: the CloudFront key is an RSA key pair whose public half becomes a CloudFront public-key resource (M3), and the Telia key is whatever the broker contract specifies (M2); their creation steps land with those milestones. The RDS master password is not managed here at all: `manage_master_user_password = true` leaves it with AWS so it never enters state.
