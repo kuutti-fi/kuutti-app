@@ -42,23 +42,61 @@ export const AuthExchangeRequest = z
       description: "The one-time code the deep link carried.",
     }),
   })
+  .strict()
   .meta({ id: "AuthExchangeRequest" });
 export type AuthExchangeRequest = z.infer<typeof AuthExchangeRequest>;
 
+/** 32 random bytes as base64url, like the one-time code: the shape of both session tokens. */
+export const SESSION_TOKEN_PATTERN = ONE_TIME_CODE_PATTERN;
+const SessionToken = z.string().regex(SESSION_TOKEN_PATTERN);
+
 /**
- * Until sessions land (#35) the exchange answers with the account the login
- * resolved to and what happened to it; #35 replaces the body with tokens.
+ * What a login hands the device (#35): a short-lived access token for the
+ * Authorization header, a long-lived refresh token the app keeps in secure
+ * storage, and the session's id, which names this device to the person.
  */
-export const AuthExchangeResponse = z
+export const SessionTokens = z
   .object({
-    accountId: z.uuid(),
-    outcome: z.enum(["created", "resumed"]).meta({
-      description:
-        "created: a fresh account (first login or after a cooldown); resumed: the live account.",
+    sessionId: z
+      .uuid()
+      .meta({ description: "This device's session; the app keeps it with the tokens." }),
+    accessToken: SessionToken.meta({ description: "Bearer token; valid until accessExpiresAt." }),
+    accessExpiresAt: z.iso.datetime(),
+    refreshToken: SessionToken.meta({
+      description: "Single use: /auth/refresh answers with a new pair and retires this one.",
+    }),
+    refreshExpiresAt: z.iso.datetime().meta({
+      description: "After this the device logs in through the bank again.",
     }),
   })
-  .meta({ id: "AuthExchangeResponse" });
+  .meta({ id: "SessionTokens" });
+export type SessionTokens = z.infer<typeof SessionTokens>;
+
+export const AuthExchangeResponse = SessionTokens.extend({
+  outcome: z.enum(["created", "resumed"]).meta({
+    description:
+      "created: a fresh account (first login or after a cooldown); resumed: the live account.",
+  }),
+}).meta({ id: "AuthExchangeResponse" });
 export type AuthExchangeResponse = z.infer<typeof AuthExchangeResponse>;
+
+export const AuthRefreshRequest = z
+  .object({ refreshToken: SessionToken })
+  .strict()
+  .meta({ id: "AuthRefreshRequest" });
+export type AuthRefreshRequest = z.infer<typeof AuthRefreshRequest>;
+
+/** What the app may know about its own session. Never another account's. */
+export const SessionResponse = z
+  .object({
+    sessionId: z.uuid(),
+    accountId: z.uuid(),
+    platform: AuthPlatform,
+    createdAt: z.iso.datetime(),
+    refreshExpiresAt: z.iso.datetime(),
+  })
+  .meta({ id: "SessionResponse" });
+export type SessionResponse = z.infer<typeof SessionResponse>;
 
 /** Stable error codes of the login (the envelope's `code`); messages come from messages.yaml. */
 export const AUTH_ERROR_CODES = [
@@ -69,5 +107,7 @@ export const AUTH_ERROR_CODES = [
   "auth_banned",
   "auth_suspended",
   "auth_cooldown",
+  "session_expired",
+  "session_revoked",
 ] as const;
 export type AuthErrorCode = (typeof AUTH_ERROR_CODES)[number];

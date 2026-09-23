@@ -6,6 +6,13 @@
     "description": "Free, non-commercial dating app for Finland. Every account is verified through a Finnish bank. Source: AGPL-3.0 with App Store exception."
   },
   "components": {
+    "securitySchemes": {
+      "session": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "The access token from /auth/exchange or /auth/refresh."
+      }
+    },
     "schemas": {
       "HealthResponse": {
         "type": "object",
@@ -101,9 +108,29 @@
       "AuthExchangeResponse": {
         "type": "object",
         "properties": {
-          "accountId": {
+          "sessionId": {
             "type": "string",
-            "format": "uuid"
+            "format": "uuid",
+            "description": "This device's session; the app keeps it with the tokens."
+          },
+          "accessToken": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{43}$",
+            "description": "Bearer token; valid until accessExpiresAt."
+          },
+          "accessExpiresAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "refreshToken": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{43}$",
+            "description": "Single use: /auth/refresh answers with a new pair and retires this one."
+          },
+          "refreshExpiresAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "After this the device logs in through the bank again."
           },
           "outcome": {
             "type": "string",
@@ -115,7 +142,11 @@
           }
         },
         "required": [
-          "accountId",
+          "sessionId",
+          "accessToken",
+          "accessExpiresAt",
+          "refreshToken",
+          "refreshExpiresAt",
           "outcome"
         ]
       },
@@ -130,6 +161,94 @@
         },
         "required": [
           "code"
+        ],
+        "additionalProperties": false
+      },
+      "SessionTokens": {
+        "type": "object",
+        "properties": {
+          "sessionId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "This device's session; the app keeps it with the tokens."
+          },
+          "accessToken": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{43}$",
+            "description": "Bearer token; valid until accessExpiresAt."
+          },
+          "accessExpiresAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "refreshToken": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{43}$",
+            "description": "Single use: /auth/refresh answers with a new pair and retires this one."
+          },
+          "refreshExpiresAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "After this the device logs in through the bank again."
+          }
+        },
+        "required": [
+          "sessionId",
+          "accessToken",
+          "accessExpiresAt",
+          "refreshToken",
+          "refreshExpiresAt"
+        ]
+      },
+      "AuthRefreshRequest": {
+        "type": "object",
+        "properties": {
+          "refreshToken": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{43}$"
+          }
+        },
+        "required": [
+          "refreshToken"
+        ],
+        "additionalProperties": false
+      },
+      "SessionResponse": {
+        "type": "object",
+        "properties": {
+          "sessionId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "accountId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "platform": {
+            "$ref": "#/components/schemas/AuthPlatform"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "refreshExpiresAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "sessionId",
+          "accountId",
+          "platform",
+          "createdAt",
+          "refreshExpiresAt"
+        ]
+      },
+      "AuthPlatform": {
+        "type": "string",
+        "enum": [
+          "ios",
+          "android"
         ]
       }
     },
@@ -317,8 +436,8 @@
     },
     "/auth/exchange": {
       "post": {
-        "summary": "Exchange the one-time code",
-        "description": "Single use, within 60 seconds of the callback. Sessions (#35) will answer with tokens.",
+        "summary": "Exchange the one-time code for a session",
+        "description": "Single use, within 60 seconds of the callback. Answers with this device's access and refresh tokens; the app keeps both in secure storage.",
         "requestBody": {
           "content": {
             "application/json": {
@@ -330,7 +449,7 @@
         },
         "responses": {
           "200": {
-            "description": "The account this login resolved to.",
+            "description": "The device's session.",
             "content": {
               "application/json": {
                 "schema": {
@@ -351,6 +470,136 @@
           },
           "401": {
             "description": "Unknown, used or expired code (auth_code_used).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/refresh": {
+      "post": {
+        "summary": "Rotate the session's tokens",
+        "description": "Presents the refresh token, receives a new pair; the old refresh token is retired. Presenting a retired token ends the device's session (session_revoked): sign in through the bank again.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AuthRefreshRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The new pair.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionTokens"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Retired, revoked, expired or unknown refresh token (session_revoked).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/session": {
+      "get": {
+        "summary": "This device's session",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The caller's own session.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "unauthenticated, session_expired or session_revoked.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/logout": {
+      "post": {
+        "summary": "Sign out this device",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "The session is ended; both tokens stop working."
+          },
+          "401": {
+            "description": "unauthenticated, session_expired or session_revoked.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/logout-all": {
+      "post": {
+        "summary": "Sign out every device",
+        "description": "Recovery for a lost phone: every session of the account ends, including this one.",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Every session of the account is ended."
+          },
+          "401": {
+            "description": "unauthenticated, session_expired or session_revoked.",
             "content": {
               "application/json": {
                 "schema": {

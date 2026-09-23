@@ -198,8 +198,8 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Exchange the one-time code
-         * @description Single use, within 60 seconds of the callback. Sessions (#35) will answer with tokens.
+         * Exchange the one-time code for a session
+         * @description Single use, within 60 seconds of the callback. Answers with this device's access and refresh tokens; the app keeps both in secure storage.
          */
         post: {
             parameters: {
@@ -214,7 +214,7 @@ export interface paths {
                 };
             };
             responses: {
-                /** @description The account this login resolved to. */
+                /** @description The device's session. */
                 200: {
                     headers: {
                         [name: string]: unknown;
@@ -233,6 +233,201 @@ export interface paths {
                     };
                 };
                 /** @description Unknown, used or expired code (auth_code_used). */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/refresh": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Rotate the session's tokens
+         * @description Presents the refresh token, receives a new pair; the old refresh token is retired. Presenting a retired token ends the device's session (session_revoked): sign in through the bank again.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["AuthRefreshRequest"];
+                };
+            };
+            responses: {
+                /** @description The new pair. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["SessionTokens"];
+                    };
+                };
+                /** @description Validation failed. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description Retired, revoked, expired or unknown refresh token (session_revoked). */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/session": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** This device's session */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The caller's own session. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["SessionResponse"];
+                    };
+                };
+                /** @description unauthenticated, session_expired or session_revoked. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/logout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Sign out this device */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The session is ended; both tokens stop working. */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description unauthenticated, session_expired or session_revoked. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/logout-all": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Sign out every device
+         * @description Recovery for a lost phone: every session of the account ends, including this one.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Every session of the account is ended. */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description unauthenticated, session_expired or session_revoked. */
                 401: {
                     headers: {
                         [name: string]: unknown;
@@ -292,8 +487,22 @@ export interface components {
             };
         };
         AuthExchangeResponse: {
-            /** Format: uuid */
-            accountId: string;
+            /**
+             * Format: uuid
+             * @description This device's session; the app keeps it with the tokens.
+             */
+            sessionId: string;
+            /** @description Bearer token; valid until accessExpiresAt. */
+            accessToken: string;
+            /** Format: date-time */
+            accessExpiresAt: string;
+            /** @description Single use: /auth/refresh answers with a new pair and retires this one. */
+            refreshToken: string;
+            /**
+             * Format: date-time
+             * @description After this the device logs in through the bank again.
+             */
+            refreshExpiresAt: string;
             /**
              * @description created: a fresh account (first login or after a cooldown); resumed: the live account.
              * @enum {string}
@@ -304,6 +513,40 @@ export interface components {
             /** @description The one-time code the deep link carried. */
             code: string;
         };
+        SessionTokens: {
+            /**
+             * Format: uuid
+             * @description This device's session; the app keeps it with the tokens.
+             */
+            sessionId: string;
+            /** @description Bearer token; valid until accessExpiresAt. */
+            accessToken: string;
+            /** Format: date-time */
+            accessExpiresAt: string;
+            /** @description Single use: /auth/refresh answers with a new pair and retires this one. */
+            refreshToken: string;
+            /**
+             * Format: date-time
+             * @description After this the device logs in through the bank again.
+             */
+            refreshExpiresAt: string;
+        };
+        AuthRefreshRequest: {
+            refreshToken: string;
+        };
+        SessionResponse: {
+            /** Format: uuid */
+            sessionId: string;
+            /** Format: uuid */
+            accountId: string;
+            platform: components["schemas"]["AuthPlatform"];
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            refreshExpiresAt: string;
+        };
+        /** @enum {string} */
+        AuthPlatform: "ios" | "android";
     };
     responses: never;
     parameters: never;

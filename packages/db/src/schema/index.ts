@@ -13,3 +13,4 @@ export {
 } from "./identity.ts";
 export { type MatchingConfigRow, matchingConfig } from "./matching-config.ts";
 export { type NewPond, type Pond, ponds } from "./ponds.ts";
+export { type NewSession, type Session, session } from "./sessions.ts";

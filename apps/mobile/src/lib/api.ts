@@ -1,23 +1,9 @@
 import { type ApiPaths, HealthResponse } from "@kuutti/schema";
-import Constants from "expo-constants";
-import createClient from "openapi-fetch";
+import createClient, { type Middleware } from "openapi-fetch";
+import { apiBaseUrl } from "./api-url";
+import { accessTokenIsStale, currentSession, refreshSession } from "./session";
 
-/**
- * API base URL. EXPO_PUBLIC_API_URL wins (set per EAS profile and per preview);
- * in local dev it is derived from the Metro host so a phone on the same network
- * reaches the API on the developer's machine. Never a secret: EXPO_PUBLIC_* is
- * public by definition.
- */
-export function apiBaseUrl(): string {
-  const fromEnv = process.env.EXPO_PUBLIC_API_URL;
-  if (fromEnv) return fromEnv.replace(/\/$/, "");
-  const host = Constants.expoConfig?.hostUri?.split(":")[0];
-  if (host) return `http://${host}:3000`;
-  // A release bundle without the variable would silently talk to nothing;
-  // EAS environments and CI both set it (apps/mobile/README.md, API URLs).
-  if (!__DEV__) throw new Error("EXPO_PUBLIC_API_URL is not set for this build");
-  return "http://localhost:3000";
-}
+export { apiBaseUrl } from "./api-url";
 
 export class ApiError extends Error {
   constructor(
@@ -29,6 +15,41 @@ export class ApiError extends Error {
   }
 }
 
+/** Routes that never carry a session: the login itself and the probe. */
+const ANONYMOUS = new Set(["/health", "/auth/exchange", "/auth/refresh"]);
+
+const retryable = new WeakMap<Request, Request>();
+
+/**
+ * The session on every request (#35): the access token goes in the header,
+ * refreshed ahead of its expiry. A 401 on a request that carried a token
+ * means the token is stale (clock skew, or a rotation on another request) or
+ * the session is over: one refresh decides which. A refresh that succeeds
+ * replays the request from the copy taken before it was sent; one the API
+ * refuses clears the store, and the app is back at the sign-in screen.
+ */
+export const sessionMiddleware: Middleware = {
+  async onRequest({ request, schemaPath }) {
+    if (ANONYMOUS.has(schemaPath)) return undefined;
+    let session = currentSession();
+    if (session && accessTokenIsStale(session)) session = await refreshSession();
+    if (!session) return undefined;
+    retryable.set(request, request.clone());
+    request.headers.set("authorization", `Bearer ${session.accessToken}`);
+    return request;
+  },
+  async onResponse({ request, response }) {
+    if (response.status !== 401) return undefined;
+    const copy = retryable.get(request);
+    if (!copy) return undefined;
+    retryable.delete(request);
+    const session = await refreshSession();
+    if (!session) return undefined;
+    copy.headers.set("authorization", `Bearer ${session.accessToken}`);
+    return globalThis.fetch(copy);
+  },
+};
+
 /**
  * Typed client over the generated OpenAPI paths (ADR-003). Types come from
  * packages/schema/src/api.generated.ts; the zod contracts guard the runtime.
@@ -38,6 +59,7 @@ export const api = createClient<ApiPaths>({
   // Resolve fetch at call time: React Native may install it after this module loads, and tests mock it.
   fetch: (request) => globalThis.fetch(request),
 });
+api.use(sessionMiddleware);
 
 export async function fetchHealth(signal?: AbortSignal): Promise<HealthResponse> {
   const { data, error, response } = await api.GET("/health", { signal });

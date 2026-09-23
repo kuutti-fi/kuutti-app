@@ -130,6 +130,12 @@ describe("bank login", () => {
     expect(first.status).toBe(200);
     const body = await first.json();
     expect(body.outcome).toBe("created");
+    expect(body.accessToken).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    const me = await app.request("/auth/session", {
+      headers: { authorization: `Bearer ${body.accessToken}` },
+    });
+    expect(me.status).toBe(200);
+    const session = await me.json();
 
     const identity = await ctx.client.query(
       "SELECT hetu_hmac, broker_subject, acr, amr, refused_attempts FROM identity",
@@ -143,16 +149,18 @@ describe("bank login", () => {
       "SELECT id, state, birth_year, birth_month FROM account",
     );
     expect(account.rows).toHaveLength(1);
-    expect(account.rows[0]?.id).toBe(body.accountId);
+    expect(account.rows[0]?.id).toBe(session.accountId);
     expect(account.rows[0]?.state).toBe("registered");
 
     const second = await exchange(app, code);
     expect(second.status).toBe(401);
     expect(await errorCode(second)).toBe("auth_code_used");
 
-    // The hetu was in the callback's inputs and never in a log line.
+    // The hetu was in the callback's inputs and never in a log line; nor were the tokens.
     expect(JSON.stringify(logs())).not.toContain(ADULT_HETU);
     expect(JSON.stringify(logs())).not.toContain(ADULT_HETU.slice(0, 6));
+    expect(JSON.stringify(logs())).not.toContain(body.accessToken);
+    expect(JSON.stringify(logs())).not.toContain(body.refreshToken);
   });
 
   test("second login of the same person resumes the live account", async ({ ctx }) => {
@@ -162,7 +170,13 @@ describe("bank login", () => {
     const a = await one.json();
     const b = await two.json();
     expect(b.outcome).toBe("resumed");
-    expect(b.accountId).toBe(a.accountId);
+    const accountOf = async (token: string) =>
+      (
+        await (
+          await app.request("/auth/session", { headers: { authorization: `Bearer ${token}` } })
+        ).json()
+      ).accountId;
+    expect(await accountOf(b.accessToken)).toBe(await accountOf(a.accessToken));
     const accounts = await ctx.client.query("SELECT count(*) AS n FROM account");
     expect(Number(accounts.rows[0]?.n)).toBe(1);
   });

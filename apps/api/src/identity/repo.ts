@@ -192,3 +192,213 @@ export async function insertAccount(
   if (!row) throw new Error("account insert returned no row");
   return accountFrom(row);
 }
+
+// Sessions (#35). Every read is keyed by a token hash or by (session id,
+// account id): a session is only ever read as the caller's own.
+
+export type SessionRow = {
+  id: string;
+  accountId: string;
+  platform: string;
+  createdAt: Date;
+  expiresAt: Date;
+  revokedAt: Date | null;
+};
+
+const sessionFrom = (r: Row): SessionRow => ({
+  id: r.id as string,
+  accountId: r.account_id as string,
+  platform: r.platform as string,
+  createdAt: r.created_at as Date,
+  expiresAt: r.expires_at as Date,
+  revokedAt: (r.revoked_at as Date | null) ?? null,
+});
+
+const SESSION_COLUMNS = "id, account_id, platform, created_at, expires_at, revoked_at";
+
+export async function insertSession(
+  db: Queryable,
+  input: {
+    accountId: string;
+    platform: string;
+    userAgent: string | null;
+    accessHash: string;
+    accessExpiresAt: Date;
+    refreshHash: string;
+    expiresAt: Date;
+    at: Date;
+  },
+): Promise<SessionRow> {
+  const { rows } = await db.query<Row>(
+    `INSERT INTO session (account_id, platform, user_agent, access_hash, access_expires_at, refresh_hash, expires_at, created_at, last_used_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $8) RETURNING ${SESSION_COLUMNS}`,
+    [
+      input.accountId,
+      input.platform,
+      input.userAgent,
+      input.accessHash,
+      input.accessExpiresAt,
+      input.refreshHash,
+      input.expiresAt,
+      input.at,
+    ],
+  );
+  const row = rows[0];
+  if (!row) throw new Error("session insert returned no row");
+  return sessionFrom(row);
+}
+
+/** The middleware's lookup: the session with the account's state, by the access token's hash. */
+export async function findSessionByAccessHash(
+  db: Queryable,
+  accessHash: string,
+): Promise<{
+  accountId: string;
+  sessionId: string;
+  accessExpiresAt: Date;
+  revokedAt: Date | null;
+  accountState: string;
+  identityStanding: string;
+} | null> {
+  const { rows } = await db.query<Row>(
+    `SELECT s.id, s.account_id, s.access_expires_at, s.revoked_at, s.expires_at, a.state, i.standing
+     FROM session s JOIN account a ON a.id = s.account_id JOIN identity i ON i.id = a.identity_id
+     WHERE s.access_hash = $1`,
+    [accessHash],
+  );
+  const r = rows[0];
+  if (!r) return null;
+  const expiresAt = r.expires_at as Date;
+  const revokedAt = (r.revoked_at as Date | null) ?? null;
+  return {
+    accountId: r.account_id as string,
+    sessionId: r.id as string,
+    // A refresh token past its life ends the session as a revocation would.
+    accessExpiresAt: new Date(
+      Math.min((r.access_expires_at as Date).getTime(), expiresAt.getTime()),
+    ),
+    revokedAt,
+    accountState: r.state as string,
+    identityStanding: r.standing as string,
+  };
+}
+
+/**
+ * The states in which a session answers. A sanction is set on the identity
+ * (rules/api.md) and an account may be suspended, banned or erased on its own;
+ * any of them ends every session, for the access token and the refresh token
+ * alike, and the same clause serves both paths.
+ */
+export const LIVE_ACCOUNT_STATES = ["registered", "active", "paused", "shadow_banned"] as const;
+const SESSION_ALIVE = `EXISTS (
+  SELECT 1 FROM account a JOIN identity i ON i.id = a.identity_id
+  WHERE a.id = session.account_id AND i.standing = 'ok'
+    AND a.state IN ('registered', 'active', 'paused', 'shadow_banned'))`;
+
+export async function touchSession(db: Queryable, sessionId: string, at: Date): Promise<void> {
+  await db.query("UPDATE session SET last_used_at = $2 WHERE id = $1 AND last_used_at < $2", [
+    sessionId,
+    at,
+  ]);
+}
+
+/**
+ * Rotates in place when the presented hash is the live one; null when it is
+ * not. Only the hash retired by the last rotation is kept: a token two
+ * rotations old reads as unknown, which is narrower than the reuse rule but
+ * costs nothing, since nobody could have used that token in between.
+ */
+export async function rotateSession(
+  db: Queryable,
+  input: {
+    refreshHash: string;
+    nextAccessHash: string;
+    nextAccessExpiresAt: Date;
+    nextRefreshHash: string;
+    at: Date;
+  },
+): Promise<SessionRow | null> {
+  const { rows } = await db.query<Row>(
+    `UPDATE session
+     SET refresh_hash = $2, retired_refresh_hash = $1, access_hash = $3, access_expires_at = $4, last_used_at = $5
+     WHERE refresh_hash = $1 AND revoked_at IS NULL AND expires_at > $5 AND ${SESSION_ALIVE}
+     RETURNING ${SESSION_COLUMNS}`,
+    [
+      input.refreshHash,
+      input.nextRefreshHash,
+      input.nextAccessHash,
+      input.nextAccessExpiresAt,
+      input.at,
+    ],
+  );
+  return rows[0] ? sessionFrom(rows[0]) : null;
+}
+
+export async function findSessionByRetiredRefreshHash(
+  db: Queryable,
+  retiredRefreshHash: string,
+): Promise<SessionRow | null> {
+  const { rows } = await db.query<Row>(
+    `SELECT ${SESSION_COLUMNS} FROM session WHERE retired_refresh_hash = $1`,
+    [retiredRefreshHash],
+  );
+  return rows[0] ? sessionFrom(rows[0]) : null;
+}
+
+export async function findSessionForAccount(
+  db: Queryable,
+  sessionId: string,
+  accountId: string,
+): Promise<SessionRow | null> {
+  const { rows } = await db.query<Row>(
+    `SELECT ${SESSION_COLUMNS} FROM session WHERE id = $1 AND account_id = $2`,
+    [sessionId, accountId],
+  );
+  return rows[0] ? sessionFrom(rows[0]) : null;
+}
+
+export async function revokeSession(
+  db: Queryable,
+  sessionId: string,
+  at: Date,
+  reason: string,
+): Promise<void> {
+  await db.query(
+    "UPDATE session SET revoked_at = $2, revoked_reason = $3 WHERE id = $1 AND revoked_at IS NULL",
+    [sessionId, at, reason],
+  );
+}
+
+export async function revokeAccountSessions(
+  db: Queryable,
+  accountId: string,
+  at: Date,
+  reason: string,
+): Promise<number> {
+  const result = await db.query(
+    "UPDATE session SET revoked_at = $2, revoked_reason = $3 WHERE account_id = $1 AND revoked_at IS NULL",
+    [accountId, at, reason],
+  );
+  return result.rowCount ?? 0;
+}
+
+/** Ended before `endedBefore`, or whose refresh token expired: gone. */
+export async function deleteDeadSessions(
+  db: Queryable,
+  endedBefore: Date,
+  now: Date,
+): Promise<number> {
+  const result = await db.query(
+    "DELETE FROM session WHERE (revoked_at IS NOT NULL AND revoked_at < $1) OR expires_at < $2",
+    [endedBefore, now],
+  );
+  return result.rowCount ?? 0;
+}
+
+export async function deleteExpiredAuthRequests(db: Queryable, now: Date): Promise<number> {
+  const result = await db.query(
+    "DELETE FROM auth_request WHERE expires_at < $1 AND (code_expires_at IS NULL OR code_expires_at < $1)",
+    [now],
+  );
+  return result.rowCount ?? 0;
+}

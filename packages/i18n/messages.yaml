@@ -306,6 +306,20 @@ errors.auth_cooldown:
   sv: Du raderade ditt konto nyligen. Ett nytt konto är möjligt efter väntetiden.
   machine: { fi: true, sv: true }
 
+errors.session_expired:
+  en: Your session has expired. Please continue; it renews by itself.
+  description: API error message (401) when the access token has run out; the app refreshes and retries without showing this unless the refresh fails too.
+  fi: Istuntosi on vanhentunut. Jatka; se uusiutuu itsestään.
+  sv: Din session har gått ut. Fortsätt; den förnyas av sig själv.
+  machine: { fi: true, sv: true }
+
+errors.session_revoked:
+  en: You have been signed out of this device. Sign in with your bank to continue.
+  description: API error message (401) when the session was ended (log out everywhere, a reused refresh token, or a sanction); the app returns to the sign-in screen.
+  fi: Sinut on kirjattu ulos tältä laitteelta. Kirjaudu pankkitunnuksillasi jatkaaksesi.
+  sv: Du har loggats ut från den här enheten. Logga in med din bank för att fortsätta.
+  machine: { fi: true, sv: true }
+
 admin.title:
   en: Kuutti admin
   description: Moderation panel, page heading. The panel is English only (TD-17), so admin.* keys need no fi or sv.

@@ -15,6 +15,8 @@ export const fi: Readonly<Record<string, string>> = {
   "errors.not_found": "Ei löytynyt.",
   "errors.payload_too_large": "Pyyntö on liian suuri.",
   "errors.rate_limited": "Liian monta pyyntöä. Yritä uudelleen {seconds, plural, one {# sekunnin} other {# sekunnin}} kuluttua.",
+  "errors.session_expired": "Istuntosi on vanhentunut. Jatka; se uusiutuu itsestään.",
+  "errors.session_revoked": "Sinut on kirjattu ulos tältä laitteelta. Kirjaudu pankkitunnuksillasi jatkaaksesi.",
   "errors.unauthenticated": "Kirjaudu sisään jatkaaksesi.",
   "errors.validation_failed": "Pyyntö ei ollut kelvollinen.",
   "settings.close": "Sulje asetukset",

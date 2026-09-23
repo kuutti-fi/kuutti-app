@@ -75,6 +75,7 @@ export function requestLogger(logger: Logger): MiddlewareHandler {
     logger.info(
       {
         requestId: c.get("requestId"),
+        accountId: c.get("accountId"),
         method: c.req.method,
         route: c.req.routePath,
         status: c.res.status,

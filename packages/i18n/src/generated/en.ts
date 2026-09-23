@@ -19,6 +19,8 @@ export const en: Readonly<Record<string, string>> = {
   "errors.not_found": "Not found.",
   "errors.payload_too_large": "The request is too large.",
   "errors.rate_limited": "Too many requests. Try again in {seconds, plural, one {# second} other {# seconds}}.",
+  "errors.session_expired": "Your session has expired. Please continue; it renews by itself.",
+  "errors.session_revoked": "You have been signed out of this device. Sign in with your bank to continue.",
   "errors.unauthenticated": "Sign in to continue.",
   "errors.validation_failed": "The request was not valid.",
   "settings.close": "Close settings",

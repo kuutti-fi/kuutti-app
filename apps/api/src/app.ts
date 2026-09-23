@@ -4,7 +4,8 @@ import { bodyLimit } from "hono/body-limit";
 import { requestId } from "hono/request-id";
 import { secureHeaders } from "hono/secure-headers";
 import { healthRoutes } from "./health/index.ts";
-import { authRoutes, type IdentityBroker } from "./identity/index.ts";
+import { authRoutes, type IdentityBroker, sessionStore } from "./identity/index.ts";
+import { requireSession } from "./lib/auth-middleware.ts";
 import type { Config } from "./lib/config.ts";
 import { corsAllowlist } from "./lib/cors.ts";
 import type { AppEnv } from "./lib/env.ts";
@@ -34,6 +35,16 @@ export type Deps = {
 };
 
 const UNLIMITED_PATHS = new Set(["/health", "/openapi.json"]);
+
+/** Routes that answer without a session: the health probe, the contract, and the login itself. */
+export const PUBLIC_ROUTES = new Set([
+  "GET /health",
+  "GET /openapi.json",
+  "GET /auth/start",
+  "GET /auth/callback",
+  "POST /auth/exchange",
+  "POST /auth/refresh",
+]);
 
 export function createApp(deps: Deps) {
   const app = new OpenAPIHono<AppEnv>({ defaultHook: validationHook<AppEnv>(deps.logger) });
@@ -71,9 +82,20 @@ export function createApp(deps: Deps) {
   app.onError(onError<AppEnv>(deps.logger, deps.report));
   app.notFound(notFound<AppEnv>());
 
-  app.route("/", healthRoutes(deps));
-  app.route("/", authRoutes(deps));
+  // One guard for every route that reads user data (rule 6); app.test.ts
+  // checks that no route outside PUBLIC_ROUTES is registered without it.
+  const guard = requireSession({ db: deps.db, store: sessionStore });
 
+  app.route("/", healthRoutes(deps));
+  app.route("/", authRoutes(deps, guard));
+
+  // The bearer scheme the session routes declare (#35); the tokens themselves
+  // are opaque, so the scheme is all the contract says about them.
+  app.openAPIRegistry.registerComponent("securitySchemes", "session", {
+    type: "http",
+    scheme: "bearer",
+    description: "The access token from /auth/exchange or /auth/refresh.",
+  });
   if (deps.config.APP_ENV !== "production") {
     app.doc("/openapi.json", openApiDocument(deps.config.APP_VERSION));
   }

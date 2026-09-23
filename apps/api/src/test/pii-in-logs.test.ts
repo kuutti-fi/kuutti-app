@@ -13,7 +13,8 @@ const FIXTURES = {
   hetu: "010190-123A",
   email: "pii.probe@example.fi",
   message: "private message text 4711",
-  token: "piitoken-4711",
+  // The shape of a session token, so the middleware's lookup path runs on it.
+  token: `piitoken4711${"x".repeat(31)}`,
 } as const;
 
 type Route = { method: string; path: string };

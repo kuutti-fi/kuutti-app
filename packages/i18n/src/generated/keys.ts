@@ -20,6 +20,8 @@ export type MessageParams = {
   "errors.not_found": Record<never, never>;
   "errors.payload_too_large": Record<never, never>;
   "errors.rate_limited": { "seconds": number };
+  "errors.session_expired": Record<never, never>;
+  "errors.session_revoked": Record<never, never>;
   "errors.unauthenticated": Record<never, never>;
   "errors.validation_failed": Record<never, never>;
   "settings.close": Record<never, never>;

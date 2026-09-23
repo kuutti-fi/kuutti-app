@@ -19,6 +19,8 @@ export const enXA: Readonly<Record<string, string>> = {
   "errors.not_found": "［Ñóót fóóúúñd.］",
   "errors.payload_too_large": "［Théé rééqúúééšt ííš tóóóó láárgéé.］",
   "errors.rate_limited": "［Tóóóó mááñýý rééqúúééštš. Trýý áágááííñ ííñ {seconds,plural,one{# šééçóóñd} other{# šééçóóñdš}}.］",
+  "errors.session_expired": "［ÝÝóóúúr šééššííóóñ hááš ééxpíírééd. Plééáášéé çóóñtííñúúéé; íít rééñééwš býý íítšéélf.］",
+  "errors.session_revoked": "［ÝÝóóúú háávéé bééééñ šíígñééd óóúút óóf thííš déévííçéé. Šíígñ ííñ wííth ýýóóúúr bááñk tóó çóóñtííñúúéé.］",
   "errors.unauthenticated": "［Šíígñ ííñ tóó çóóñtííñúúéé.］",
   "errors.validation_failed": "［Théé rééqúúééšt wááš ñóót váálííd.］",
   "settings.close": "［Çlóóšéé šééttííñgš］",
