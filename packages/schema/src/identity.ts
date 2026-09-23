@@ -107,6 +107,7 @@ export const AUTH_ERROR_CODES = [
   "auth_banned",
   "auth_suspended",
   "auth_cooldown",
+  "auth_cancelled",
   "session_expired",
   "session_revoked",
 ] as const;

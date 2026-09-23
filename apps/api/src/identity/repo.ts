@@ -101,6 +101,11 @@ export async function attachCode(
   );
 }
 
+/** Ends a login attempt without a code: the person cancelled at the bank. */
+export async function expireAuthRequest(db: Queryable, id: string, at: Date): Promise<void> {
+  await db.query("UPDATE auth_request SET expires_at = $2 WHERE id = $1", [id, at]);
+}
+
 /** Marks the code used; the row count says whether this call was the first to. */
 export async function consumeCode(db: Queryable, id: string, at: Date): Promise<boolean> {
   const result = await db.query(

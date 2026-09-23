@@ -6,7 +6,7 @@ export { BrokerError, type BrokerIdentity, type IdentityBroker } from "./broker.
 export { DiscoveryError, discoverProvider, isTeliaIssuer } from "./discovery.ts";
 export { wellKnownRoutes } from "./links.ts";
 // hetu.ts stays inside the slice: nothing outside it may hold a hetu (rules/api.md).
-export { brokerOptionsFromConfig, OidcBroker } from "./oidc-broker.ts";
+export { brokerOptionsFromConfig, OidcBroker, teliaKeyIds } from "./oidc-broker.ts";
 export {
   decideRegistration,
   REREGISTER_COOLDOWN_DAYS,

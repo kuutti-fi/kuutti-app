@@ -306,6 +306,13 @@ errors.auth_cooldown:
   sv: Du raderade ditt konto nyligen. Ett nytt konto är möjligt efter väntetiden.
   machine: { fi: true, sv: true }
 
+errors.auth_cancelled:
+  en: The sign-in was cancelled at the bank.
+  description: API error message (400) when the person backed out at the bank (the broker answered access_denied); the app shows its own text.
+  fi: Kirjautuminen peruttiin pankissa.
+  sv: Inloggningen avbröts hos banken.
+  machine: { fi: true, sv: true }
+
 errors.session_expired:
   en: Your session has expired. Please continue; it renews by itself.
   description: API error message (401) when the access token has run out; the app refreshes and retries without showing this unless the refresh fails too.
@@ -409,6 +416,13 @@ signIn.error.auth_cooldown:
   description: Sign-in screen, inside the deletion cooldown; {date} is the day the cooldown ends, formatted for the locale (after a colon, so no language inflects it).
   fi: "Poistit tilisi äskettäin. Uuden tilin voi luoda aikaisintaan: {date}"
   sv: "Du raderade ditt konto nyligen. Tidigaste dagen för ett nytt konto: {date}"
+  machine: { fi: true, sv: true }
+
+signIn.error.auth_cancelled:
+  en: You cancelled the sign-in at your bank. Nothing was saved.
+  description: Sign-in screen, the person backed out at the bank.
+  fi: Peruutit kirjautumisen pankissasi. Mitään ei tallennettu.
+  sv: Du avbröt inloggningen hos din bank. Inget sparades.
   machine: { fi: true, sv: true }
 
 signIn.error.auth_provider_error:

@@ -114,7 +114,9 @@ function refusal(res: Response): { error: string | null; until: string | null } 
 }
 
 describe("bank login", () => {
-  test("start: validates the platform and remembers the attempt", async ({ ctx }) => {
+  test("A login starts with the platform recorded and the browser sent to the bank chooser", async ({
+    ctx,
+  }) => {
     const { app, broker } = await appWith(ctx, ADULT_HETU);
     expect((await app.request("/auth/start")).status).toBe(400);
     expect((await app.request("/auth/start?platform=web")).status).toBe(400);
@@ -127,7 +129,7 @@ describe("bank login", () => {
     expect(rows.rows[0]).toEqual({ platform: "ios", locale: "fi" });
   });
 
-  test("first login: identity and account are created, the code is exchanged once", async ({
+  test("A first login creates the identity and the account and the code is exchanged once", async ({
     ctx,
   }) => {
     const { app, logs } = await appWith(ctx, ADULT_HETU);
@@ -164,14 +166,14 @@ describe("bank login", () => {
     expect(second.status).toBe(401);
     expect(await errorCode(second)).toBe("auth_code_used");
 
-    // The hetu was in the callback's inputs and never in a log line; nor were the tokens.
+    // The hetu was among the inputs of the callback and never in a log line; nor were the tokens.
     expect(JSON.stringify(logs())).not.toContain(ADULT_HETU);
     expect(JSON.stringify(logs())).not.toContain(ADULT_HETU.slice(0, 6));
     expect(JSON.stringify(logs())).not.toContain(body.accessToken);
     expect(JSON.stringify(logs())).not.toContain(body.refreshToken);
   });
 
-  test("second login of the same person resumes the live account", async ({ ctx }) => {
+  test("A second login of the same person resumes the live account", async ({ ctx }) => {
     const { app } = await appWith(ctx, ADULT_HETU);
     const one = await exchange(app, await codeFrom(await callback(app, await start(app))));
     const two = await exchange(app, await codeFrom(await callback(app, await start(app))));
@@ -189,7 +191,7 @@ describe("bank login", () => {
     expect(Number(accounts.rows[0]?.n)).toBe(1);
   });
 
-  test("callback: an unknown state, a used state and a broker failure each get their code", async ({
+  test("An unknown state, a used state and a broker failure each send the browser back with a code", async ({
     ctx,
   }) => {
     const { app } = await appWith(ctx, ADULT_HETU);
@@ -203,20 +205,35 @@ describe("bank login", () => {
       "auth_provider_error",
     );
 
-    const denied = await app.request(
-      `/auth/callback?error=access_denied&state=${encodeURIComponent(await start(app))}`,
+    const odd = await app.request(
+      `/auth/callback?error=server_error&state=${encodeURIComponent(await start(app))}`,
     );
-    expect(refusal(denied).error).toBe("auth_provider_error");
+    expect(refusal(odd).error).toBe("auth_provider_error");
   });
 
-  test("a minor is refused and nothing is stored", async ({ ctx }) => {
+  test("A person who cancels at the bank is sent back with auth_cancelled", async ({ ctx }) => {
+    // Guide 2.5.2: the broker answers error=access_denied and no code.
+    const { app, logs } = await appWith(ctx, ADULT_HETU);
+    const state = await start(app);
+    const back = await app.request(
+      `/auth/callback?error=access_denied&state=${encodeURIComponent(state)}`,
+    );
+    expect(refusal(back).error).toBe("auth_cancelled");
+    // The attempt is spent: the state cannot be replayed with a code later.
+    expect(refusal(await callback(app, state)).error).toBe("auth_state_mismatch");
+    expect(JSON.stringify(logs())).not.toContain("provider");
+    const rows = await ctx.client.query("SELECT count(*) AS n FROM identity");
+    expect(Number(rows.rows[0]?.n)).toBe(0);
+  });
+
+  test("A minor is refused and nothing is stored", async ({ ctx }) => {
     const { app } = await appWith(ctx, MINOR_HETU);
     expect(refusal(await callback(app, await start(app))).error).toBe("auth_under_18");
     const rows = await ctx.client.query("SELECT count(*) AS n FROM identity");
     expect(Number(rows.rows[0]?.n)).toBe(0);
   });
 
-  test("a banned identity is refused and the attempt is counted", async ({ ctx }) => {
+  test("A banned identity is refused and the attempt is counted", async ({ ctx }) => {
     const { app } = await appWith(ctx, ADULT_HETU);
     const { hetuHmac } = deriveIdentity(ADULT_HETU, hmacKeyFromHex(KEY_HEX), NOW);
     await ctx.client.query("INSERT INTO identity (hetu_hmac, standing) VALUES ($1, 'banned')", [
@@ -229,7 +246,7 @@ describe("bank login", () => {
     expect(rows.rows[0]).toMatchObject({ refused_attempts: 1, accounts: "0" });
   });
 
-  test("a cooling-down identity is refused with the date; after the cooldown a fresh account", async ({
+  test("A cooling-down identity is refused with the date and gets a fresh account afterwards", async ({
     ctx,
   }) => {
     const { app } = await appWith(ctx, ADULT_HETU);
@@ -248,7 +265,7 @@ describe("bank login", () => {
     expect((await fresh.json()).outcome).toBe("created");
   });
 
-  test("exchange: validation and an unknown code", async ({ ctx }) => {
+  test("The exchange validates the code and refuses an unknown one", async ({ ctx }) => {
     const { app } = await appWith(ctx, ADULT_HETU);
     expect((await exchange(app, "short")).status).toBe(400);
     const unknown = await exchange(app, "A".repeat(43));
@@ -256,7 +273,7 @@ describe("bank login", () => {
     expect(await errorCode(unknown)).toBe("auth_code_used");
   });
 
-  test("without a broker the login answers 503, the exchange still validates", async ({ ctx }) => {
+  test("Without a broker the login answers 503", async ({ ctx }) => {
     const { logger } = await captureLogger();
     const app = createApp({ config: testConfig(), logger, db: ctx.client });
     const res = await app.request("/auth/start?platform=android");

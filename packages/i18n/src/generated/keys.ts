@@ -9,6 +9,7 @@ export type MessageParams = {
   "admin.source.unavailable": Record<never, never>;
   "admin.title": Record<never, never>;
   "errors.auth_banned": Record<never, never>;
+  "errors.auth_cancelled": Record<never, never>;
   "errors.auth_code_used": Record<never, never>;
   "errors.auth_cooldown": Record<never, never>;
   "errors.auth_provider_error": Record<never, never>;
@@ -45,6 +46,7 @@ export type MessageParams = {
   "signIn.button": Record<never, never>;
   "signIn.done": Record<never, never>;
   "signIn.error.auth_banned": Record<never, never>;
+  "signIn.error.auth_cancelled": Record<never, never>;
   "signIn.error.auth_code_used": Record<never, never>;
   "signIn.error.auth_cooldown": { "date": string };
   "signIn.error.auth_provider_error": Record<never, never>;
