@@ -65,8 +65,8 @@ else {
     existsSync(`/opt/homebrew/opt/postgresql@${v}/bin/pg_ctl`),
   );
   bad(
-    "docker compose not available (Postgres, MinIO and the mock bank IdP run in compose)",
-    `install Docker Desktop or OrbStack, then start it${brewPg ? ". Until then env:up falls back to Homebrew PostgreSQL; MinIO and the mock IdP stay unavailable" : ""}`,
+    "docker compose not available (Postgres, the S3 stand-in and the mock bank IdP run in compose)",
+    `install Docker Desktop or OrbStack, then start it${brewPg ? ". Until then env:up falls back to Homebrew PostgreSQL; the S3 stand-in and the mock IdP stay unavailable" : ""}`,
   );
 }
 
@@ -80,8 +80,7 @@ const PORTS: [number, string][] = [
   [8081, "metro"],
   [5173, "admin"],
   [5432, "postgres"],
-  [9000, "minio"],
-  [9001, "minio console"],
+  [9000, "s3 stand-in (versitygw)"],
   [8080, "mock idp"],
 ];
 for (const [port, name] of PORTS) {

@@ -58,4 +58,4 @@ One AWS account, everything in eu-central-1. Vendor list: AWS, Expo/EAS, GitHub,
 
 ## Local dev
 
-- `pnpm env:up` is the entry point; underneath, `docker compose up -d --wait` provides Postgres (with `kuutti_test` from `docker/postgres/init.sql`), MinIO as the S3 stand-in, and the mock IdP (`navikt/mock-oauth2-server`, issuer `ftn`) whose login page accepts arbitrary FTN claims. Every published port binds to 127.0.0.1. The real Telia test bed is wired only on staging.
+- `pnpm env:up` is the entry point; underneath, `docker compose up -d --wait` provides Postgres (with `kuutti_test` from `docker/postgres/init.sql`), versitygw as the S3 stand-in (an S3 gateway over a directory; MinIO's community images were withdrawn in September 2026), and the mock IdP (`navikt/mock-oauth2-server`, issuer `ftn`) whose login page accepts arbitrary FTN claims. Every published port binds to 127.0.0.1. The real Telia test bed is wired only on staging.
