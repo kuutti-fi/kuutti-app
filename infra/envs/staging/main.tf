@@ -101,6 +101,8 @@ resource "aws_ssm_parameter" "config" {
     # Pull-request previews connect as this role (#9); its password is
     # db-preview-password from infra/scripts/db-app-role.sh.
     "db-preview-user" = "kuutti_preview"
+    # Photo moderation through Rekognition (#49, ADR-006); the instance role allows the two calls.
+    "moderation" = "rekognition"
     }, var.media_enabled ? {
     # Photos (#48): what the API needs besides the private key, which is
     # /kuutti/staging/cloudfront-signing-key and never a resource (ADR-001).

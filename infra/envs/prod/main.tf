@@ -96,6 +96,8 @@ resource "aws_ssm_parameter" "config" {
     "db-port"   = tostring(module.data.port)
     "db-name"   = module.data.db_name
     "db-user"   = "kuutti_app"
+    # Photo moderation through Rekognition (#49, ADR-006); the instance role allows the two calls.
+    "moderation" = "rekognition"
     }, var.media_enabled ? {
     # Photos (#48): what the API needs besides the private key, which is
     # /kuutti/prod/cloudfront-signing-key and never a resource (ADR-001).

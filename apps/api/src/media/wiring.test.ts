@@ -28,6 +28,7 @@ describe("media wiring", () => {
       baseUrl: "https://api.staging.kuutti.app",
       keyPairId: "K2JCJMDEHXQW5F",
       concurrency: expect.any(Number),
+      moderation: "queue",
     });
     expect(JSON.stringify(setup)).not.toContain("PRIVATE KEY");
   });
@@ -39,6 +40,7 @@ describe("media wiring", () => {
       bucket: "kuutti-media",
       endpoint: "http://127.0.0.1:9000",
       concurrency: 2,
+      moderation: "queue",
     });
     expect(() =>
       createMediaDeps(
@@ -74,5 +76,21 @@ describe("media wiring", () => {
     const { deps, setup } = createMediaDeps(config);
     expect(deps).toBeUndefined();
     expect(setup.mode).toBe("off");
+  });
+});
+
+describe("moderation wiring", () => {
+  it("queues everything unless MODERATION says rekognition, whose client is built for the region", () => {
+    const local = testConfig({ S3_ENDPOINT: "http://127.0.0.1:9000" });
+    expect(createMediaDeps(local).deps?.moderator?.kind).toBe("queue");
+    const aws = testConfig({
+      APP_ENV: "staging",
+      NODE_ENV: "production",
+      MODERATION: "rekognition",
+      ...cloudfront,
+    });
+    const { deps, setup } = createMediaDeps(aws);
+    expect(deps?.moderator?.kind).toBe("rekognition");
+    expect(setup).toMatchObject({ moderation: "rekognition" });
   });
 });

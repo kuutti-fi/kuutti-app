@@ -63,11 +63,15 @@ describe("migrate", () => {
         );
         expect(tables.rows.map((r) => r.table_name)).toEqual([
           "account",
+          "admin_session",
+          "audit_log",
           "auth_request",
           "identity",
           "matching_config",
+          "moderator_roles",
           "photo",
           "photo_access",
+          "photo_review",
           "ponds",
           "session",
         ]);

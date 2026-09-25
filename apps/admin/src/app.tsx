@@ -1,18 +1,39 @@
+import { formatDate } from "@kuutti/i18n";
 import { useT } from "@kuutti/i18n/react";
+import { SignIn, useStaffSession } from "./features/identity/index.ts";
+import { PhotoQueue } from "./features/media/index.ts";
 import mark from "./logo-mark.png";
 import { SourceOffer } from "./source-offer.tsx";
 
-// Placeholder. Screens (report queue, photo queue, config editor) arrive with M4.
-// English only by decision (TD-17); the component library choice is open (rules/admin.md).
+// The moderation panel (#49, rules/admin.md): a staff bank login, then the
+// photo review queue. English only by decision (TD-17); plain React, so the
+// component-library question of rules/admin.md stays open.
 export function App() {
-  const { t } = useT();
+  const { t, locale } = useT();
+  const session = useStaffSession();
   return (
     <>
-      <main>
+      <header className="masthead">
         {/* The mark is decorative: the heading right under it carries the name. */}
-        <img src={mark} alt="" width={64} height={64} />
+        <img src={mark} alt="" width={48} height={48} />
         <h1>{t("admin.title")}</h1>
-        <p>{t("admin.empty")}</p>
+        {session.status === "signed-in" && (
+          <p className="session">
+            {t("admin.session.role", { role: session.session.role })} ·{" "}
+            {t("admin.session.expires", {
+              time: formatDate(locale, new Date(session.session.expiresAt), { timeStyle: "short" }),
+            })}{" "}
+            <button type="button" onClick={() => void session.signOut()}>
+              {t("admin.signOut")}
+            </button>
+          </p>
+        )}
+      </header>
+      <main>
+        {session.status === "loading" && <p aria-busy="true">{t("admin.queue.loading")}</p>}
+        {session.status === "signed-out" && <SignIn />}
+        {session.status === "signed-in" &&
+          (session.session.role === "researcher" ? <p>{t("admin.forbidden")}</p> : <PhotoQueue />)}
       </main>
       <SourceOffer />
     </>

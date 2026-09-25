@@ -9,16 +9,17 @@ import {
   type IdentityBroker,
   isTeliaIssuer,
   OidcBroker,
+  sweepAdminSessions,
   sweepSessions,
   teliaKeyIds,
 } from "./identity/index.ts";
-import { scheduleNightly } from "./jobs/nightly.ts";
+import { type NightlyJob, scheduleNightly } from "./jobs/nightly.ts";
 import { type Config, ConfigError, loadConfig } from "./lib/config.ts";
 import { createLogger } from "./lib/logger.ts";
 import { ensurePreviewDatabase } from "./lib/preview-database.ts";
 import { flushSentry, initSentry, sentryReporter } from "./lib/sentry.ts";
 import { buildInfo } from "./lib/version.ts";
-import { createMediaDeps } from "./media/index.ts";
+import { createMediaDeps, sweepPendingPhotos } from "./media/index.ts";
 
 async function main(): Promise<void> {
   let config: Config;
@@ -159,10 +160,21 @@ async function main(): Promise<void> {
   });
   // Nightly housekeeping inside the process (rules/api.md): ended sessions and
   // stale login attempts (#35). The round builder and the research export join here.
-  scheduleNightly(
-    [{ name: "sweep-sessions", run: () => sweepSessions({ db: pool, now: () => new Date() }) }],
-    logger,
-  );
+  const now = () => new Date();
+  const jobs: NightlyJob[] = [
+    { name: "sweep-sessions", run: () => sweepSessions({ db: pool, now }) },
+    { name: "sweep-admin-sessions", run: () => sweepAdminSessions({ db: pool, now }) },
+  ];
+  // Photos the automatic check missed get one more look (#49); none without a moderator.
+  const mediaDeps = media.deps;
+  const moderator = mediaDeps?.moderator;
+  if (mediaDeps && moderator) {
+    jobs.push({
+      name: "moderate-pending-photos",
+      run: () => sweepPendingPhotos({ db: pool, logger, now, moderator, store: mediaDeps.store }),
+    });
+  }
+  scheduleNightly(jobs, logger);
 
   const server = serve({ fetch: app.fetch, port: config.PORT, hostname: "0.0.0.0" }, (address) => {
     logger.info(

@@ -376,6 +376,20 @@ errors.media_busy:
   sv: Många foton bearbetas just nu. Försök igen om en stund.
   machine: { fi: true, sv: true }
 
+errors.admin_not_allowed:
+  en: This bank login has no moderator role.
+  description: Staff sign-in (403), the identified person has no row in moderator_roles or their identity is not in good standing; nothing was created.
+  fi: Tällä pankkitunnistautumisella ei ole moderaattorin roolia.
+  sv: Den här bankinloggningen har ingen moderatorroll.
+  machine: { fi: true, sv: true }
+
+errors.admin_forbidden:
+  en: Your role does not allow this.
+  description: Admin routes (403), the session's role is not one the route admits (a researcher on the photo queue, for example).
+  fi: Roolisi ei salli tätä.
+  sv: Din roll tillåter inte det här.
+  machine: { fi: true, sv: true }
+
 errors.media_unavailable:
   en: Photos are not available right now.
   description: Photo routes (503) when the API has no object storage configured (a developer's machine without the S3 stand-in, an environment before the media module is applied).
@@ -852,3 +866,204 @@ smoke.photos.open:
   fi: Kuvasi
   sv: Dina foton
   machine: { fi: true, sv: true }
+
+photos.rejected.nudity:
+  en: Not accepted. Photos with nudity cannot be used on Kuutti.
+  description: Photos screen, under the badge of a rejected photo; the moderator chose the reason nudity.
+  fi: Ei hyväksytty. Alastomuutta sisältäviä kuvia ei voi käyttää Kuutissa.
+  sv: Inte godkänt. Foton med nakenhet kan inte användas på Kuutti.
+  machine: { fi: true, sv: true }
+
+photos.rejected.no_person:
+  en: Not accepted. A profile photo has to show you.
+  description: Photos screen, rejected because no person is visible (a landscape, a pet, an object).
+  fi: Ei hyväksytty. Profiilikuvassa pitää näkyä sinä.
+  sv: Inte godkänt. En profilbild måste visa dig.
+  machine: { fi: true, sv: true }
+
+photos.rejected.several_people:
+  en: Not accepted. A profile photo shows you alone, so nobody else appears on Kuutti without asking.
+  description: Photos screen, rejected because several people are in the picture.
+  fi: Ei hyväksytty. Profiilikuvassa olet yksin, jotta kukaan muu ei päädy Kuuttiin kysymättä.
+  sv: Inte godkänt. På en profilbild är du ensam, så att ingen annan hamnar på Kuutti utan att bli tillfrågad.
+  machine: { fi: true, sv: true }
+
+photos.rejected.minor:
+  en: Not accepted. Photos with children cannot be used on Kuutti.
+  description: Photos screen, rejected because a minor appears in the picture.
+  fi: Ei hyväksytty. Kuvia, joissa on lapsia, ei voi käyttää Kuutissa.
+  sv: Inte godkänt. Foton med barn kan inte användas på Kuutti.
+  machine: { fi: true, sv: true }
+
+photos.rejected.violence:
+  en: Not accepted. Photos with violence or weapons cannot be used on Kuutti.
+  description: Photos screen, rejected because of violence or weapons.
+  fi: Ei hyväksytty. Kuvia, joissa on väkivaltaa tai aseita, ei voi käyttää Kuutissa.
+  sv: Inte godkänt. Foton med våld eller vapen kan inte användas på Kuutti.
+  machine: { fi: true, sv: true }
+
+photos.rejected.contact_details:
+  en: Not accepted. Photos must not show contact details, usernames or links.
+  description: Photos screen, rejected because the picture carries contact details, a handle or a link (pre-match links are banned by the product constraints).
+  fi: Ei hyväksytty. Kuvissa ei saa näkyä yhteystietoja, käyttäjätunnuksia tai linkkejä.
+  sv: Inte godkänt. Foton får inte visa kontaktuppgifter, användarnamn eller länkar.
+  machine: { fi: true, sv: true }
+
+photos.rejected.other:
+  en: Not accepted. This photo does not fit Kuutti; try another one.
+  description: Photos screen, rejected for a reason outside the list.
+  fi: Ei hyväksytty. Tämä kuva ei sovi Kuuttiin; kokeile toista.
+  sv: Inte godkänt. Det här fotot passar inte på Kuutti; prova ett annat.
+  machine: { fi: true, sv: true }
+
+admin.signIn.title:
+  en: Sign in
+  description: Admin panel, heading of the sign-in screen. English only (TD-17).
+
+admin.signIn.explain:
+  en: Moderators sign in with their bank, like everyone. The panel opens only for a bank login that has a moderator role.
+  description: Admin panel, sign-in screen paragraph.
+
+admin.signIn.button:
+  en: Sign in with your bank
+  description: Admin panel, the button that starts the staff bank login.
+
+admin.signIn.error.admin_not_allowed:
+  en: That bank login has no moderator role. Ask the maintainer to add it.
+  description: Admin panel, the bank login came back refused with admin_not_allowed.
+
+admin.signIn.error.no_api:
+  en: This build of the panel names no API to sign in to; it was built without VITE_API_URL.
+  description: Admin panel, a production build without an API address; nothing is sent anywhere.
+
+admin.signIn.error.generic:
+  en: Sign-in did not complete. Try again.
+  description: Admin panel, any other sign-in failure (a used code, the API unreachable).
+
+admin.session.role:
+  en: "Signed in as {role}"
+  description: Admin panel header. {role} is the role word from the API (moderator, admin, researcher), not translated.
+
+admin.session.expires:
+  en: "Session ends: {time}"
+  description: Admin panel header. {time} is a clock time formatted for the locale, after a colon so nothing inflects it.
+
+admin.signOut:
+  en: Sign out
+  description: Admin panel header button.
+
+admin.queue.title:
+  en: Photo review queue
+  description: Admin panel, heading of the photo queue screen.
+
+admin.queue.total:
+  en: "{total, plural, =0 {Nothing waiting} one {# photo waiting} other {# photos waiting}}"
+  description: Admin panel, how many photos wait for a decision.
+
+admin.queue.loading:
+  en: Loading the queue…
+  description: Admin panel, while the queue is fetched.
+
+admin.queue.error:
+  en: The queue could not be loaded.
+  description: Admin panel, the queue request failed.
+
+admin.queue.refresh:
+  en: Refresh
+  description: Admin panel, reloads the queue.
+
+admin.queue.uploaded:
+  en: "Uploaded {time}"
+  description: Admin panel, one queue item. {time} is a date and time formatted for the locale.
+
+admin.queue.account:
+  en: "Account {account}"
+  description: Admin panel, one queue item. {account} is the first characters of the pseudonymous account id.
+
+admin.queue.image:
+  en: "Photo under review"
+  description: Admin panel, alt text of the card image in the queue.
+
+admin.queue.imageLoading:
+  en: Loading the photo…
+  description: Admin panel, while the signed URL of a card is fetched.
+
+admin.queue.labels:
+  en: What the automatic check saw
+  description: Admin panel, heading above the label list of one item.
+
+admin.queue.noLabels:
+  en: No labels above 30 % confidence.
+  description: Admin panel, when the automatic check returned no labels.
+
+admin.queue.notChecked:
+  en: Not checked automatically.
+  description: Admin panel, the item was queued without an automatic check (no Rekognition where the API runs).
+
+admin.queue.faces:
+  en: "{faces, plural, =0 {No face found} one {# face found} other {# faces found}}"
+  description: Admin panel, the face count the automatic check found.
+
+admin.queue.label:
+  en: "{name} ({confidence, number} %)"
+  description: Admin panel, one label with its confidence. {name} is the label as Rekognition names it, in English.
+
+admin.queue.approve:
+  en: Approve
+  description: Admin panel, button that approves the photo.
+
+admin.queue.reject:
+  en: Reject…
+  description: Admin panel, button that opens the reason choice.
+
+admin.queue.reason.label:
+  en: Reason the person is told
+  description: Admin panel, label of the reason select in the rejection form.
+
+admin.queue.reason.nudity:
+  en: Nudity
+  description: Admin panel, a rejection reason.
+
+admin.queue.reason.no_person:
+  en: No person visible
+  description: Admin panel, a rejection reason.
+
+admin.queue.reason.several_people:
+  en: Several people
+  description: Admin panel, a rejection reason.
+
+admin.queue.reason.minor:
+  en: A child appears
+  description: Admin panel, a rejection reason.
+
+admin.queue.reason.violence:
+  en: Violence or weapons
+  description: Admin panel, a rejection reason.
+
+admin.queue.reason.contact_details:
+  en: Contact details, handle or link
+  description: Admin panel, a rejection reason.
+
+admin.queue.reason.other:
+  en: Other
+  description: Admin panel, a rejection reason.
+
+admin.queue.confirmReject:
+  en: Reject photo
+  description: Admin panel, the confirming button of the rejection form.
+
+admin.queue.cancel:
+  en: Cancel
+  description: Admin panel, closes the rejection form without deciding.
+
+admin.queue.decided:
+  en: "{decision, select, approved {Approved} rejected {Rejected} other {Decided}}"
+  description: Admin panel, the line shown where a decided item was, until the next refresh.
+
+admin.queue.decisionFailed:
+  en: The decision was not saved. Refresh and try again.
+  description: Admin panel, a decision request failed.
+
+admin.forbidden:
+  en: Your role does not allow the photo queue.
+  description: Admin panel, a researcher signed in; the queue is for moderators and admins.

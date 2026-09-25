@@ -280,6 +280,22 @@ Then give the `api` application in Dokploy a second domain, `origin.api.<env>.<d
 
 After the cutover the box still admits 443 from anywhere, because Dokploy's control plane (`deploy.yml`) and the pull-request previews are served on it directly. `cloudfront_only_ingress` (network module) is the switch that closes it to CloudFront's prefix list once those two are behind the distribution as well; ADR-005 names that follow-up.
 
+### Photo moderation (#49, ADR-006)
+
+The instance role may call `rekognition:DetectModerationLabels` and `rekognition:DetectFaces` (`modules/compute`, statement `RekognitionDetect`), the parameter `moderation=rekognition` under `/kuutti/<env>/` switches the API's automatic check on, and the observability module counts the calls from the `photo moderated` log lines (`RekognitionCalls` in the `Kuutti/<env>` namespace). Without the parameter every photo goes to the human queue.
+
+Staff are identities with a role (rules/admin.md): the person signs in once through the bank (the app is enough), then the maintainer grants the role to the identity that just appeared, from a machine that reaches the database (the Session Manager tunnel of `db-app-role.sh`). The API never logs a `hetu_hmac`; `recent` lists the last five logins by it:
+
+```sh
+export DATABASE_URL=postgres://kuutti_app:...@127.0.0.1:15432/kuutti
+pnpm --filter @kuutti/db moderator -- recent
+pnpm --filter @kuutti/db moderator -- grant <hetu_hmac> moderator --by "Nikolai"
+pnpm --filter @kuutti/db moderator -- list
+pnpm --filter @kuutti/db moderator -- revoke <hetu_hmac>
+```
+
+Revoking ends the person's admin sessions at once. The panel signs in at `/admin/auth/start` and returns to `ADMIN_APP_URL` (the SSM parameter `admin-app-url` once the panel has a deployed host; Vite's `http://localhost:5173` by default, which production refuses at boot: set the parameter before the first release), which must also be on the CORS allowlist.
+
 ### Observability (#11)
 
 `infra/modules/observability`, composed by each environment: an SNS topic `kuutti-<env>-alerts` in eu-central-1, alarms for the instance status check, the instance and RDS CPU credit balances, RDS free storage and the API's 5xx rate (a metric filter on `/kuutti/<env>/api`), and three saved Logs Insights queries. The subscriber is the repository variable `ALERT_EMAIL` (`gh variable set ALERT_EMAIL --body <project alias>`), which CI hands to OpenTofu as `TF_VAR_alert_email`; confirm the subscription from that mailbox after the first apply (`aws sns list-subscriptions-by-topic --topic-arn <alerts_topic_arn>` shows `PendingConfirmation` until the link in AWS's mail is followed), then run the delivery test in `docs/runbooks/alerts.md`. Without the variable the topic exists with no subscriber. About 0.80 USD a month per environment.

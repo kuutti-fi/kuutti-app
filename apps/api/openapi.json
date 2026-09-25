@@ -251,6 +251,64 @@
           "android"
         ]
       },
+      "AdminSession": {
+        "type": "object",
+        "properties": {
+          "accessToken": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{43}$"
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "role": {
+            "$ref": "#/components/schemas/ModeratorRole"
+          }
+        },
+        "required": [
+          "accessToken",
+          "expiresAt",
+          "role"
+        ]
+      },
+      "ModeratorRole": {
+        "type": "string",
+        "enum": [
+          "moderator",
+          "admin",
+          "researcher"
+        ]
+      },
+      "AdminAuthExchangeRequest": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{43}$"
+          }
+        },
+        "required": [
+          "code"
+        ],
+        "additionalProperties": false
+      },
+      "AdminWhoAmI": {
+        "type": "object",
+        "properties": {
+          "role": {
+            "$ref": "#/components/schemas/ModeratorRole"
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "role",
+          "expiresAt"
+        ]
+      },
       "PhotoList": {
         "type": "object",
         "properties": {
@@ -300,6 +358,21 @@
           "state": {
             "$ref": "#/components/schemas/PhotoState"
           },
+          "rejectionReason": {
+            "type": "string",
+            "nullable": true,
+            "enum": [
+              "nudity",
+              "no_person",
+              "several_people",
+              "minor",
+              "violence",
+              "contact_details",
+              "other",
+              null
+            ],
+            "description": "Set when state is rejected: the reason the owner is told."
+          },
           "position": {
             "type": "integer",
             "minimum": 0,
@@ -316,6 +389,7 @@
           "width",
           "height",
           "state",
+          "rejectionReason",
           "position",
           "createdAt"
         ]
@@ -393,6 +467,192 @@
           "full"
         ],
         "description": "thumb: 200×200 for lists. card: 800×1067 when a profile is opened. full: 1600 px long edge, requested only from the zoom screen."
+      },
+      "PhotoReviewQueue": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PhotoReviewItem"
+            },
+            "maxItems": 100
+          },
+          "total": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "items",
+          "total"
+        ]
+      },
+      "PhotoReviewItem": {
+        "type": "object",
+        "properties": {
+          "photoId": {
+            "$ref": "#/components/schemas/PhotoId"
+          },
+          "accountId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "state": {
+            "$ref": "#/components/schemas/PhotoState"
+          },
+          "blurhash": {
+            "type": "string",
+            "minLength": 6,
+            "maxLength": 200
+          },
+          "width": {
+            "type": "integer",
+            "minimum": 0,
+            "exclusiveMinimum": true
+          },
+          "height": {
+            "type": "integer",
+            "minimum": 0,
+            "exclusiveMinimum": true
+          },
+          "uploadedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "checkedAt": {
+            "type": "string",
+            "nullable": true,
+            "format": "date-time"
+          },
+          "labels": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ModerationLabel"
+            },
+            "maxItems": 50
+          },
+          "faces": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "flagged": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 100
+            },
+            "maxItems": 50
+          }
+        },
+        "required": [
+          "photoId",
+          "accountId",
+          "state",
+          "blurhash",
+          "width",
+          "height",
+          "uploadedAt",
+          "checkedAt",
+          "labels",
+          "faces",
+          "flagged"
+        ]
+      },
+      "ModerationLabel": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "parentName": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "confidence": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100
+          }
+        },
+        "required": [
+          "name",
+          "parentName",
+          "confidence"
+        ]
+      },
+      "PhotoDecisionResponse": {
+        "type": "object",
+        "properties": {
+          "photoId": {
+            "$ref": "#/components/schemas/PhotoId"
+          },
+          "state": {
+            "$ref": "#/components/schemas/PhotoState"
+          },
+          "rejectionReason": {
+            "$ref": "#/components/schemas/PhotoRejectionReason"
+          }
+        },
+        "required": [
+          "photoId",
+          "state",
+          "rejectionReason"
+        ]
+      },
+      "PhotoRejectionReason": {
+        "type": "string",
+        "nullable": true,
+        "enum": [
+          "nudity",
+          "no_person",
+          "several_people",
+          "minor",
+          "violence",
+          "contact_details",
+          "other",
+          null
+        ]
+      },
+      "PhotoDecisionRequest": {
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "decision": {
+                "type": "string",
+                "enum": [
+                  "approve"
+                ]
+              }
+            },
+            "required": [
+              "decision"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "decision": {
+                "type": "string",
+                "enum": [
+                  "reject"
+                ]
+              },
+              "reason": {
+                "$ref": "#/components/schemas/PhotoRejectionReason"
+              }
+            },
+            "required": [
+              "decision",
+              "reason"
+            ],
+            "additionalProperties": false
+          }
+        ]
       }
     },
     "parameters": {}
@@ -700,6 +960,168 @@
         "responses": {
           "204": {
             "description": "Every session of the account is ended."
+          },
+          "401": {
+            "description": "unauthenticated, session_expired or session_revoked.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/auth/start": {
+      "get": {
+        "summary": "Begin a staff bank login",
+        "description": "Opened by the moderation panel. The same bank login as the app's, marked as a staff attempt: it resolves to an identity with a moderator role and creates nothing. The browser returns to the panel with a one-time code in the URL fragment, or with error=admin_not_allowed.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "fi",
+                "sv",
+                "en"
+              ],
+              "description": "The language of the bank chooser; defaults to the request's."
+            },
+            "required": false,
+            "description": "The language of the bank chooser; defaults to the request's.",
+            "name": "locale",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "302": {
+            "description": "Redirect to the broker."
+          },
+          "400": {
+            "description": "Validation failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "No identification broker is configured.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/auth/exchange": {
+      "post": {
+        "summary": "Exchange a staff one-time code for an admin session",
+        "description": "Single use, within 60 seconds. Eight hours, no refresh; sign in again afterwards.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdminAuthExchangeRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The admin session.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminSession"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unknown, used or expired code (auth_code_used).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "admin_not_allowed: the role was taken away meanwhile.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/whoami": {
+      "get": {
+        "summary": "This admin session",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The role and when the session ends.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminWhoAmI"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "unauthenticated, session_expired or session_revoked.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/auth/logout": {
+      "post": {
+        "summary": "End this admin session",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "The session is ended."
           },
           "401": {
             "description": "unauthenticated, session_expired or session_revoked.",
@@ -1027,6 +1449,238 @@
           },
           "503": {
             "description": "media_unavailable: no object storage is configured here.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/photos/queue": {
+      "get": {
+        "summary": "Photos waiting for a person's decision",
+        "description": "Oldest first, with what the automatic check saw: labels with confidences, faces, what was flagged.",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20
+            },
+            "required": false,
+            "name": "limit",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The queue.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PhotoReviewQueue"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "unauthenticated, session_expired or session_revoked.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "admin_forbidden: the role does not allow this.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/photos/{id}/card": {
+      "get": {
+        "summary": "A signed URL for the card variant, for review",
+        "description": "Any photo, any state. Every issuance is an audit_log row naming the member of staff.",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "$ref": "#/components/schemas/PhotoId"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The URL and when it stops working.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PhotoUrlResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "unauthenticated, session_expired or session_revoked.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "admin_forbidden: the role does not allow this.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such photo.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "media_unavailable: no object storage is configured here.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/photos/{id}/decision": {
+      "post": {
+        "summary": "Approve or reject a photo",
+        "description": "approve makes the photo visible to others; reject hides it and tells the owner the reason in words. Only a person rejects. Written to audit_log.",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "$ref": "#/components/schemas/PhotoId"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PhotoDecisionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The photo's new state.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PhotoDecisionResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed (a rejection without a reason, for example).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "unauthenticated, session_expired or session_revoked.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "admin_forbidden: the role does not allow this.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such photo.",
             "content": {
               "application/json": {
                 "schema": {

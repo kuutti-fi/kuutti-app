@@ -1,7 +1,9 @@
 import { availableParallelism } from "node:os";
+import { RekognitionClient } from "@aws-sdk/client-rekognition";
 import pLimit from "p-limit";
 import type { Config } from "../lib/config.ts";
 import { createS3Client } from "../lib/s3.ts";
+import { type Moderator, queueAllModerator, rekognitionModerator } from "./moderation.ts";
 import type { MediaDeps } from "./photos.ts";
 import { s3MediaStore } from "./store.ts";
 import { cloudFrontSigner, presignedS3Signer } from "./urls.ts";
@@ -13,9 +15,35 @@ import { cloudFrontSigner, presignedS3Signer } from "./urls.ts";
  * configured, in which case the photo routes answer 503.
  */
 export type MediaSetup =
-  | { mode: "cloudfront"; bucket: string; baseUrl: string; keyPairId: string; concurrency: number }
-  | { mode: "presigned"; bucket: string; endpoint: string; concurrency: number }
+  | {
+      mode: "cloudfront";
+      bucket: string;
+      baseUrl: string;
+      keyPairId: string;
+      concurrency: number;
+      moderation: Moderator["kind"];
+    }
+  | {
+      mode: "presigned";
+      bucket: string;
+      endpoint: string;
+      concurrency: number;
+      moderation: Moderator["kind"];
+    }
   | { mode: "off"; reason: string };
+
+/**
+ * The automatic check (#49): Rekognition through the instance role where the
+ * configuration says so, otherwise everything goes to a person. A deployed
+ * environment without MODERATION=rekognition therefore fills the queue rather
+ * than approving anything; it is loud, not unsafe.
+ */
+function moderatorFor(config: Config): Moderator {
+  if (config.MODERATION === "rekognition") {
+    return rekognitionModerator(new RekognitionClient({ region: config.S3_REGION }));
+  }
+  return queueAllModerator();
+}
 
 /**
  * Media deps from the validated configuration. Half a CloudFront
@@ -40,6 +68,7 @@ export function createMediaDeps(config: Config): { deps?: MediaDeps; setup: Medi
   }
   if (config.MEDIA_URL_BASE && config.CLOUDFRONT_KEY_PAIR_ID && config.CLOUDFRONT_SIGNING_KEY) {
     const client = createS3Client(config);
+    const moderator = moderatorFor(config);
     return {
       deps: {
         store: s3MediaStore(client, config.S3_BUCKET),
@@ -49,6 +78,7 @@ export function createMediaDeps(config: Config): { deps?: MediaDeps; setup: Medi
           privateKey: config.CLOUDFRONT_SIGNING_KEY,
         }),
         limit,
+        moderator,
       },
       setup: {
         mode: "cloudfront",
@@ -56,6 +86,7 @@ export function createMediaDeps(config: Config): { deps?: MediaDeps; setup: Medi
         baseUrl: config.MEDIA_URL_BASE,
         keyPairId: config.CLOUDFRONT_KEY_PAIR_ID,
         concurrency,
+        moderation: moderator.kind,
       },
     };
   }
@@ -66,17 +97,20 @@ export function createMediaDeps(config: Config): { deps?: MediaDeps; setup: Medi
       );
     }
     const client = createS3Client(config);
+    const moderator = moderatorFor(config);
     return {
       deps: {
         store: s3MediaStore(client, config.S3_BUCKET),
         signer: presignedS3Signer(client, config.S3_BUCKET),
         limit,
+        moderator,
       },
       setup: {
         mode: "presigned",
         bucket: config.S3_BUCKET,
         endpoint: config.S3_ENDPOINT,
         concurrency,
+        moderation: moderator.kind,
       },
     };
   }

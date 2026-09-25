@@ -1,5 +1,5 @@
 import { index, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
-import { account } from "./identity.ts";
+import { account, identity } from "./identity.ts";
 
 /**
  * One row per login attempt (#33): the state and nonce the API generated for
@@ -25,6 +25,9 @@ export const authRequest = pgTable(
     codeUsedAt: timestamp("code_used_at", { withTimezone: true }),
     accountId: uuid("account_id").references(() => account.id),
     outcome: text("outcome"),
+    // An admin login (#49, platform "admin") resolves to an identity with a
+    // role, never to an account; the exchange turns it into an admin session.
+    identityId: uuid("identity_id").references(() => identity.id),
   },
   (table) => [index("auth_request_expires_at_idx").on(table.expiresAt)],
 );

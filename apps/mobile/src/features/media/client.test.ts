@@ -16,6 +16,7 @@ const stored = {
   width: 1600,
   height: 1200,
   state: "pending",
+  rejectionReason: null,
   position: 0,
   createdAt: "2026-09-25T12:00:00.000Z",
 };

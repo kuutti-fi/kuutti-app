@@ -66,6 +66,13 @@ const Env = z.object({
   // sharp runs this many uploads at once; above it the upload answers 503
   // (rules/api.md Media). Defaults to the vCPU count; tests set 1.
   IMAGE_CONCURRENCY: z.coerce.number().int().min(1).max(64).optional(),
+  // Photo moderation (#49, ADR-006): rekognition through the instance role on
+  // AWS (the SSM parameter `moderation`), queue everywhere else, which sends
+  // every photo to a person and approves nothing by itself.
+  MODERATION: z.enum(["rekognition", "queue"]).default("queue"),
+  // Where a staff bank login returns to (#49): the moderation panel's origin,
+  // which is also on the CORS allowlist. Vite's dev server by default.
+  ADMIN_APP_URL: z.url().default("http://localhost:5173"),
 
   // Bank identification (M2, docs/vendors/telia.md): the mock IdP locally, the
   // Telia broker on staging and production. The issuer's endpoints and keys come
@@ -196,6 +203,14 @@ export function parseConfig(raw: Record<string, string | undefined>): Config {
     env.APP_ENV !== "test"
   ) {
     throw new ConfigError([], ["HETU_HMAC_KEY: the development placeholder is not a key"]);
+  }
+  // The staff login's return address (#49): a production box without the
+  // admin-app-url parameter would send a live one-time code to localhost.
+  if (env.APP_ENV === "production" && !env.ADMIN_APP_URL.startsWith("https://")) {
+    throw new ConfigError(
+      ["ADMIN_APP_URL"],
+      ["ADMIN_APP_URL: production needs the panel's https address (SSM admin-app-url)"],
+    );
   }
   const rateLimit =
     env.RATE_LIMIT_PER_MINUTE ??

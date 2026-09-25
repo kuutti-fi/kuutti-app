@@ -1,5 +1,5 @@
 import type { PlainMessageKey } from "@kuutti/i18n";
-import type { Photo, PhotoState } from "@kuutti/schema";
+import type { Photo, PhotoRejectionReason, PhotoState } from "@kuutti/schema";
 import { useRouter } from "expo-router";
 import ArrowLeft from "lucide-react-native/icons/arrow-left";
 import ArrowRight from "lucide-react-native/icons/arrow-right";
@@ -32,6 +32,24 @@ const STATE_TEXT: Record<PhotoState, PlainMessageKey> = {
   approved: "photos.state.approved",
   rejected: "photos.state.rejected",
 };
+
+/** A rejected photo says why, in words the moderator chose from a list (#49); never a label name. */
+const REJECTED_TEXT: Record<PhotoRejectionReason, PlainMessageKey> = {
+  nudity: "photos.rejected.nudity",
+  no_person: "photos.rejected.no_person",
+  several_people: "photos.rejected.several_people",
+  minor: "photos.rejected.minor",
+  violence: "photos.rejected.violence",
+  contact_details: "photos.rejected.contact_details",
+  other: "photos.rejected.other",
+};
+
+function stateText(photo: Photo, t: ReturnType<typeof useT>["t"]): string {
+  if (photo.state === "rejected" && photo.rejectionReason) {
+    return t(REJECTED_TEXT[photo.rejectionReason]);
+  }
+  return t(STATE_TEXT[photo.state]);
+}
 
 /**
  * The API's refusals the screen has its own words for; a Map so a code like
@@ -145,7 +163,7 @@ export function PhotosScreen() {
               </Pressable>
               <View className="gap-0.5">
                 {index === 0 && <Text variant="small">{t("photos.main")}</Text>}
-                <Text variant="muted">{t(STATE_TEXT[photo.state])}</Text>
+                <Text variant="muted">{stateText(photo, t)}</Text>
               </View>
               <View className="flex-row flex-wrap gap-1">
                 {index !== 0 && (

@@ -1,5 +1,13 @@
 import type { Queryable } from "@kuutti/db";
-import type { Photo, PhotoId, PhotoState, PhotoVariant } from "@kuutti/schema";
+import type {
+  ModerationLabel,
+  Photo,
+  PhotoId,
+  PhotoRejectionReason,
+  PhotoReviewItem,
+  PhotoState,
+  PhotoVariant,
+} from "@kuutti/schema";
 
 // Raw parameterised SQL for the same reason as identity/repo.ts: Deps.db is
 // the Queryable seam the test harness hands a rolled-back transaction through.
@@ -18,11 +26,12 @@ const photoFrom = (r: Row): PhotoRow => ({
   width: r.width as number,
   height: r.height as number,
   state: r.state as PhotoState,
+  rejectionReason: (r.rejection_reason as PhotoRejectionReason | null) ?? null,
   position: r.position as number,
   createdAt: (r.created_at as Date).toISOString(),
 });
 
-const COLUMNS = "id, key, blurhash, width, height, state, position, created_at";
+const COLUMNS = "id, key, blurhash, width, height, state, rejection_reason, position, created_at";
 
 export async function listPhotos(db: Queryable, accountId: string): Promise<PhotoRow[]> {
   const { rows } = await db.query<Row>(
@@ -141,4 +150,154 @@ export async function insertPhotoAccess(
     "INSERT INTO photo_access (account_id, photo_id, variant, at) VALUES ($1, $2, $3, $4)",
     [input.accountId, input.photoId, input.variant, input.at],
   );
+}
+
+// Moderation (#49). The automatic check and the staff routes read photos
+// across accounts on purpose: what a moderator sees is every queued photo,
+// behind the admin guard (lib/admin-middleware.ts) and an audit row per view.
+// Rule 6 scopes what a person reads about themselves; staff access is the
+// exception the security checklist names, and it is logged.
+
+/** The automatic check's result; never overwrites a person's decision. */
+export async function upsertAutomaticReview(
+  db: Queryable,
+  input: {
+    photoId: string;
+    labels: ModerationLabel[];
+    faces: number;
+    flagged: string[];
+    modelVersion: string | null;
+    checkedAt: Date;
+    decision: "approved" | "queued";
+  },
+): Promise<void> {
+  await db.query(
+    `INSERT INTO photo_review (photo_id, labels, faces, flagged, model_version, checked_at, decision)
+     VALUES ($1, $2::jsonb, $3, $4, $5, $6, $7)
+     ON CONFLICT (photo_id) DO UPDATE
+       SET labels = EXCLUDED.labels, faces = EXCLUDED.faces, flagged = EXCLUDED.flagged,
+           model_version = EXCLUDED.model_version, checked_at = EXCLUDED.checked_at,
+           decision = EXCLUDED.decision
+       WHERE photo_review.decided_by IS NULL`,
+    [
+      input.photoId,
+      JSON.stringify(input.labels),
+      input.faces,
+      input.flagged,
+      input.modelVersion,
+      input.checkedAt,
+      input.decision,
+    ],
+  );
+}
+
+/** pending → approved or queued; true when this call moved it (a person's decision stands). */
+export async function movePendingPhoto(
+  db: Queryable,
+  photoId: string,
+  decision: "approved" | "queued",
+): Promise<boolean> {
+  const result = await db.query("UPDATE photo SET state = $2 WHERE id = $1 AND state = 'pending'", [
+    photoId,
+    decision,
+  ]);
+  return result.rowCount === 1;
+}
+
+/** Photos still pending with no automatic check recorded, oldest first: what the nightly sweep retries. */
+export async function findPendingUnchecked(
+  db: Queryable,
+  olderThan: Date,
+  limit: number,
+): Promise<Array<{ id: string; accountId: string; key: string }>> {
+  const { rows } = await db.query<Row>(
+    `SELECT p.id, p.account_id, p.key FROM photo p
+     LEFT JOIN photo_review r ON r.photo_id = p.id
+     WHERE p.state = 'pending' AND r.photo_id IS NULL AND p.created_at < $1
+     ORDER BY p.created_at LIMIT $2`,
+    [olderThan, limit],
+  );
+  return rows.map((r) => ({
+    id: r.id as string,
+    accountId: r.account_id as string,
+    key: r.key as string,
+  }));
+}
+
+const reviewItemFrom = (r: Row): PhotoReviewItem => ({
+  photoId: r.id as PhotoId,
+  accountId: r.account_id as string,
+  state: r.state as PhotoState,
+  blurhash: r.blurhash as string,
+  width: r.width as number,
+  height: r.height as number,
+  uploadedAt: (r.created_at as Date).toISOString(),
+  checkedAt: ((r.checked_at as Date | null) ?? null)?.toISOString() ?? null,
+  labels: (r.labels as ModerationLabel[] | null) ?? [],
+  faces: (r.faces as number | null) ?? 0,
+  flagged: (r.flagged as string[] | null) ?? [],
+});
+
+const QUEUE_COLUMNS = `p.id, p.account_id, p.state, p.blurhash, p.width, p.height, p.created_at,
+  r.checked_at, r.labels, r.faces, r.flagged`;
+
+/** The human queue: queued photos, oldest first. */
+export async function listQueue(db: Queryable, limit: number): Promise<PhotoReviewItem[]> {
+  const { rows } = await db.query<Row>(
+    `SELECT ${QUEUE_COLUMNS} FROM photo p LEFT JOIN photo_review r ON r.photo_id = p.id
+     WHERE p.state = 'queued' ORDER BY p.created_at LIMIT $1`,
+    [limit],
+  );
+  return rows.map(reviewItemFrom);
+}
+
+export async function countQueue(db: Queryable): Promise<number> {
+  const { rows } = await db.query<{ n: string }>(
+    "SELECT count(*) AS n FROM photo WHERE state = 'queued'",
+  );
+  return Number(rows[0]?.n ?? 0);
+}
+
+/** One photo as staff sees it, any account; null when there is no such photo. */
+export async function findPhotoForStaff(
+  db: Queryable,
+  photoId: string,
+): Promise<(PhotoRow & { accountId: string }) | null> {
+  const { rows } = await db.query<Row>(`SELECT ${COLUMNS}, account_id FROM photo WHERE id = $1`, [
+    photoId,
+  ]);
+  const r = rows[0];
+  return r ? { ...photoFrom(r), accountId: r.account_id as string } : null;
+}
+
+/**
+ * A person's decision: the photo's state and reason, and the review row with
+ * who decided and when. Rejected is only ever written here (rules/api.md:
+ * never auto-delete, never auto-reject).
+ */
+export async function decidePhoto(
+  db: Queryable,
+  input: {
+    photoId: string;
+    decision: "approved" | "rejected";
+    reason: PhotoRejectionReason | null;
+    decidedBy: string;
+    at: Date;
+  },
+): Promise<PhotoRow | null> {
+  const { rows } = await db.query<Row>(
+    `UPDATE photo SET state = $2, rejection_reason = $3 WHERE id = $1 RETURNING ${COLUMNS}`,
+    [input.photoId, input.decision, input.reason],
+  );
+  const row = rows[0];
+  if (!row) return null;
+  await db.query(
+    `INSERT INTO photo_review (photo_id, labels, faces, flagged, decision, decided_by, decided_at, reason)
+     VALUES ($1, '[]'::jsonb, 0, '{}', $2, $3, $4, $5)
+     ON CONFLICT (photo_id) DO UPDATE
+       SET decision = EXCLUDED.decision, decided_by = EXCLUDED.decided_by,
+           decided_at = EXCLUDED.decided_at, reason = EXCLUDED.reason`,
+    [input.photoId, input.decision, input.decidedBy, input.at, input.reason],
+  );
+  return photoFrom(row);
 }

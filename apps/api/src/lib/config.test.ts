@@ -82,6 +82,25 @@ describe("parseConfig", () => {
   });
 });
 
+describe("parseConfig for the staff login (#49)", () => {
+  it("defaults the panel's address to Vite locally and refuses that default in production", () => {
+    expect(parseConfig({ DATABASE_URL: "postgres://x" }).ADMIN_APP_URL).toBe(
+      "http://localhost:5173",
+    );
+    expect(() =>
+      parseConfig({ APP_ENV: "production", NODE_ENV: "production", DATABASE_URL: "postgres://x" }),
+    ).toThrow(/ADMIN_APP_URL: production needs/);
+    expect(
+      parseConfig({
+        APP_ENV: "production",
+        NODE_ENV: "production",
+        DATABASE_URL: "postgres://x",
+        ADMIN_APP_URL: "https://admin.kuutti.app",
+      }).ADMIN_APP_URL,
+    ).toBe("https://admin.kuutti.app");
+  });
+});
+
 describe("parseConfig for a pull-request preview", () => {
   const staging = {
     APP_ENV: "preview",

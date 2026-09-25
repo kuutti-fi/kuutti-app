@@ -161,6 +161,22 @@ resource "aws_cloudwatch_metric_alarm" "five_xx" {
   ok_actions          = [aws_sns_topic.alerts.arn]
 }
 
+# Every moderated photo is one log line with the number of Rekognition calls it
+# cost ({"msg":"photo moderated","rekognitionCalls":2,...}, #49). Summed, that
+# is the bill's driver besides the box; the billing alarm covers the rest.
+resource "aws_cloudwatch_log_metric_filter" "rekognition_calls" {
+  name           = "${local.name}-rekognition-calls"
+  log_group_name = var.log_group_name
+  pattern        = "{ $.msg = \"photo moderated\" && $.rekognitionCalls > 0 }"
+
+  metric_transformation {
+    name          = "RekognitionCalls"
+    namespace     = local.namespace
+    value         = "$.rekognitionCalls"
+    default_value = "0"
+  }
+}
+
 # Saved Logs Insights queries: the first three things to run when an alarm
 # fires. pino levels: 50 error, 60 fatal.
 resource "aws_cloudwatch_query_definition" "errors_by_route" {

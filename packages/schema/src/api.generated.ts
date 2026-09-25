@@ -408,6 +408,222 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/auth/start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Begin a staff bank login
+         * @description Opened by the moderation panel. The same bank login as the app's, marked as a staff attempt: it resolves to an identity with a moderator role and creates nothing. The browser returns to the panel with a one-time code in the URL fragment, or with error=admin_not_allowed.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description The language of the bank chooser; defaults to the request's. */
+                    locale?: "fi" | "sv" | "en";
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Redirect to the broker. */
+                302: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Validation failed. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description No identification broker is configured. */
+                503: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/auth/exchange": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Exchange a staff one-time code for an admin session
+         * @description Single use, within 60 seconds. Eight hours, no refresh; sign in again afterwards.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["AdminAuthExchangeRequest"];
+                };
+            };
+            responses: {
+                /** @description The admin session. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["AdminSession"];
+                    };
+                };
+                /** @description Validation failed. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description Unknown, used or expired code (auth_code_used). */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description admin_not_allowed: the role was taken away meanwhile. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/whoami": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** This admin session */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The role and when the session ends. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["AdminWhoAmI"];
+                    };
+                };
+                /** @description unauthenticated, session_expired or session_revoked. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/auth/logout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** End this admin session */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The session is ended. */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description unauthenticated, session_expired or session_revoked. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/photos": {
         parameters: {
             query?: never;
@@ -749,6 +965,241 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/photos/queue": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Photos waiting for a person's decision
+         * @description Oldest first, with what the automatic check saw: labels with confidences, faces, what was flagged.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    limit?: number;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The queue. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["PhotoReviewQueue"];
+                    };
+                };
+                /** @description Validation failed. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description unauthenticated, session_expired or session_revoked. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description admin_forbidden: the role does not allow this. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/photos/{id}/card": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * A signed URL for the card variant, for review
+         * @description Any photo, any state. Every issuance is an audit_log row naming the member of staff.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: components["schemas"]["PhotoId"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The URL and when it stops working. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["PhotoUrlResponse"];
+                    };
+                };
+                /** @description Validation failed. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description unauthenticated, session_expired or session_revoked. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description admin_forbidden: the role does not allow this. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description No such photo. */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description media_unavailable: no object storage is configured here. */
+                503: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/photos/{id}/decision": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Approve or reject a photo
+         * @description approve makes the photo visible to others; reject hides it and tells the owner the reason in words. Only a person rejects. Written to audit_log.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: components["schemas"]["PhotoId"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["PhotoDecisionRequest"];
+                };
+            };
+            responses: {
+                /** @description The photo's new state. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["PhotoDecisionResponse"];
+                    };
+                };
+                /** @description Validation failed (a rejection without a reason, for example). */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description unauthenticated, session_expired or session_revoked. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description admin_forbidden: the role does not allow this. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description No such photo. */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -852,6 +1303,22 @@ export interface components {
         };
         /** @enum {string} */
         AuthPlatform: "ios" | "android";
+        AdminSession: {
+            accessToken: string;
+            /** Format: date-time */
+            expiresAt: string;
+            role: components["schemas"]["ModeratorRole"];
+        };
+        /** @enum {string} */
+        ModeratorRole: "moderator" | "admin" | "researcher";
+        AdminAuthExchangeRequest: {
+            code: string;
+        };
+        AdminWhoAmI: {
+            role: components["schemas"]["ModeratorRole"];
+            /** Format: date-time */
+            expiresAt: string;
+        };
         PhotoList: {
             photos: components["schemas"]["Photo"][];
             /** @description matching_config max_photos. */
@@ -866,6 +1333,11 @@ export interface components {
             /** @description Of the full variant. */
             height: number;
             state: components["schemas"]["PhotoState"];
+            /**
+             * @description Set when state is rejected: the reason the owner is told.
+             * @enum {string|null}
+             */
+            rejectionReason: "nudity" | "no_person" | "several_people" | "minor" | "violence" | "contact_details" | "other" | null;
             /** @description 0 is the main photo; the owner sets the order. */
             position: number;
             /** Format: date-time */
@@ -897,6 +1369,46 @@ export interface components {
          * @enum {string}
          */
         PhotoVariant: "thumb" | "card" | "full";
+        PhotoReviewQueue: {
+            items: components["schemas"]["PhotoReviewItem"][];
+            total: number;
+        };
+        PhotoReviewItem: {
+            photoId: components["schemas"]["PhotoId"];
+            /** Format: uuid */
+            accountId: string;
+            state: components["schemas"]["PhotoState"];
+            blurhash: string;
+            width: number;
+            height: number;
+            /** Format: date-time */
+            uploadedAt: string;
+            /** Format: date-time */
+            checkedAt: string | null;
+            labels: components["schemas"]["ModerationLabel"][];
+            faces: number;
+            flagged: string[];
+        };
+        ModerationLabel: {
+            name: string;
+            parentName: string;
+            confidence: number;
+        };
+        PhotoDecisionResponse: {
+            photoId: components["schemas"]["PhotoId"];
+            state: components["schemas"]["PhotoState"];
+            rejectionReason: components["schemas"]["PhotoRejectionReason"];
+        };
+        /** @enum {string|null} */
+        PhotoRejectionReason: "nudity" | "no_person" | "several_people" | "minor" | "violence" | "contact_details" | "other" | null;
+        PhotoDecisionRequest: {
+            /** @enum {string} */
+            decision: "approve";
+        } | {
+            /** @enum {string} */
+            decision: "reject";
+            reason: components["schemas"]["PhotoRejectionReason"];
+        };
     };
     responses: never;
     parameters: never;

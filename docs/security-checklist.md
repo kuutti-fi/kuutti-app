@@ -7,7 +7,7 @@ The four surfaces that matter most, in order: the OIDC exchange with Telia, the 
 ## Broken access control
 
 - [ ] Every query that touches user data is scoped by the session's `account_id` inside the query, never by a check after the fetch.
-- [ ] Admin routes check role (moderator / admin / researcher) server-side, and the admin allowlist is by `hetu_hmac`.
+- [x] Admin routes check role (moderator / admin / researcher) server-side, and the admin allowlist is by `hetu_hmac`. (#49: `requireAdmin` in `apps/api/src/lib/admin-middleware.ts` re-reads `moderator_roles` on every request; the row is keyed by the identity the `hetu_hmac` resolves to.)
 - [ ] No endpoint returns another user's data beyond what a profile card shows; no bulk export endpoint exists.
 - [ ] Hard filters are enforced in the round builder query, in both directions.
 
@@ -51,7 +51,7 @@ The four surfaces that matter most, in order: the OIDC exchange with Telia, the 
 - [ ] OIDC callback verifies `state`, `nonce`, the ID token signature against the issuer JWKS, `iss`, `aud`, `exp`, and the `acr` expected for FTN.
 - [ ] Telia broker keys are fetched from discovery and rotate on their schedule; nothing is pinned.
 - [ ] The app never holds a client secret; the exchange is backend-driven and the app receives a one-time code by deep link.
-- [ ] Sessions expire; a device change re-authenticates through the bank; admin sessions are 8 hours with no refresh token.
+- [x] Sessions expire; a device change re-authenticates through the bank; admin sessions are 8 hours with no refresh token. (#35 for the product sessions; #49: `admin_session`, `ADMIN_SESSION_TTL_MS`, no refresh route, tested.)
 - [ ] Re-registration honours identity standing: banned and suspended are refused, cooldown is enforced, nothing is restored.
 
 ## Software and data integrity failures
@@ -64,7 +64,7 @@ The four surfaces that matter most, in order: the OIDC exchange with Telia, the 
 ## Logging and monitoring failures
 
 - [ ] Structured logs carry `account_id` and request id, never hetu, message text, email, or `seeks`.
-- [ ] Moderator actions, disclosure requests, and photo views by staff write to the immutable audit table.
+- [x] Moderator actions, disclosure requests, and photo views by staff write to the immutable audit table. (#49: `audit_log`, append-only by the trigger of migration 0006, written before the view or the change; disclosure requests join in M4.)
 - [ ] A test asserts that known PII patterns do not appear in log output.
 - [x] Signed URL issuance is logged per account (photo id, variant, time). (#48: a `photo_access` row and a log line per issuance, `apps/api/src/media/photos.ts`.)
 

@@ -1,0 +1,200 @@
+import { I18nProvider } from "@kuutti/i18n/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { i18n } from "../../i18n.ts";
+import { setTokenSource } from "../../lib/api.ts";
+import { PhotoQueue } from "./PhotoQueue.tsx";
+
+// The queue as a moderator uses it (#49): items with what the check saw, the
+// card through a signed URL, approve and reject with a reason from the list;
+// every request carries the admin token. Requests are answered by a fake
+// fetch keyed on method and path.
+
+const item = (n: number, extra: Record<string, unknown> = {}) => ({
+  photoId: `0b1c1c4e-9a8e-4a0b-9c3a-0c8d1e2f3a${n.toString(16).padStart(2, "0")}`,
+  accountId: "6f1c1c4e-9a8e-4a0b-9c3a-0c8d1e2f3a4b",
+  state: "queued",
+  blurhash: "LEHV6nWB2yk8pyo0adR*.7kCMdnj",
+  width: 800,
+  height: 1067,
+  uploadedAt: "2026-09-25T12:00:00.000Z",
+  checkedAt: "2026-09-25T12:00:02.000Z",
+  labels: [{ name: "Suggestive", parentName: "", confidence: 71.4 }],
+  faces: 1,
+  flagged: ["Suggestive"],
+  ...extra,
+});
+
+const json = (body: unknown, status = 200) =>
+  new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
+
+type Handler = (req: Request) => Promise<Response> | Response | null;
+function fetchMock(handlers: Handler[]) {
+  const calls: Request[] = [];
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (input: Request | string, init?: RequestInit) => {
+      const req = input instanceof Request ? input : new Request(input, init);
+      calls.push(req);
+      for (const handler of handlers) {
+        const res = await handler(req);
+        if (res) return res;
+      }
+      throw new Error(`unexpected ${req.method} ${req.url}`);
+    }),
+  );
+  return calls;
+}
+const path = (req: Request) => new URL(req.url).pathname;
+const cardUrls: Handler = (req) =>
+  req.method === "GET" && /\/admin\/photos\/[^/]+\/card$/.test(path(req))
+    ? json({
+        url: "https://media.test/media/k/card.webp?Signature=s",
+        variant: "card",
+        expiresAt: "2030-01-01T00:00:00.000Z",
+      })
+    : null;
+
+function show() {
+  render(
+    <I18nProvider i18n={i18n}>
+      <PhotoQueue />
+    </I18nProvider>,
+  );
+}
+
+beforeEach(() => setTokenSource(() => "t".repeat(43)));
+afterEach(() => {
+  cleanup();
+  vi.unstubAllGlobals();
+});
+
+describe("PhotoQueue", () => {
+  it("lists queued photos with the card, what the check saw, and labelled controls", async () => {
+    const calls = fetchMock([
+      (req) =>
+        req.method === "GET" && path(req) === "/admin/photos/queue"
+          ? json({
+              items: [item(1), item(2, { labels: [], faces: 0, flagged: ["no_face"] })],
+              total: 2,
+            })
+          : null,
+      cardUrls,
+    ]);
+    show();
+    expect(await screen.findByText("2 photos waiting")).toBeInTheDocument();
+    expect(await screen.findAllByRole("img", { name: "Photo under review" })).toHaveLength(2);
+    expect(screen.getByText("Suggestive (71 %)")).toBeInTheDocument();
+    expect(screen.getByText("No face found")).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "Approve" })).toHaveLength(2);
+    expect(screen.getAllByRole("button", { name: "Reject…" })).toHaveLength(2);
+    // Every request carried the admin token; the card was asked for through the API, never the bucket.
+    for (const call of calls)
+      expect(call.headers.get("authorization")).toBe(`Bearer ${"t".repeat(43)}`);
+    expect(calls.filter((c) => /\/card$/.test(path(c)))).toHaveLength(2);
+  });
+
+  it("approves with one click and reports it", async () => {
+    const calls = fetchMock([
+      (req) =>
+        req.method === "GET" && path(req) === "/admin/photos/queue"
+          ? json({ items: [item(1)], total: 1 })
+          : null,
+      cardUrls,
+      (req) =>
+        req.method === "POST" && path(req) === `/admin/photos/${item(1).photoId}/decision`
+          ? json({ photoId: item(1).photoId, state: "approved", rejectionReason: null })
+          : null,
+    ]);
+    show();
+    fireEvent.click(await screen.findByRole("button", { name: "Approve" }));
+    expect(await screen.findByText("Approved")).toBeInTheDocument();
+    expect(screen.getByText("Nothing waiting")).toBeInTheDocument();
+    const post = calls.find((c) => c.method === "POST");
+    expect(JSON.parse(await (post as Request).text())).toEqual({ decision: "approve" });
+  });
+
+  it("rejects only after a reason is chosen and confirmed", async () => {
+    const calls = fetchMock([
+      (req) =>
+        req.method === "GET" && path(req) === "/admin/photos/queue"
+          ? json({ items: [item(1)], total: 1 })
+          : null,
+      cardUrls,
+      (req) =>
+        req.method === "POST"
+          ? json({ photoId: item(1).photoId, state: "rejected", rejectionReason: "no_person" })
+          : null,
+    ]);
+    show();
+    fireEvent.click(await screen.findByRole("button", { name: "Reject…" }));
+    const select = screen.getByLabelText("Reason the person is told");
+    fireEvent.change(select, { target: { value: "no_person" } });
+    expect(calls.some((c) => c.method === "POST")).toBe(false);
+    fireEvent.click(screen.getByRole("button", { name: "Reject photo" }));
+    expect(await screen.findByText("Rejected")).toBeInTheDocument();
+    const post = calls.find((c) => c.method === "POST");
+    expect(JSON.parse(await (post as Request).text())).toEqual({
+      decision: "reject",
+      reason: "no_person",
+    });
+  });
+
+  it("cancelling the rejection form changes nothing", async () => {
+    const calls = fetchMock([
+      (req) =>
+        req.method === "GET" && path(req) === "/admin/photos/queue"
+          ? json({ items: [item(1)], total: 1 })
+          : null,
+      cardUrls,
+    ]);
+    show();
+    fireEvent.click(await screen.findByRole("button", { name: "Reject…" }));
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(screen.getByRole("button", { name: "Approve" })).toBeInTheDocument();
+    expect(calls.some((c) => c.method === "POST")).toBe(false);
+  });
+
+  it("says when a decision was not saved and when the queue cannot load", async () => {
+    fetchMock([
+      (req) =>
+        req.method === "GET" && path(req) === "/admin/photos/queue"
+          ? json({ items: [item(1)], total: 1 })
+          : null,
+      cardUrls,
+      (req) =>
+        req.method === "POST"
+          ? json({ error: { code: "admin_forbidden", message: "x", requestId: "r" } }, 403)
+          : null,
+    ]);
+    show();
+    fireEvent.click(await screen.findByRole("button", { name: "Approve" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("The decision was not saved");
+    cleanup();
+    vi.unstubAllGlobals();
+    fetchMock([
+      (req) =>
+        path(req) === "/admin/photos/queue"
+          ? json({ error: { code: "unauthenticated", message: "x", requestId: "r" } }, 401)
+          : null,
+    ]);
+    show();
+    expect(await screen.findByRole("alert")).toHaveTextContent("The queue could not be loaded.");
+  });
+
+  it("shows an unchecked photo as such", async () => {
+    fetchMock([
+      (req) =>
+        path(req) === "/admin/photos/queue"
+          ? json({
+              items: [item(1, { labels: [], faces: 0, flagged: ["not_checked"], checkedAt: null })],
+              total: 1,
+            })
+          : null,
+      cardUrls,
+    ]);
+    show();
+    expect(await screen.findByText("Not checked automatically.")).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByText("No face found")).toBeNull());
+  });
+});

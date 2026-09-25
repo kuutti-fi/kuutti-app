@@ -1,5 +1,9 @@
 import { createRoute, OpenAPIHono } from "@hono/zod-openapi";
 import {
+  AdminAuthExchangeRequest,
+  AdminAuthStartQuery,
+  AdminSession,
+  AdminWhoAmI,
   AuthCallbackQuery,
   AuthExchangeRequest,
   AuthExchangeResponse,
@@ -11,10 +15,18 @@ import {
 } from "@kuutti/schema";
 import type { MiddlewareHandler } from "hono";
 import type { Deps } from "../app.ts";
+import { staffOf } from "../lib/admin-middleware.ts";
 import { callerOf } from "../lib/auth-middleware.ts";
 import type { AppEnv } from "../lib/env.ts";
 import { AppError } from "../lib/errors.ts";
 import { isLocalisedErrorCode } from "../lib/i18n.ts";
+import {
+  ADMIN_PLATFORM,
+  adminErrorUrl,
+  endAdminSession,
+  exchangeAdminCode,
+  startAdminLogin,
+} from "./admin-session.ts";
 import { appErrorUrl } from "./codes.ts";
 import { hmacKeyFromHex } from "./hetu.ts";
 import { completeLogin, exchangeCode, type LoginDeps, startLogin } from "./login.ts";
@@ -38,6 +50,11 @@ const bearer = { security: [{ session: [] }] };
 function untilOf(detail: unknown): string | undefined {
   const until = (detail as { until?: unknown } | undefined)?.until;
   return typeof until === "string" ? until : undefined;
+}
+
+/** True when the refused attempt was a staff login (#49): the browser goes to the panel. */
+function isAdminAttempt(detail: unknown): boolean {
+  return (detail as { platform?: unknown } | undefined)?.platform === ADMIN_PLATFORM;
 }
 
 /** What the device is called in its own list: the platform plus a bounded user agent. */
@@ -134,17 +151,72 @@ const logoutAllRoute = createRoute({
   },
 });
 
-export function authRoutes(deps: Deps, requireSession: MiddlewareHandler<AppEnv>) {
+const adminStartRoute = createRoute({
+  method: "get",
+  path: "/admin/auth/start",
+  summary: "Begin a staff bank login",
+  description:
+    "Opened by the moderation panel. The same bank login as the app's, marked as a staff attempt: it resolves to an identity with a moderator role and creates nothing. The browser returns to the panel with a one-time code in the URL fragment, or with error=admin_not_allowed.",
+  request: { query: AdminAuthStartQuery },
+  responses: {
+    302: { description: "Redirect to the broker." },
+    400: errorContent("Validation failed."),
+    503: errorContent("No identification broker is configured."),
+  },
+});
+
+const adminExchangeRoute = createRoute({
+  method: "post",
+  path: "/admin/auth/exchange",
+  summary: "Exchange a staff one-time code for an admin session",
+  description: "Single use, within 60 seconds. Eight hours, no refresh; sign in again afterwards.",
+  request: { body: json(AdminAuthExchangeRequest) },
+  responses: {
+    200: { description: "The admin session.", ...json(AdminSession) },
+    400: errorContent("Validation failed."),
+    401: errorContent("Unknown, used or expired code (auth_code_used)."),
+    403: errorContent("admin_not_allowed: the role was taken away meanwhile."),
+  },
+});
+
+const adminWhoAmIRoute = createRoute({
+  method: "get",
+  path: "/admin/whoami",
+  summary: "This admin session",
+  ...bearer,
+  responses: {
+    200: { description: "The role and when the session ends.", ...json(AdminWhoAmI) },
+    401: errorContent("unauthenticated, session_expired or session_revoked."),
+  },
+});
+
+const adminLogoutRoute = createRoute({
+  method: "post",
+  path: "/admin/auth/logout",
+  summary: "End this admin session",
+  ...bearer,
+  responses: {
+    204: { description: "The session is ended." },
+    401: errorContent("unauthenticated, session_expired or session_revoked."),
+  },
+});
+
+export function authRoutes(
+  deps: Deps,
+  requireSession: MiddlewareHandler<AppEnv>,
+  requireAnyStaff: MiddlewareHandler<AppEnv>,
+) {
   const app = new OpenAPIHono<AppEnv>();
   const hmacKey = deps.config.HETU_HMAC_KEY ? hmacKeyFromHex(deps.config.HETU_HMAC_KEY) : null;
   const now = () => new Date();
   const sessionDeps: SessionDeps = { db: deps.db, now };
+  const adminAppUrl = deps.config.ADMIN_APP_URL;
 
   const loginDeps = (): LoginDeps => {
     if (!deps.broker || !hmacKey) {
       throw new AppError(503, "auth_provider_error", "Bank identification is not configured here");
     }
-    return { db: deps.db, broker: deps.broker, hmacKey, now };
+    return { db: deps.db, broker: deps.broker, hmacKey, now, adminAppUrl };
   };
 
   app.openapi(startRoute, async (c) => {
@@ -172,6 +244,9 @@ export function authRoutes(deps: Deps, requireSession: MiddlewareHandler<AppEnv>
           { requestId: c.get("requestId"), code: error.code, detail: error.detail },
           error.message,
         );
+        if (isAdminAttempt(error.detail)) {
+          return c.redirect(adminErrorUrl(adminAppUrl, error.code).toString(), 302);
+        }
         return c.redirect(appErrorUrl(error.code, untilOf(error.detail)), 302);
       }
       throw error;
@@ -211,6 +286,33 @@ export function authRoutes(deps: Deps, requireSession: MiddlewareHandler<AppEnv>
 
   app.openapi(logoutAllRoute, async (c) => {
     await endAllSessions(sessionDeps, callerOf(c).accountId);
+    return c.body(null, 204);
+  });
+
+  // Staff (#49): the start and the exchange are public like the app's; the
+  // rest sits behind the admin guard, registered on the path before the handler.
+  app.openapi(adminStartRoute, async (c) => {
+    const query = c.req.valid("query");
+    const url = await startAdminLogin(loginDeps(), { locale: query.locale ?? c.get("locale") });
+    return c.redirect(url.toString(), 302);
+  });
+
+  app.openapi(adminExchangeRoute, async (c) => {
+    const { code } = c.req.valid("json");
+    return c.json(await exchangeAdminCode(sessionDeps, code), 200);
+  });
+
+  for (const route of [adminWhoAmIRoute, adminLogoutRoute]) {
+    app.use(route.getRoutingPath(), requireAnyStaff);
+  }
+
+  app.openapi(adminWhoAmIRoute, async (c) => {
+    const staff = staffOf(c);
+    return c.json({ role: staff.role, expiresAt: staff.expiresAt }, 200);
+  });
+
+  app.openapi(adminLogoutRoute, async (c) => {
+    await endAdminSession(sessionDeps, staffOf(c).sessionId);
     return c.body(null, 204);
   });
 
