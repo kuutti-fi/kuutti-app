@@ -1130,7 +1130,7 @@ export interface paths {
         put?: never;
         /**
          * Approve or reject a photo
-         * @description approve makes the photo visible to others; reject hides it and tells the owner the reason in words. Only a person rejects. Written to audit_log.
+         * @description approve makes the photo visible to others; reject hides it and tells the owner the reason in words. Only a queued photo takes a decision, once. Only a person rejects. Written to audit_log.
          */
         post: {
             parameters: {
@@ -1185,6 +1185,15 @@ export interface paths {
                 };
                 /** @description No such photo. */
                 404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description photo_not_queued: the photo is not waiting for a decision (already decided, or still being checked). */
+                409: {
                     headers: {
                         [name: string]: unknown;
                     };

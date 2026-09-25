@@ -113,8 +113,12 @@ export function StaffSessionProvider({ children }: { children: React.ReactNode }
           );
         return;
       }
-      // A stored token is checked against the API before anything is shown with it.
-      setState({ status: "signed-in", session: stored });
+      // A stored token is checked against the API before anything is shown
+      // with it. The client's middleware reads the ref, and setState fills it
+      // only on the next render, so the ref is set here first or the first
+      // request would go out without the token and sign the person out.
+      stateRef.current = { status: "signed-in", session: stored };
+      setState(stateRef.current);
       const { data } = await api.GET("/admin/whoami");
       if (!mounted) return;
       if (!data) {

@@ -50,6 +50,13 @@
       "when": 1790349132484,
       "tag": "0006_audit_log_immutable",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1790356493711,
+      "tag": "0007_matching_config_defaults",
+      "breakpoints": true
     }
   ]
 }

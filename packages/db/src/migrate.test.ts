@@ -5,6 +5,7 @@ import { readJournal } from "./journal.ts";
 import { migrate } from "./migrate.ts";
 import { migrationsStatus } from "./migrations.ts";
 import { createPool } from "./pool.ts";
+import { MATCHING_CONFIG_V1 } from "./seed.ts";
 import { withTemporaryDatabase } from "./test/temporary-database.ts";
 
 const MIGRATIONS = resolve(import.meta.dirname, "..", "drizzle");
@@ -46,6 +47,21 @@ describe("migrate", () => {
         );
         expect(Number(rows.rows[0]?.n)).toBe(journal.length);
         expect((await migrationsStatus(pool, MIGRATIONS)).state).toBe("current");
+      } finally {
+        await pool.end();
+      }
+    });
+  });
+
+  it("carries matching_config version 1, the same rows as the seed", async () => {
+    await withTemporaryDatabase(async (url) => {
+      const pool = createPool({ connectionString: url, max: 2 });
+      try {
+        await migrate(pool, MIGRATIONS);
+        const { rows } = await pool.query<{ key: string; value: unknown }>(
+          "SELECT key, value FROM matching_config WHERE version = 1 ORDER BY key",
+        );
+        expect(Object.fromEntries(rows.map((r) => [r.key, r.value]))).toEqual(MATCHING_CONFIG_V1);
       } finally {
         await pool.end();
       }

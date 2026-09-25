@@ -1612,7 +1612,7 @@
     "/admin/photos/{id}/decision": {
       "post": {
         "summary": "Approve or reject a photo",
-        "description": "approve makes the photo visible to others; reject hides it and tells the owner the reason in words. Only a person rejects. Written to audit_log.",
+        "description": "approve makes the photo visible to others; reject hides it and tells the owner the reason in words. Only a queued photo takes a decision, once. Only a person rejects. Written to audit_log.",
         "security": [
           {
             "session": []
@@ -1681,6 +1681,16 @@
           },
           "404": {
             "description": "No such photo.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "photo_not_queued: the photo is not waiting for a decision (already decided, or still being checked).",
             "content": {
               "application/json": {
                 "schema": {

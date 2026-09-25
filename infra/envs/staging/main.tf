@@ -103,6 +103,10 @@ resource "aws_ssm_parameter" "config" {
     "db-preview-user" = "kuutti_preview"
     # Photo moderation through Rekognition (#49, ADR-006); the instance role allows the two calls.
     "moderation" = "rekognition"
+    # The staff login's return and the panel's origin (#49): without them a
+    # deployed box sends the one-time code to localhost and refuses the panel's preflight.
+    "admin-app-url"        = var.admin_app_url
+    "cors-allowed-origins" = var.cors_allowed_origins
     }, var.media_enabled ? {
     # Photos (#48): what the API needs besides the private key, which is
     # /kuutti/staging/cloudfront-signing-key and never a resource (ADR-001).

@@ -3,7 +3,7 @@ import {
   DetectModerationLabelsCommand,
   type RekognitionClient,
 } from "@aws-sdk/client-rekognition";
-import type { Queryable } from "@kuutti/db";
+import { type Queryable, transaction } from "@kuutti/db";
 import type { ModerationLabel } from "@kuutti/schema";
 import type { Logger } from "../lib/logger.ts";
 import { matchingConfigNumber } from "../lib/matching-config.ts";
@@ -154,16 +154,20 @@ export async function moderatePhoto(
   }
   const decided = decideModeration(inspection, thresholds);
   const at = deps.now();
-  await repo.upsertAutomaticReview(deps.db, {
-    photoId: input.photoId,
-    labels: inspection.labels,
-    faces: decided.faces,
-    flagged: decided.flagged,
-    modelVersion: inspection.modelVersion,
-    checkedAt: at,
-    decision: decided.decision,
+  // The record and the move are one unit: a photo never ends up pending with
+  // a review row that says it was checked (the sweep would skip it forever).
+  const moved = await transaction(deps.db, async (tx) => {
+    await repo.upsertAutomaticReview(tx, {
+      photoId: input.photoId,
+      labels: inspection.labels,
+      faces: decided.faces,
+      flagged: decided.flagged,
+      modelVersion: inspection.modelVersion,
+      checkedAt: at,
+      decision: decided.decision,
+    });
+    return repo.movePendingPhoto(tx, input.photoId, decided.decision);
   });
-  const moved = await repo.movePendingPhoto(deps.db, input.photoId, decided.decision);
   deps.logger.info(
     {
       accountId: input.accountId,

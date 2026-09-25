@@ -25,4 +25,41 @@ export function createPool(options: PoolOptions): pg.Pool {
   });
 }
 
+/**
+ * One unit of work: a transaction on a Pool, a savepoint on a client that is
+ * already inside one (the test harness hands routes a client inside BEGIN, so
+ * the same code runs in both; a bare client outside a transaction gets the
+ * SAVEPOINT error, 25P01). Rolled back when `fn` throws.
+ */
+export async function transaction<T>(db: Queryable, fn: (tx: Queryable) => Promise<T>): Promise<T> {
+  if (db instanceof pg.Pool) {
+    const client = await db.connect();
+    // A connection whose rollback failed is discarded, never returned to the pool.
+    let dead = false;
+    try {
+      await client.query("BEGIN");
+      const result = await fn(client);
+      await client.query("COMMIT");
+      return result;
+    } catch (error) {
+      await client.query("ROLLBACK").catch(() => {
+        dead = true;
+      });
+      throw error;
+    } finally {
+      client.release(dead);
+    }
+  }
+  const savepoint = `sp_${Math.random().toString(36).slice(2, 10)}`;
+  await db.query(`SAVEPOINT ${savepoint}`);
+  try {
+    const result = await fn(db);
+    await db.query(`RELEASE SAVEPOINT ${savepoint}`);
+    return result;
+  } catch (error) {
+    await db.query(`ROLLBACK TO SAVEPOINT ${savepoint}`).catch(() => undefined);
+    throw error;
+  }
+}
+
 export type { Pool, PoolClient } from "pg";

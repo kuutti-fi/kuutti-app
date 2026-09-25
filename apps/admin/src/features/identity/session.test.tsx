@@ -121,6 +121,23 @@ describe("staff session", () => {
     expect(window.sessionStorage.getItem("kuutti.admin.session")).toBeNull();
   });
 
+  it("sends the stored token with the very first request after a reload", async () => {
+    window.sessionStorage.setItem("kuutti.admin.session", JSON.stringify(session));
+    const seen: string[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: Request | string, init?: RequestInit) => {
+        const req = input instanceof Request ? input : new Request(input, init);
+        seen.push(req.headers.get("authorization") ?? "");
+        return json({ role: session.role, expiresAt: session.expiresAt });
+      }),
+    );
+    show();
+    await waitFor(() => expect(screen.getByTestId("state")).toHaveTextContent("signed-in"));
+    expect(seen).toEqual([`Bearer ${session.accessToken}`]);
+    expect(window.sessionStorage.getItem("kuutti.admin.session")).not.toBeNull();
+  });
+
   it("the sign-in button sends the browser to the staff login of the API", async () => {
     vi.stubGlobal("fetch", vi.fn());
     const assign = vi.fn();

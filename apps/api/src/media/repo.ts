@@ -204,7 +204,12 @@ export async function movePendingPhoto(
   return result.rowCount === 1;
 }
 
-/** Photos still pending with no automatic check recorded, oldest first: what the nightly sweep retries. */
+/**
+ * Photos still pending with no person's decision, oldest first: what the
+ * nightly sweep retries. That is a photo the check never reached, and one the
+ * check recorded but whose state did not move (the two writes are one
+ * transaction now; rows from before that are picked up here too).
+ */
 export async function findPendingUnchecked(
   db: Queryable,
   olderThan: Date,
@@ -213,7 +218,7 @@ export async function findPendingUnchecked(
   const { rows } = await db.query<Row>(
     `SELECT p.id, p.account_id, p.key FROM photo p
      LEFT JOIN photo_review r ON r.photo_id = p.id
-     WHERE p.state = 'pending' AND r.photo_id IS NULL AND p.created_at < $1
+     WHERE p.state = 'pending' AND (r.photo_id IS NULL OR r.decided_by IS NULL) AND p.created_at < $1
      ORDER BY p.created_at LIMIT $2`,
     [olderThan, limit],
   );
@@ -272,8 +277,9 @@ export async function findPhotoForStaff(
 
 /**
  * A person's decision: the photo's state and reason, and the review row with
- * who decided and when. Rejected is only ever written here (rules/api.md:
- * never auto-delete, never auto-reject).
+ * who decided and when. Only a queued photo takes one (null otherwise, and
+ * nothing is written), so an earlier decision is never overwritten. Rejected
+ * is only ever written here (rules/api.md: never auto-delete, never auto-reject).
  */
 export async function decidePhoto(
   db: Queryable,
@@ -286,7 +292,7 @@ export async function decidePhoto(
   },
 ): Promise<PhotoRow | null> {
   const { rows } = await db.query<Row>(
-    `UPDATE photo SET state = $2, rejection_reason = $3 WHERE id = $1 RETURNING ${COLUMNS}`,
+    `UPDATE photo SET state = $2, rejection_reason = $3 WHERE id = $1 AND state = 'queued' RETURNING ${COLUMNS}`,
     [input.photoId, input.decision, input.reason],
   );
   const row = rows[0];

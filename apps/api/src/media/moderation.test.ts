@@ -195,6 +195,57 @@ describe("moderation of uploads", () => {
     ).toEqual({ rechecked: 0, failed: 0 });
   });
 
+  test("A check recorded without the photo moving is retried by the sweep, a person's decision is not", async ({
+    ctx,
+  }) => {
+    // The record and the move are one transaction now; a row from before that
+    // (or a crash between the two) must not be pending forever.
+    const { app, store, logger } = await appWith(ctx, scripted(new Error("down")));
+    const me = await signedInAccount(ctx.client);
+    const upload = async () => {
+      const res = await app.request("/photos", {
+        method: "POST",
+        headers: me.headers,
+        body: multipart(await fixtureJpeg({ width: 700, height: 900, exif: false })),
+      });
+      return (await res.json()).id as string;
+    };
+    const halfWritten = await upload();
+    const decidedByPerson = await upload();
+    await ctx.client.query(
+      `INSERT INTO photo_review (photo_id, labels, faces, flagged, checked_at, decision)
+       VALUES ($1, '[]'::jsonb, 1, '{}', now(), 'approved')`,
+      [halfWritten],
+    );
+    const identity = await ctx.client.query<{ identity_id: string }>(
+      "SELECT identity_id FROM account WHERE id = $1",
+      [me.accountId],
+    );
+    await ctx.client.query(
+      `INSERT INTO photo_review (photo_id, labels, faces, flagged, checked_at, decision, decided_by, decided_at)
+       VALUES ($1, '[]'::jsonb, 1, '{}', now(), 'rejected', $2, now())`,
+      [decidedByPerson, identity.rows[0]?.identity_id],
+    );
+    const later = new Date(Date.now() + RECHECK_AFTER_MS + 1000);
+    const working = scripted(inspection("none", "99"));
+    const swept = await sweepPendingPhotos({
+      db: ctx.client,
+      logger,
+      now: () => later,
+      moderator: working,
+      store,
+    });
+    expect(swept).toEqual({ rechecked: 1, failed: 0 });
+    const states = await ctx.client.query(
+      "SELECT id, state FROM photo WHERE id = ANY($1::uuid[])",
+      [[halfWritten, decidedByPerson]],
+    );
+    expect(Object.fromEntries(states.rows.map((r) => [r.id, r.state]))).toEqual({
+      [halfWritten]: "approved",
+      [decidedByPerson]: "pending",
+    });
+  });
+
   test("No label name reaches a log line", async ({ ctx }) => {
     const { app, logs } = await appWith(ctx, scripted(inspection("Explicit Nudity 97", "99")));
     const me = await signedInAccount(ctx.client);

@@ -180,6 +180,17 @@ describe("PhotoQueue", () => {
     ]);
     show();
     expect(await screen.findByRole("alert")).toHaveTextContent("The queue could not be loaded.");
+    cleanup();
+    vi.unstubAllGlobals();
+    // A network failure rejects the request outright: still the error state, not loading forever.
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        throw new TypeError("Failed to fetch");
+      }),
+    );
+    show();
+    expect(await screen.findByRole("alert")).toHaveTextContent("The queue could not be loaded.");
   });
 
   it("shows an unchecked photo as such", async () => {

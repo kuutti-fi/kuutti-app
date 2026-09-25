@@ -294,7 +294,17 @@ pnpm --filter @kuutti/db moderator -- list
 pnpm --filter @kuutti/db moderator -- revoke <hetu_hmac>
 ```
 
-Revoking ends the person's admin sessions at once. The panel signs in at `/admin/auth/start` and returns to `ADMIN_APP_URL` (the SSM parameter `admin-app-url` once the panel has a deployed host; Vite's `http://localhost:5173` by default, which production refuses at boot: set the parameter before the first release), which must also be on the CORS allowlist.
+Revoking ends the person's admin sessions at once. The panel signs in at `/admin/auth/start` and returns to `ADMIN_APP_URL`, which must also be on the CORS allowlist: both are parameters of the environment (`admin_app_url`, `cors_allowed_origins` in `envs/<env>/variables.tf` → `admin-app-url`, `cors-allowed-origins`). Staging defaults to a developer's Vite panel at `http://localhost:5173` until the panel has a host; production defaults to `https://admin.kuutti.app`, which must exist before the first release (the API refuses a non-https value there at boot).
+
+The audit table's role boundary (ADR-006, security checklist line 67) is not a migration: migrations run as `kuutti_app`, and Postgres lets an owner hand a table only to a role it could `SET ROLE` into. After the first deploy that created `audit_log`, run
+
+```sh
+infra/scripts/db-audit-owner.sh staging
+```
+
+which moves the table and its trigger function to `kuutti_audit` and leaves `kuutti_app` with SELECT and INSERT. The API logs `audit boundary` at boot with `enforced: true|false` and warns on staging and production until it is true; `packages/db/src/audit-owner.test.ts` runs the same SQL as a non-superuser in the master role's position on a fresh database.
+
+A later migration that touches `audit_log` would fail as `kuutti_app`, and with it the whole migration batch and the boot. The sequence for such a change is: `db-audit-owner.sh <env> release` (ownership back to `kuutti_app`), deploy, `db-audit-owner.sh <env>` again. The pull request that carries the migration says so in its body.
 
 ### Observability (#11)
 

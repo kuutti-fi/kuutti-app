@@ -35,10 +35,17 @@ export function PhotoQueue() {
 
   const load = useCallback(async () => {
     setState({ kind: "loading" });
-    const { data } = await api.GET("/admin/photos/queue", { params: { query: { limit: 20 } } });
-    if (!data) return setState({ kind: "error" });
-    const queue = PhotoReviewQueue.parse(data);
-    setState({ kind: "ready", items: queue.items, total: queue.total });
+    try {
+      const { data } = await api.GET("/admin/photos/queue", { params: { query: { limit: 20 } } });
+      if (!data) return setState({ kind: "error" });
+      const queue = PhotoReviewQueue.parse(data);
+      setState({ kind: "ready", items: queue.items, total: queue.total });
+    } catch (error) {
+      // A network failure or an answer that is not the contract: the same
+      // error state, never a loading state that nothing will end.
+      console.error("queue load failed", error);
+      setState({ kind: "error" });
+    }
   }, []);
 
   useEffect(() => {

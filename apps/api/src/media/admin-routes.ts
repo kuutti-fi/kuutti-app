@@ -1,4 +1,5 @@
 import { createRoute, OpenAPIHono } from "@hono/zod-openapi";
+import { transaction } from "@kuutti/db";
 import {
   ErrorResponse,
   PhotoDecisionRequest,
@@ -74,7 +75,7 @@ const decisionRoute = createRoute({
   path: "/admin/photos/{id}/decision",
   summary: "Approve or reject a photo",
   description:
-    "approve makes the photo visible to others; reject hides it and tells the owner the reason in words. Only a person rejects. Written to audit_log.",
+    "approve makes the photo visible to others; reject hides it and tells the owner the reason in words. Only a queued photo takes a decision, once. Only a person rejects. Written to audit_log.",
   ...bearer,
   request: { params: PhotoParams, body: { required: true, ...json(PhotoDecisionRequest) } },
   responses: {
@@ -82,6 +83,9 @@ const decisionRoute = createRoute({
     400: errorContent("Validation failed (a rejection without a reason, for example)."),
     ...staffErrors,
     404: errorContent("No such photo."),
+    409: errorContent(
+      "photo_not_queued: the photo is not waiting for a decision (already decided, or still being checked).",
+    ),
   },
 });
 
@@ -138,23 +142,33 @@ export function photoAdminRoutes(deps: Deps, requireModerator: MiddlewareHandler
     const body = c.req.valid("json");
     const before = await repo.findPhotoForStaff(deps.db, id);
     if (!before) throw new AppError(404, "not_found", "No such photo");
+    const notQueued = () =>
+      new AppError(409, "photo_not_queued", "Only a queued photo takes a decision");
+    if (before.state !== "queued") throw notQueued();
     const decision = body.decision === "approve" ? "approved" : "rejected";
     const reason = body.decision === "reject" ? body.reason : null;
-    await recordAudit(deps.db, {
-      actorIdentityId: staff.identityId,
-      action: body.decision === "approve" ? "photo.approve" : "photo.reject",
-      subjectType: "photo",
-      subjectId: id,
-      detail: { from: before.state, to: decision, reason },
+    // The audit row and the decision are one unit: neither exists without the
+    // other. The update is keyed on the queued state, so of two moderators
+    // deciding at once exactly one writes, and the other's audit row is
+    // rolled back with the refusal.
+    const row = await transaction(deps.db, async (tx) => {
+      await recordAudit(tx, {
+        actorIdentityId: staff.identityId,
+        action: body.decision === "approve" ? "photo.approve" : "photo.reject",
+        subjectType: "photo",
+        subjectId: id,
+        detail: { from: before.state, to: decision, reason },
+      });
+      const updated = await repo.decidePhoto(tx, {
+        photoId: id,
+        decision,
+        reason,
+        decidedBy: staff.identityId,
+        at: now(),
+      });
+      if (!updated) throw notQueued();
+      return updated;
     });
-    const row = await repo.decidePhoto(deps.db, {
-      photoId: id,
-      decision,
-      reason,
-      decidedBy: staff.identityId,
-      at: now(),
-    });
-    if (!row) throw new AppError(404, "not_found", "No such photo");
     deps.logger.info(
       { staffIdentityId: staff.identityId, photoId: id, from: before.state, to: decision, reason },
       "photo decided",

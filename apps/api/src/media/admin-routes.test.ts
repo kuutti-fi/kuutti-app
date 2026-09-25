@@ -191,6 +191,35 @@ describe("photo review queue", () => {
     // No label name in any log line was ever a risk here; the reason is a code, and the owner sees a text.
   });
 
+  test("A decision is taken once, on a queued photo only, and a refused one leaves no audit row", async ({
+    ctx,
+  }) => {
+    const { app } = await appWith(ctx);
+    const staff = await staffSession(ctx.client);
+    const owner = await signedInAccount(ctx.client);
+    const queued = await photoIn(ctx, owner.accountId, "queued", { labels: [] });
+    const pending = await photoIn(ctx, owner.accountId, "pending");
+    const rejected = await photoIn(ctx, owner.accountId, "rejected");
+    expect((await decide(app, staff.headers, queued, { decision: "approve" })).status).toBe(200);
+    // The same photo again, a photo the check has not finished, and an earlier rejection.
+    for (const id of [queued, pending, rejected]) {
+      const res = await decide(app, staff.headers, id, { decision: "approve" });
+      expect(res.status).toBe(409);
+      expect(await errorCode(res)).toBe("photo_not_queued");
+    }
+    const states = await ctx.client.query<{ id: string; state: string }>(
+      "SELECT id, state FROM photo WHERE id = ANY($1::uuid[])",
+      [[queued, pending, rejected]],
+    );
+    expect(Object.fromEntries(states.rows.map((r) => [r.id, r.state]))).toEqual({
+      [queued]: "approved",
+      [pending]: "pending",
+      [rejected]: "rejected",
+    });
+    const audit = await ctx.client.query("SELECT action FROM audit_log");
+    expect(audit.rows).toEqual([{ action: "photo.approve" }]);
+  });
+
   test("A rejection needs a reason from the list", async ({ ctx }) => {
     const { app } = await appWith(ctx);
     const staff = await staffSession(ctx.client);

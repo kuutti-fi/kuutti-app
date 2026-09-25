@@ -212,6 +212,14 @@ export function parseConfig(raw: Record<string, string | undefined>): Config {
       ["ADMIN_APP_URL: production needs the panel's https address (SSM admin-app-url)"],
     );
   }
+  // A browser origin the production API answers is the panel's or the site's
+  // https host; a developer's http://localhost belongs to staging only.
+  if (env.APP_ENV === "production") {
+    const plain = [...allowedOrigins(env)].filter((o) => !o.startsWith("https://"));
+    if (plain.length > 0) {
+      throw new ConfigError([], ["CORS_ALLOWED_ORIGINS: production allows https origins only"]);
+    }
+  }
   const rateLimit =
     env.RATE_LIMIT_PER_MINUTE ??
     (env.APP_ENV === "preview" ? RATE_LIMIT_DEFAULT.preview : RATE_LIMIT_DEFAULT.other);
