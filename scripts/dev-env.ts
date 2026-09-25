@@ -321,9 +321,8 @@ async function ensureDatabase(): Promise<void> {
     env(`database already listening on ${host}:${port}`);
   } else if (docker) {
     env(`starting docker compose (${composeFile})`);
+    // The S3 stand-in creates the media bucket itself at start (docker-compose.yml).
     await streamed("db", "32", "docker", ["compose", "up", "-d", "--wait", "--quiet-pull"]);
-    // One-shot bucket creation lives behind a profile (see docker-compose.yml).
-    await streamed("db", "32", "docker", ["compose", "run", "--rm", "s3-init"]);
     await waitFor("postgres", () => portOpen(host, port), 60_000);
   } else {
     if (composeFile)

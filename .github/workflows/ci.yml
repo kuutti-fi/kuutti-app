@@ -191,7 +191,6 @@ jobs:
         run: |
           cp env.example .env
           docker compose up -d --wait
-          docker compose run --rm s3-init
           docker compose ps
 
       - name: Mock bank IdP issues FTN-shaped claims
