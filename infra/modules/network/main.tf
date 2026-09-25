@@ -88,12 +88,30 @@ resource "aws_db_subnet_group" "this" {
 # rewrites the whole group.
 # ---------------------------------------------------------------------------
 
+# The description is part of the group's identity for AWS: changing it
+# replaces the group, and a replacement of the group the instance is attached
+# to destroys every rule first and then fails on the delete (25 September
+# 2026, staging unreachable for the duration). It stays as it was written;
+# the cloudfront_only_ingress switch is explained on its rule below.
 resource "aws_security_group" "api" {
   name        = "${local.name}-api"
-  description = "The API instance: HTTPS from anywhere or from CloudFront only (cloudfront_only_ingress), HTTP for ACME and the redirect, SSH only from the maintainer list."
+  description = "The API instance: HTTPS and HTTP from anywhere (Traefik terminates TLS), SSH only from the maintainer list."
   vpc_id      = aws_vpc.this.id
 
   tags = { Name = "${local.name}-api" }
+
+  lifecycle {
+    # A group replacement is never what a change here means; if one is ever
+    # wanted, it is a deliberate -replace with the instance detached first.
+    prevent_destroy = true
+  }
+}
+
+# The rule gained a count with the CloudFront switch (#48): the same object
+# under its new address, not a new rule.
+moved {
+  from = aws_vpc_security_group_ingress_rule.api_https
+  to   = aws_vpc_security_group_ingress_rule.api_https[0]
 }
 
 resource "aws_vpc_security_group_ingress_rule" "api_https" {
