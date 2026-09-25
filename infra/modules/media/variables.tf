@@ -38,6 +38,12 @@ variable "instance_role_name" {
 }
 
 variable "signing_public_key_pem" {
-  description = "The public half of the CloudFront signing key pair, PEM. The private half is /kuutti/<env>/cloudfront-signing-key in SSM and never in code (ADR-001, ADR-005). Checked by a precondition on the public key resource, so a dormant module (count = 0) with an empty value still validates."
+  description = "The public half of the current CloudFront signing key pair, PEM (infra/envs/<env>/cloudfront-signing-key.pub.pem). Its id is the API's CLOUDFRONT_KEY_PAIR_ID; the private half is /kuutti/<env>/cloudfront-signing-key in SSM and never in code (ADR-001, ADR-005). Checked by a precondition on the public key resource, so a dormant module (count = 0) with an empty value still validates."
   type        = string
+}
+
+variable "additional_signing_public_keys_pem" {
+  description = "Public halves the key group trusts besides the current one, PEM: the next key during a rotation, the previous key for the fifteen minutes its URLs are still valid (infra/envs/<env>/cloudfront-signing-key.*.pub.pem)."
+  type        = list(string)
+  default     = []
 }

@@ -5,7 +5,7 @@ import { testSigningKeys } from "../test/media.ts";
 import { createMediaDeps } from "./wiring.ts";
 
 // What boot decides about photos from the configuration (ADR-005): CloudFront
-// with all three values, MinIO presigning in development only, off otherwise,
+// with all three values, stand-in presigning in development only, off otherwise,
 // and never half of one.
 
 const keys = testSigningKeys();
@@ -32,7 +32,7 @@ describe("media wiring", () => {
     expect(JSON.stringify(setup)).not.toContain("PRIVATE KEY");
   });
 
-  it("presigns MinIO GETs in development only", () => {
+  it("presigns GETs on the compose stand-in in development only", () => {
     const local = testConfig({ S3_ENDPOINT: "http://127.0.0.1:9000", IMAGE_CONCURRENCY: "2" });
     expect(createMediaDeps(local).setup).toEqual({
       mode: "presigned",

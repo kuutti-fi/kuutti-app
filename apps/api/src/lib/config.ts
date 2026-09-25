@@ -53,9 +53,11 @@ const Env = z.object({
   // (https://api.<env>.kuutti.app; objects are signed under /media/), the id
   // of our CloudFront public key, and the private half from
   // /kuutti/<env>/cloudfront-signing-key. All three or none: with them URLs
-  // are CloudFront signed URLs; without them a developer's MinIO presigns its
+  // are CloudFront signed URLs; without them a developer's stand-in presigns its
   // own, and a deployed environment has no photos (media/wiring.ts).
-  MEDIA_URL_BASE: z.url({ protocol: /^https?$/ }).optional(),
+  // https only: a signed URL over plain HTTP would hand the picture and its
+  // signature to the network, and no CloudFront distribution speaks HTTP to us.
+  MEDIA_URL_BASE: z.url({ protocol: /^https$/ }).optional(),
   CLOUDFRONT_KEY_PAIR_ID: z
     .string()
     .regex(/^[A-Z0-9]{13,20}$/, "a CloudFront public key id")

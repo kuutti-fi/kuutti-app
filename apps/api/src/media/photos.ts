@@ -79,25 +79,42 @@ export async function uploadPhoto(
     }
     throw error;
   }
-  await Promise.all(
-    PHOTO_VARIANTS.map((variant) =>
-      deps.store.put(objectKey(processed.key, variant), processed.variants[variant], WEBP),
-    ),
-  );
-  const row = await repo.insertPhoto(deps.db, {
-    accountId: input.accountId,
-    key: processed.key,
-    blurhash: processed.blurhash,
-    width: processed.width,
-    height: processed.height,
-    maxPhotos,
-  });
-  if (!row) {
-    // Two uploads raced past the count above; this one lost. Its objects go
-    // unless another row already shares them.
-    if ((await repo.countRowsForKey(deps.db, processed.key)) === 0) {
-      await deps.store.delete(PHOTO_VARIANTS.map((v) => objectKey(processed.key, v)));
+  // The objects first, then the row that owns them. Whatever fails in
+  // between, the objects do not stay behind without a row: a picture nobody
+  // can reach is still a picture kept (TD-7), so the failure path removes
+  // them unless another row already shares the content.
+  const keys = PHOTO_VARIANTS.map((variant) => objectKey(processed.key, variant));
+  const dropOrphans = async () => {
+    try {
+      if ((await repo.countRowsForKey(deps.db, processed.key)) === 0) {
+        await deps.store.delete(keys);
+      }
+    } catch (error) {
+      deps.logger.error({ accountId: input.accountId, err: error }, "photo orphan cleanup failed");
     }
+  };
+  let row: repo.PhotoRow | null;
+  try {
+    await Promise.all(
+      PHOTO_VARIANTS.map((variant) =>
+        deps.store.put(objectKey(processed.key, variant), processed.variants[variant], WEBP),
+      ),
+    );
+    row = await repo.insertPhoto(deps.db, {
+      accountId: input.accountId,
+      key: processed.key,
+      blurhash: processed.blurhash,
+      width: processed.width,
+      height: processed.height,
+      maxPhotos,
+    });
+  } catch (error) {
+    await dropOrphans();
+    throw error;
+  }
+  if (!row) {
+    // Two uploads raced past the count above; this one lost.
+    await dropOrphans();
     throw new AppError(409, "photo_limit", "The account has its maximum number of photos", {
       maxPhotos,
     });

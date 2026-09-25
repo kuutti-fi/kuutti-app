@@ -9,8 +9,13 @@ output "media_url_base" {
 }
 
 output "key_pair_id" {
-  description = "SSM parameter cloudfront-key-pair-id: the API's CLOUDFRONT_KEY_PAIR_ID, the id of the public key resource (Key-Pair-Id in every signed URL)."
-  value       = aws_cloudfront_public_key.signing.id
+  description = "SSM parameter cloudfront-key-pair-id: the API's CLOUDFRONT_KEY_PAIR_ID, the id of the current public key (Key-Pair-Id in every signed URL)."
+  value       = aws_cloudfront_public_key.signing[local.current_signing_key].id
+}
+
+output "trusted_key_ids" {
+  description = "Every public key the media behaviour trusts, by the hash that names it; the current one is key_pair_id."
+  value       = { for hash, key in aws_cloudfront_public_key.signing : hash => key.id }
 }
 
 output "distribution_id" {

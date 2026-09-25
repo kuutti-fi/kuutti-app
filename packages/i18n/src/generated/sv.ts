@@ -38,6 +38,7 @@ export const sv: Readonly<Record<string, string>> = {
   "photos.error.permission": "Kuutti kunde inte öppna dina foton. Tillåt åtkomst i telefonens inställningar och försök igen.",
   "photos.error.photo_invalid": "Fotot kunde inte läsas. Prova en annan bild.",
   "photos.error.photo_limit": "Du har redan det största antalet foton. Ta bort ett för att lägga till ett annat.",
+  "photos.error.photo_order_invalid": "Fotoordningen var inaktuell, så den laddades om. Försök flytta igen.",
   "photos.error.photo_unsupported": "Den här filen är inte ett foto som Kuutti kan använda. Välj en JPEG-, PNG- eller WebP-bild.",
   "photos.error.tooLarge": "Fotot är för stort. Välj en mindre bild.",
   "photos.explain": "Högst {max, plural, one {# foto} other {# foton}}. Det första är ditt huvudfoto. Ett nytt foto granskas innan någon annan ser det.",

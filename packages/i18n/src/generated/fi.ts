@@ -38,6 +38,7 @@ export const fi: Readonly<Record<string, string>> = {
   "photos.error.permission": "Kuutti ei päässyt kuviisi. Salli pääsy puhelimen asetuksista ja yritä uudelleen.",
   "photos.error.photo_invalid": "Kuvaa ei voitu lukea. Kokeile toista kuvaa.",
   "photos.error.photo_limit": "Sinulla on jo enimmäismäärä kuvia. Poista yksi lisätäksesi toisen.",
+  "photos.error.photo_order_invalid": "Kuvien järjestys oli vanhentunut, joten se ladattiin uudelleen. Kokeile siirtoa uudelleen.",
   "photos.error.photo_unsupported": "Tämä tiedosto ei ole kuva, jota Kuutti voi käyttää. Valitse JPEG-, PNG- tai WebP-kuva.",
   "photos.error.tooLarge": "Kuva on liian suuri. Valitse pienempi kuva.",
   "photos.explain": "Enintään {max, plural, one {# kuva} other {# kuvaa}}. Ensimmäinen on pääkuvasi. Uusi kuva tarkistetaan, ennen kuin kukaan muu näkee sen.",

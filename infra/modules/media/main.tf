@@ -49,11 +49,11 @@ resource "aws_s3_bucket_ownership_controls" "media" {
 resource "aws_s3_bucket_server_side_encryption_configuration" "media" {
   bucket = aws_s3_bucket.media.id
 
+  # SSE-S3; a bucket key is an SSE-KMS construct and has no place here.
   rule {
     apply_server_side_encryption_by_default {
       sse_algorithm = "AES256"
     }
-    bucket_key_enabled = true
   }
 }
 
@@ -114,24 +114,36 @@ resource "aws_iam_role_policy" "api_media" {
 }
 
 # ---------------------------------------------------------------------------
-# Signed URLs. The public half of the key pair is a CloudFront public key in a
-# key group the media behaviour trusts; the private half is read by the API
-# from SSM at boot (rules/infra.md Secrets) and signs each URL for fifteen
-# minutes. Rotation is a second key in the group, then a switch of the SSM
-# value, then the removal of the first key.
+# Signed URLs. The public halves of the key pairs are CloudFront public keys
+# in one key group the media behaviour trusts; the private half of the current
+# key is read by the API from SSM at boot (rules/infra.md Secrets) and signs
+# each URL for fifteen minutes. Every key is named by a hash of its PEM, so a
+# changed key is a new resource next to the old one, never a replacement
+# fighting over a name. Rotation: commit the new public half as an additional
+# key (both trusted), switch the SSM value and the current file, restart the
+# API, then drop the old file (infra/README.md, Media).
 # ---------------------------------------------------------------------------
 
+locals {
+  # The current key first: its id is what the API puts in every URL.
+  signing_keys = {
+    for pem in concat([var.signing_public_key_pem], var.additional_signing_public_keys_pem) :
+    substr(sha256(pem), 0, 12) => pem
+  }
+  current_signing_key = substr(sha256(var.signing_public_key_pem), 0, 12)
+}
+
 resource "aws_cloudfront_public_key" "signing" {
-  name        = "${local.name}-media-signing"
-  comment     = "Public half of /kuutti/${var.environment}/cloudfront-signing-key (ADR-005)"
-  encoded_key = var.signing_public_key_pem
+  for_each = local.signing_keys
+
+  name        = "${local.name}-media-signing-${each.key}"
+  comment     = "A public half of /kuutti/${var.environment}/cloudfront-signing-key (ADR-005)"
+  encoded_key = each.value
 
   lifecycle {
-    create_before_destroy = true
-
     precondition {
-      condition     = can(regex("BEGIN PUBLIC KEY", var.signing_public_key_pem))
-      error_message = "signing_public_key_pem must be a PEM public key: commit infra/envs/<env>/cloudfront-signing-key.pub.pem before setting media_enabled (infra/README.md, Media)."
+      condition     = can(regex("BEGIN PUBLIC KEY", each.value))
+      error_message = "every signing key must be a PEM public key: commit infra/envs/<env>/cloudfront-signing-key.pub.pem before setting media_enabled (infra/README.md, Media)."
     }
   }
 }
@@ -139,7 +151,7 @@ resource "aws_cloudfront_public_key" "signing" {
 resource "aws_cloudfront_key_group" "signing" {
   name    = "${local.name}-media-signing"
   comment = "Key group the media behaviour trusts"
-  items   = [aws_cloudfront_public_key.signing.id]
+  items   = [for key in aws_cloudfront_public_key.signing : key.id]
 }
 
 resource "aws_cloudfront_origin_access_control" "media" {

@@ -43,6 +43,7 @@ export type MessageParams = {
   "photos.error.permission": Record<never, never>;
   "photos.error.photo_invalid": Record<never, never>;
   "photos.error.photo_limit": Record<never, never>;
+  "photos.error.photo_order_invalid": Record<never, never>;
   "photos.error.photo_unsupported": Record<never, never>;
   "photos.error.tooLarge": Record<never, never>;
   "photos.explain": { "max": number };

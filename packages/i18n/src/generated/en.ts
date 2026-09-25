@@ -42,6 +42,7 @@ export const en: Readonly<Record<string, string>> = {
   "photos.error.permission": "Kuutti could not open your photos. Allow access in the phone's settings and try again.",
   "photos.error.photo_invalid": "The photo could not be read. Try another picture.",
   "photos.error.photo_limit": "You already have the maximum number of photos. Remove one to add another.",
+  "photos.error.photo_order_invalid": "The photo order was out of date, so it was reloaded. Try the move again.",
   "photos.error.photo_unsupported": "This file is not a photo Kuutti can use. Choose a JPEG, PNG or WebP picture.",
   "photos.error.tooLarge": "The photo is too large. Choose a smaller picture.",
   "photos.explain": "Up to {max, plural, one {# photo} other {# photos}}. The first one is your main photo. A new photo is checked before anyone else sees it.",

@@ -42,6 +42,7 @@ export const enXA: Readonly<Record<string, string>> = {
   "photos.error.permission": "［Kúúúúttíí çóóúúld ñóót óópééñ ýýóóúúr phóótóóš. ÁÁllóów ááççééšš ííñ théé phóóñéé'š šééttííñgš ááñd trýý áágááííñ.］",
   "photos.error.photo_invalid": "［Théé phóótóó çóóúúld ñóót béé rééáád. Trýý ááñóóthéér pííçtúúréé.］",
   "photos.error.photo_limit": "［ÝÝóóúú áálrééáádýý háávéé théé mááxíímúúm ñúúmbéér óóf phóótóóš. Réémóóvéé óóñéé tóó áádd ááñóóthéér.］",
+  "photos.error.photo_order_invalid": "［Théé phóótóó óórdéér wááš óóúút óóf dáátéé, šóó íít wááš réélóóáádééd. Trýý théé móóvéé áágááííñ.］",
   "photos.error.photo_unsupported": "［Thííš fííléé ííš ñóót áá phóótóó Kúúúúttíí çááñ úúšéé. Çhóóóóšéé áá JPÉÉG, PÑG óór WéébP pííçtúúréé.］",
   "photos.error.tooLarge": "［Théé phóótóó ííš tóóóó láárgéé. Çhóóóóšéé áá šmáálléér pííçtúúréé.］",
   "photos.explain": "［ÚÚp tóó {max,plural,one{# phóótóó} other{# phóótóóš}}. Théé fííršt óóñéé ííš ýýóóúúr mááííñ phóótóó. ÁÁ ñééw phóótóó ííš çhééçkééd bééfóóréé ááñýýóóñéé éélšéé šééééš íít.］",

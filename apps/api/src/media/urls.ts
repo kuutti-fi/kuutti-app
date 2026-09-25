@@ -8,7 +8,7 @@ import { getSignedUrl as presignS3Url } from "@aws-sdk/s3-request-presigner";
 // writes a photo_access row per issuance. On AWS the URL is a CloudFront signed
 // URL (TD-8): the distribution refuses the object without a valid signature
 // from the key pair whose private half lives in SSM and is read at boot.
-// Locally the stand-in is a presigned MinIO GET, refused outside development
+// Locally the stand-in is a presigned GET on the compose S3 stand-in, refused outside development
 // by the boot wiring in index.ts.
 
 export const URL_TTL_MS = 15 * 60 * 1000;
@@ -42,7 +42,7 @@ export function cloudFrontSigner(options: CloudFrontSignerOptions): UrlSigner {
   };
 }
 
-/** Development only: MinIO presigns its own GETs, which is what the phone or the web preview fetches. */
+/** Development only: the compose stand-in presigns its own GETs, which is what the phone or the web preview fetches. */
 export function presignedS3Signer(
   client: S3Client,
   bucket: string,

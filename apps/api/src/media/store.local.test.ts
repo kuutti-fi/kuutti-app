@@ -6,13 +6,13 @@ import { fixtureWebp } from "../test/media.ts";
 import { objectKey, s3MediaStore } from "./store.ts";
 import { presignedS3Signer, URL_TTL_MS } from "./urls.ts";
 
-// The S3 store and the development signer against MinIO from docker compose,
+// The S3 store and the development signer against the S3 stand-in from docker compose,
 // when S3_ENDPOINT is set (CI's compose job, or a developer with the stack
 // up); skipped otherwise. Never a mocked store here: the memory store serves
 // the route tests, this proves the real client and the presigned GET.
 const endpoint = process.env.S3_ENDPOINT;
 
-describe.skipIf(!endpoint)("media store (MinIO stand-in)", () => {
+describe.skipIf(!endpoint)("media store (compose stand-in)", () => {
   const config = testConfig({
     S3_ENDPOINT: endpoint,
     S3_BUCKET: process.env.S3_BUCKET ?? "kuutti-media",

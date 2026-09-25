@@ -42,11 +42,16 @@ export async function countPhotos(db: Queryable, accountId: string): Promise<num
 
 /**
  * Appends after the account's last photo, and only while the account has
- * fewer than `maxPhotos`: the cap is the statement's HAVING clause, so two
- * uploads that both passed the service's count cannot both insert past it.
- * Null means the cap refused this one. Two concurrent inserts may still take
- * the same position (READ COMMITTED sees the same max); the order stays
- * stable through created_at and is renumbered by the next reorder or delete.
+ * fewer than `maxPhotos`: the cap is the statement's HAVING clause, so a
+ * request that arrives after another's commit is refused here even when it
+ * passed the service's count. Null means the cap refused this one. Two
+ * inserts that run at the same instant can still both see the old count
+ * under READ COMMITTED and both succeed, one photo over the cap and on the
+ * same position; the order stays stable through created_at and is renumbered
+ * by the next reorder or delete, and the extra photo is the account's own to
+ * remove. Closing that window needs a transaction with an advisory lock per
+ * account, which the query seam does not offer yet; it is a product cap, not a
+ * security boundary, so that waits for the seam.
  */
 export async function insertPhoto(
   db: Queryable,

@@ -45,6 +45,7 @@ const ERROR_TEXT: ReadonlyMap<string, PlainMessageKey> = new Map([
   ["payload_too_large", "photos.error.tooLarge"],
   ["media_busy", "photos.error.media_busy"],
   ["media_unavailable", "photos.error.media_unavailable"],
+  ["photo_order_invalid", "photos.error.photo_order_invalid"],
 ]);
 
 function noticeText(notice: PhotosNotice, t: ReturnType<typeof useT>["t"]): string {

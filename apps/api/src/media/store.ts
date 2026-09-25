@@ -6,7 +6,7 @@ import {
 } from "@aws-sdk/client-s3";
 import type { PhotoVariant } from "@kuutti/schema";
 
-// Where the variants live. One implementation over S3 (MinIO locally, the
+// Where the variants live. One implementation over S3 (the compose stand-in locally, the
 // media bucket through the instance role on AWS, both via lib/s3.ts); tests
 // use an in-memory one. Only the pipeline's output ever reaches put(), so the
 // store never sees an original (rule 4).

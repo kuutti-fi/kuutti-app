@@ -9,7 +9,7 @@ import { cloudFrontSigner, presignedS3Signer } from "./urls.ts";
 /**
  * What the boot decided about media, for the log line: `cloudfront` on AWS
  * (the bucket through the instance role, URLs signed with the key from SSM),
- * `presigned` locally (MinIO signs its own GETs), `off` when nothing is
+ * `presigned` locally (the compose stand-in signs its own GETs), `off` when nothing is
  * configured, in which case the photo routes answer 503.
  */
 export type MediaSetup =
@@ -20,7 +20,7 @@ export type MediaSetup =
 /**
  * Media deps from the validated configuration. Half a CloudFront
  * configuration is a misnamed parameter and throws, like half an OIDC one; a
- * deployed environment never falls back to presigned MinIO URLs, which exist
+ * deployed environment never falls back to presigned stand-in URLs, which exist
  * for a developer's machine only (rule 8: nothing on AWS is reachable except
  * through the distribution).
  */
@@ -83,7 +83,7 @@ export function createMediaDeps(config: Config): { deps?: MediaDeps; setup: Medi
   return {
     setup: {
       mode: "off",
-      reason: "neither MEDIA_URL_BASE (CloudFront) nor S3_ENDPOINT (MinIO) is set",
+      reason: "neither MEDIA_URL_BASE (CloudFront) nor S3_ENDPOINT (the compose stand-in) is set",
     },
   };
 }

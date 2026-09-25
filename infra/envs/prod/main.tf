@@ -64,6 +64,8 @@ module "media" {
   origin_fqdn            = "origin.api.${var.domain}"
   instance_role_name     = module.compute.role_name
   signing_public_key_pem = fileexists("${path.module}/cloudfront-signing-key.pub.pem") ? file("${path.module}/cloudfront-signing-key.pub.pem") : ""
+  # Rotation (ADR-005): cloudfront-signing-key.<anything>.pub.pem files are trusted too.
+  additional_signing_public_keys_pem = [for f in fileset(path.module, "cloudfront-signing-key.*.pub.pem") : file("${path.module}/${f}")]
 }
 
 # Alarms, the alert topic and the saved log queries (#11).
