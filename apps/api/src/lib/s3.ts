@@ -2,7 +2,7 @@ import { S3Client } from "@aws-sdk/client-s3";
 import type { Config } from "./config.ts";
 
 /**
- * Object storage client. Locally MinIO from docker compose (path-style, static
+ * Object storage client. Locally the S3 stand-in from docker compose (path-style, static
  * keys from env.example); on AWS, S3 through the instance role with no keys at
  * all (TD-4). Uploads always go through the API (rule 4); reads use signed
  * CloudFront URLs (TD-8). The media slice (M3) builds on this.

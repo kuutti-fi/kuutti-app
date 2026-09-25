@@ -1,5 +1,5 @@
 # Local development stack (#5). `pnpm env:up` runs this for you; on its own:
-#   docker compose up -d --wait && docker compose run --rm minio-init
+#   docker compose up -d --wait && docker compose run --rm s3-init
 # Every published port binds to 127.0.0.1. Values mirror env.example and are
 # not secrets. Deployed environments use RDS, S3 and the Telia broker instead.
 name: kuutti
@@ -23,39 +23,48 @@ services:
       timeout: 5s
       retries: 12
 
-  # S3 stand-in (TD-2). Console at http://127.0.0.1:9001, API at :9000.
-  # MinIO publishes its images on quay.io; Docker Hub no longer serves them.
-  minio:
-    image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
-    command: server /data --console-address ":9001"
+  # S3 stand-in (TD-2): versitygw, an S3 gateway over a directory (Apache-2.0,
+  # Docker Hub, arm64 and amd64). MinIO's community images were withdrawn from
+  # Docker Hub and quay.io in September 2026, so the stand-in changed; the API
+  # sees the same S3 API on :9000 with the keys of env.example. No console.
+  s3:
+    image: versity/versitygw:v1.8.0
+    command: ["--port", ":9000", "--region", "eu-central-1", "--quiet", "posix", "/data"]
     environment:
-      MINIO_ROOT_USER: kuutti
-      MINIO_ROOT_PASSWORD: kuutti-dev-only
+      ROOT_ACCESS_KEY: kuutti
+      ROOT_SECRET_KEY: kuutti-dev-only
     ports:
       - "127.0.0.1:9000:9000"
-      - "127.0.0.1:9001:9001"
     volumes:
-      - minio-data:/data
+      - s3-data:/data
     healthcheck:
-      test: ["CMD", "mc", "ready", "local"]
+      # The image is Alpine with busybox: a TCP check is what it can do, and the
+      # gateway answers on the port the moment the backend is up.
+      test: ["CMD", "nc", "-z", "127.0.0.1", "9000"]
       interval: 5s
       timeout: 5s
       retries: 12
 
   # One-shot: the media bucket exists before the API starts. Behind a profile so
   # `docker compose up -d --wait` (which treats an exited container as failure)
-  # ignores it; `docker compose run --rm minio-init` runs it, as env:up and CI do.
-  minio-init:
-    image: quay.io/minio/mc:RELEASE.2025-08-13T08-35-41Z
+  # ignores it; `docker compose run --rm s3-init` runs it, as env:up and CI do.
+  # The AWS CLI from Amazon's public registry, pinned; idempotent.
+  s3-init:
+    image: public.ecr.aws/aws-cli/aws-cli:2.37.3
     profiles: ["init"]
     depends_on:
-      minio:
+      s3:
         condition: service_healthy
+    environment:
+      AWS_ACCESS_KEY_ID: kuutti
+      AWS_SECRET_ACCESS_KEY: kuutti-dev-only
+      AWS_DEFAULT_REGION: eu-central-1
+      AWS_EC2_METADATA_DISABLED: "true"
     entrypoint: ["/bin/sh", "-c"]
     command:
       - >-
-        mc alias set local http://minio:9000 kuutti kuutti-dev-only &&
-        mc mb --ignore-existing local/kuutti-media &&
+        aws --endpoint-url http://s3:9000 s3api head-bucket --bucket kuutti-media 2>/dev/null ||
+        aws --endpoint-url http://s3:9000 s3api create-bucket --bucket kuutti-media >/dev/null &&
         echo "bucket kuutti-media ready"
     restart: "no"
 
@@ -74,4 +83,4 @@ services:
 
 volumes:
   postgres-data:
-  minio-data:
+  s3-data:

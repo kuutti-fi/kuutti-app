@@ -39,7 +39,7 @@ const Env = z.object({
 
   CORS_ALLOWED_ORIGINS: z.string().optional(),
 
-  // Object storage: MinIO locally (env.example), S3 through the instance role on AWS.
+  // Object storage: the compose S3 stand-in locally (env.example), S3 through the instance role on AWS.
   S3_ENDPOINT: z.string().min(1).optional(),
   S3_REGION: z.string().min(1).default("eu-central-1"),
   S3_BUCKET: z.string().min(1).default("kuutti-media"),

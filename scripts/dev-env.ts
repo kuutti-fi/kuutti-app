@@ -323,12 +323,12 @@ async function ensureDatabase(): Promise<void> {
     env(`starting docker compose (${composeFile})`);
     await streamed("db", "32", "docker", ["compose", "up", "-d", "--wait", "--quiet-pull"]);
     // One-shot bucket creation lives behind a profile (see docker-compose.yml).
-    await streamed("db", "32", "docker", ["compose", "run", "--rm", "minio-init"]);
+    await streamed("db", "32", "docker", ["compose", "run", "--rm", "s3-init"]);
     await waitFor("postgres", () => portOpen(host, port), 60_000);
   } else {
     if (composeFile)
       env(
-        "docker compose not available: falling back to Homebrew PostgreSQL; MinIO and the mock IdP stay down (pnpm env:doctor)",
+        "docker compose not available: falling back to Homebrew PostgreSQL; the S3 stand-in and the mock IdP stay down (pnpm env:doctor)",
       );
     const brew = brewPostgres();
     if (!brew) {

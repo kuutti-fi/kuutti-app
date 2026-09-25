@@ -24,7 +24,7 @@ Then open http://localhost:3000/health (the API), http://localhost:8081 (the app
 By hand, one piece at a time (this is what `env:up` does for you), each in its own terminal:
 
 ```bash
-docker compose up -d --wait                              # Postgres, MinIO, mock bank login
+docker compose up -d --wait                              # Postgres, S3 stand-in, mock bank login
 pnpm --filter @kuutti/db migrate                         # apply the migrations
 pnpm --filter @kuutti/db seed --env development          # ponds and matching_config
 pnpm dev                                                 # API on 3000, restarts on change
