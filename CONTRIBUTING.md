@@ -59,7 +59,7 @@ pnpm env:doctor                     # names anything missing and the fix
 pnpm env:up                         # database, storage, mock bank IdP, API, app, admin
 ```
 
-`env:up` starts Postgres, MinIO and the mock bank IdP with `docker compose`, migrates and seeds, then runs the API on http://localhost:3000, Metro on http://localhost:8081 (web target and the dev client), and the admin panel on http://localhost:5173, with prefixed logs. Ctrl+C stops the apps; `pnpm env:down` also stops the containers; `pnpm env:status` shows who holds which port. Without Docker, `env:up` falls back to Homebrew PostgreSQL and the storage and IdP stand-ins are unavailable.
+`env:up` starts Postgres, the S3 stand-in (versitygw) and the mock bank IdP with `docker compose`, migrates and seeds, then runs the API on http://localhost:3000, Metro on http://localhost:8081 (web target and the dev client), and the admin panel on http://localhost:5173, with prefixed logs. Ctrl+C stops the apps; `pnpm env:down` also stops the containers; `pnpm env:status` shows who holds which port. Without Docker, `env:up` falls back to Homebrew PostgreSQL and the storage and IdP stand-ins are unavailable.
 
 Checks that everything is right:
 

@@ -4,11 +4,11 @@ import { describe, expect, it } from "vitest";
 import { testConfig } from "../test/harness.ts";
 import { createS3Client } from "./s3.ts";
 
-// Runs against MinIO from docker compose when S3_ENDPOINT is set (CI's compose job,
+// Runs against the S3 stand-in from docker compose when S3_ENDPOINT is set (CI's compose job,
 // or a developer with the stack up); skipped otherwise. Never a mocked store.
 const endpoint = process.env.S3_ENDPOINT;
 
-describe.skipIf(!endpoint)("object storage (MinIO stand-in)", () => {
+describe.skipIf(!endpoint)("object storage (compose stand-in)", () => {
   it("puts and gets an object through the path-style client", async () => {
     const config = testConfig({
       S3_ENDPOINT: endpoint,
