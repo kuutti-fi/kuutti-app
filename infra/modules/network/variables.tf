@@ -24,3 +24,9 @@ variable "ssh_cidrs" {
   type        = list(string)
   default     = []
 }
+
+variable "cloudfront_only_ingress" {
+  description = "When true, port 443 admits only CloudFront's origin-facing prefix list (ADR-005), so the box is reachable through the distribution alone. Off until Dokploy's control plane (deploy.yml) and the pull-request previews are served through the distribution too: today they reach the box on 443 directly. Port 80 stays open for the ACME challenge and the redirect either way."
+  type        = bool
+  default     = false
+}

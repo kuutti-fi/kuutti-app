@@ -33,6 +33,7 @@ export const MATCHING_CONFIG_V1 = {
   pass_cooldown_days: 90, // TD-12
   shown_cooldown_days: 30, // TD-12
   silent_match_archive_days: 7, // TD-13
+  max_photos: 6, // #48: photos per account; the grid and the upload route read it
 } as const;
 
 /**

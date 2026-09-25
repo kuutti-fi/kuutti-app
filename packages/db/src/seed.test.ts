@@ -50,6 +50,7 @@ describe("seed", () => {
           pass_cooldown_days: 90,
           shown_cooldown_days: 30,
           silent_match_archive_days: 7,
+          max_photos: 6,
         });
         expect(byKey).toEqual(MATCHING_CONFIG_V1);
       } finally {

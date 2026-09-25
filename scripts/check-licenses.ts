@@ -199,14 +199,28 @@ for (const [id, { name, license }] of packages) {
 }
 
 // A platform binary is installed on one platform only, so its exception may
-// match nothing here, but only while the package it belongs to (@sentry/cli for
-// @sentry/cli-linux-x64) is an exception in use: otherwise it is stale too.
-const PLATFORM_SUFFIX = /-(darwin|linux|win32|android|freebsd)(-.+)?$/;
+// match nothing here, but only while its family is in use: either the package
+// it belongs to (@sentry/cli for @sentry/cli-linux-x64) is an exception in use,
+// or another platform's binary of the same family is (sharp's libvips builds,
+// @img/sharp-libvips-<platform>, which have no package of their own: the family
+// is then named by a bare entry, in use whenever one of its platforms is).
+const PLATFORM_SUFFIX = /-(darwin|linux|linuxmusl|win32|android|freebsd|wasm32)(-.+)?$/;
 const namesInUse = new Set([...usedExceptions].map((index) => policy.exceptions[index]?.name));
+const familiesInUse = new Set(
+  [...usedExceptions].map((index) =>
+    (policy.exceptions[index]?.name ?? "").replace(PLATFORM_SUFFIX, ""),
+  ),
+);
+const declared = new Set(policy.exceptions.map((e) => e.name));
 policy.exceptions.forEach((exception, index) => {
   if (usedExceptions.has(index)) return;
   const base = exception.name.replace(PLATFORM_SUFFIX, "");
-  if (base !== exception.name && namesInUse.has(base)) return;
+  if (
+    base !== exception.name &&
+    (namesInUse.has(base) || (declared.has(base) && familiesInUse.has(base)))
+  )
+    return;
+  if (base === exception.name && familiesInUse.has(base)) return;
   problems.push(
     `exception for ${exception.name} (${exception.license}) matches no installed package: delete it`,
   );

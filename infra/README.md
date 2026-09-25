@@ -9,11 +9,11 @@ Commands below use `tofu`. Terraform is command-compatible if you have it instea
 | path | contents | when |
 |---|---|---|
 | `bootstrap/` | state bucket, GitHub OIDC provider, CI roles, budget and billing alarm, the hosted zone of the project domain | once, before anything else |
-| `modules/` | `network`, `compute`, `data` (#7); media and email later | as milestones need them |
+| `modules/` | `network`, `compute`, `data` (#7); `media` (#48, dormant until the cutover below); email later | as milestones need them |
 | `envs/staging`, `envs/prod` | one composition per environment: the three modules plus the non-secret parameters | M1 (#7) |
 | `github/` | repository settings, branch protection, environments | not adopted; `gh api` below until the GitHub provider question is settled |
 
-Modules arrive with the milestone that needs them: network, compute and data in M1 (#7); media and delivery in M3; email in M5. `scripts/` holds the one-time procedures that are deliberately not resources.
+Modules arrive with the milestone that needs them: network, compute and data in M1 (#7); media and delivery in M3 (#48, ADR-005); email in M5. `scripts/` holds the one-time procedures that are deliberately not resources.
 
 ## Account, once (console, maintainer only)
 
@@ -250,7 +250,7 @@ OpenTofu and the OIDC exchange are installed by `.github/scripts/install-tofu.sh
 
 The staging apply and the staging deploy run only while the repository variable `STAGING_ENABLED` is `true` (`gh variable set STAGING_ENABLED --body true`). Until the maintainer sets it, every merge plans and builds but applies and deploys nothing: staging starts when there is something to deploy, prod at the first release tag.
 
-Until the media module puts CloudFront in front (M3), TLS terminates at Traefik on the box and the API answers on the Elastic IP directly (#7).
+Until an environment's `media_enabled` is set (Media, below), TLS terminates at Traefik on the box and the API answers on the Elastic IP directly (#7).
 
 Each environment composes the three modules (#7, TD-19):
 
@@ -263,6 +263,22 @@ Each environment composes the three modules (#7, TD-19):
 The composition then writes the non-secret parameters `app-env`, `log-level`, `db-host`, `db-port`, `db-name`, `db-user` under `/kuutti/<env>/`; the API turns them into `APP_ENV`, `DB_HOST` and so on at boot and composes `DATABASE_URL` with `sslmode=require`.
 
 Every IAM role declared in an environment or module sets `permissions_boundary` to the bootstrap output `permissions_boundary_arn`; the apply role refuses to create a role without it. The plan role cannot read secrets, logs, or object data, only resource metadata and state.
+
+### Media (#48, ADR-005)
+
+`infra/modules/media`, composed by each environment behind `media_enabled` (default `false`): the private media bucket `kuutti-media-<env>-<account>` (SSE-S3, versioning off so an erased photo is gone, a policy that lets only the distribution read `media/*`), the instance role's right to write and remove objects under `media/`, the CloudFront distribution on `api.<env>.<domain>` with the API as its default origin and the bucket behind `/media/*`, the key group for signed URLs, the ACM certificate in us-east-1, and the alias records. The API signs URLs for fifteen minutes with the private key from SSM; `apps/api/src/media/` is the code. The module writes `s3-bucket`, `media-url-base` and `cloudfront-key-pair-id` under `/kuutti/<env>/` for the API.
+
+Cutover, once per environment, maintainer only. The key pair first, offline like the other keys:
+
+```sh
+openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out /Volumes/<offline-medium>/kuutti-<env>-cloudfront-signing.pem
+openssl pkey -in /Volumes/<offline-medium>/kuutti-<env>-cloudfront-signing.pem -pubout -out infra/envs/<env>/cloudfront-signing-key.pub.pem
+aws ssm put-parameter --name /kuutti/<env>/cloudfront-signing-key --type SecureString --value "$(cat /Volumes/<offline-medium>/kuutti-<env>-cloudfront-signing.pem)"
+```
+
+Then give the `api` application in Dokploy a second domain, `origin.api.<env>.<domain>` with Let's Encrypt (Domains tab, same as `api.<env>` in `dokploy-setup.sh`): CloudFront connects to the box by that name and Traefik must present a certificate for it, while the `api.<env>` router keeps serving the forwarded Host. Commit the public key and `media_enabled = true` in `envs/<env>/terraform.tfvars.example`'s real counterpart (CI passes it through the environment's tfvars; for staging, set it in `envs/staging/main.tf`'s variable default if the tfvars is not in CI), push, and let the apply run: it creates the bucket, the certificate (validated by a record in the zone, a few minutes), the distribution (about ten minutes), moves `api.<env>` from the Elastic IP to the alias, points `origin.api.<env>` at the box, and writes the three parameters. The next deploy of the API logs `"mode":"cloudfront"` under `media`. Checks: `/health` through `api.<env>` answers; an upload from the phone appears as three objects under `media/<key>/` in the bucket and nothing else; the URL the app receives opens once and answers 403 without its query string or after fifteen minutes; `photo_access` has a row per URL.
+
+After the cutover the box still admits 443 from anywhere, because Dokploy's control plane (`deploy.yml`) and the pull-request previews are served on it directly. `cloudfront_only_ingress` (network module) is the switch that closes it to CloudFront's prefix list once those two are behind the distribution as well; ADR-005 names that follow-up.
 
 ### Observability (#11)
 
@@ -389,7 +405,7 @@ Secret parameters are not resources in this code: the AWS provider would store t
 | `/kuutti/<env>/hetu-hmac-key` | API at boot; HMAC-SHA256 of the hetu (rules 1 and 2) | M2 |
 | `/kuutti/<env>/telia-signing-key` | API; signs the request object and the `private_key_jwt` client assertion of the Telia exchange (docs/vendors/telia.md) | #32 |
 | `/kuutti/<env>/telia-encryption-key` | API; decrypts the ID token Telia encrypts to us | #32 |
-| `/kuutti/<env>/cloudfront-signing-key` | API; signed media URLs | M3 |
+| `/kuutti/<env>/cloudfront-signing-key` | API; signs photo URLs (ADR-005); the public half is `envs/<env>/cloudfront-signing-key.pub.pem` in the repository | #48, at the media cutover |
 | `/kuutti/<env>/db-app-password` | API; its own database role | #7 |
 | `/kuutti/staging/db-preview-password` | a preview API as `kuutti_preview` (creates, owns and serves `kuutti_pr_<n>`); the `preview-database` Run Command document that drops it | #9 |
 | `/kuutti/ci-check/secret` | nothing; proves the plan role cannot decrypt | #6 |

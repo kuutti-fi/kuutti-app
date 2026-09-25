@@ -18,6 +18,7 @@ import { createLogger } from "./lib/logger.ts";
 import { ensurePreviewDatabase } from "./lib/preview-database.ts";
 import { flushSentry, initSentry, sentryReporter } from "./lib/sentry.ts";
 import { buildInfo } from "./lib/version.ts";
+import { createMediaDeps } from "./media/index.ts";
 
 async function main(): Promise<void> {
   let config: Config;
@@ -137,12 +138,24 @@ async function main(): Promise<void> {
     logger.info(seeded, "seed");
   }
 
+  // Photos (#48): the bucket and the URL signer, or nothing and the photo
+  // routes answer 503. A deployed environment with MEDIA_URL_BASE but no key
+  // fails here rather than serving photos nobody can open; the private key
+  // itself never appears in the log line (keyPairId is the public half's id).
+  const media = createMediaDeps(config);
+  if (media.setup.mode === "off" && config.APP_ENV !== "development" && config.APP_ENV !== "test") {
+    logger.warn(media.setup, "photos off: media delivery is not configured (infra/modules/media)");
+  } else {
+    logger.info(media.setup, "media");
+  }
+
   const app = createApp({
     config,
     logger,
     db: pool,
     ...(reporting ? { report: sentryReporter() } : {}),
     ...(broker ? { broker } : {}),
+    ...(media.deps ? { media: media.deps } : {}),
   });
   // Nightly housekeeping inside the process (rules/api.md): ended sessions and
   // stale login attempts (#35). The round builder and the research export join here.

@@ -25,6 +25,7 @@ import { requestLocale } from "./lib/i18n.ts";
 import { type Logger, requestLogger } from "./lib/logger.ts";
 import { openApiDocument } from "./lib/openapi.ts";
 import { rateLimit } from "./lib/rate-limit.ts";
+import { type MediaDeps, photoRoutes, UPLOAD_ROUTE } from "./media/index.ts";
 
 export type { AppEnv };
 
@@ -37,6 +38,8 @@ export type Deps = {
   report?: ErrorReporter;
   /** The bank-login broker (#33); absent when OIDC is not configured, and the auth routes answer 503. */
   broker?: IdentityBroker;
+  /** Object storage and URL signing (#48); absent when neither is configured, and the photo routes answer 503. */
+  media?: MediaDeps;
 };
 
 const UNLIMITED_PATHS = new Set(["/health", "/openapi.json"]);
@@ -70,12 +73,16 @@ export function createApp(deps: Deps) {
     c.header("X-Robots-Tag", "noindex, nofollow");
   });
   app.use("*", corsAllowlist(deps.config.corsAllowedOrigins));
-  app.use(
-    "*",
-    bodyLimit({
-      maxSize: deps.config.BODY_LIMIT_BYTES,
-      onError: (c) => c.json(localisedEnvelope(c, "payload_too_large"), 413),
-    }),
+  // The photo upload is the one body allowed past the app-wide cap; its own
+  // 10 MB limit sits on the route, behind the session guard (media/routes.ts).
+  const limitBody = bodyLimit({
+    maxSize: deps.config.BODY_LIMIT_BYTES,
+    onError: (c) => c.json(localisedEnvelope(c, "payload_too_large"), 413),
+  });
+  app.use("*", (c, next) =>
+    c.req.method === UPLOAD_ROUTE.method && c.req.path === UPLOAD_ROUTE.path
+      ? next()
+      : limitBody(c, next),
   );
   app.use(
     "*",
@@ -96,6 +103,7 @@ export function createApp(deps: Deps) {
   app.route("/", healthRoutes(deps));
   app.route("/", authRoutes(deps, guard));
   app.route("/", wellKnownRoutes(deps));
+  app.route("/", photoRoutes(deps, guard));
 
   // The bearer scheme the session routes declare (#35); the tokens themselves
   // are opaque, so the scheme is all the contract says about them.

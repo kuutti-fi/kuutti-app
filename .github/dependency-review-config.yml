@@ -34,3 +34,11 @@ allow-dependencies-licenses:
   - pkg:npm/%40segment/loosely-validate-event
   - pkg:npm/golden-fleece
   - pkg:npm/qrcode-terminal
+  - pkg:npm/%40img/sharp-libvips
+  - pkg:npm/%40img/sharp-libvips-darwin-arm64
+  - pkg:npm/%40img/sharp-libvips-darwin-x64
+  - pkg:npm/%40img/sharp-libvips-linux-arm64
+  - pkg:npm/%40img/sharp-libvips-linux-x64
+  - pkg:npm/%40img/sharp-libvips-linux-arm
+  - pkg:npm/%40img/sharp-libvips-linuxmusl-arm64
+  - pkg:npm/%40img/sharp-libvips-linuxmusl-x64

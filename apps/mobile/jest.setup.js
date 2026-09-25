@@ -33,3 +33,34 @@ jest.mock("expo-router", () => {
   const router = { push: jest.fn(), replace: jest.fn(), back: jest.fn() };
   return { __router: router, useRouter: () => router, useLocalSearchParams: () => ({}) };
 });
+
+// The phone's photo picker and the image manipulator are native (#48). The
+// picker cancels unless a test says otherwise; the manipulator "resizes" by
+// returning the requested size and a new uri, so a test can see the picture
+// went through the pre-resize before the upload.
+jest.mock("expo-image-picker", () => ({
+  launchImageLibraryAsync: jest.fn(async () => ({ canceled: true, assets: null })),
+}));
+jest.mock("expo-image-manipulator", () => {
+  const manipulate = jest.fn((uri) => {
+    let size = { width: 3000, height: 2000 };
+    const context = {
+      resize: jest.fn((wanted) => {
+        const ratio = size.width / size.height;
+        size = wanted.width
+          ? { width: wanted.width, height: Math.round(wanted.width / ratio) }
+          : { width: Math.round(wanted.height * ratio), height: wanted.height };
+        return context;
+      }),
+      renderAsync: jest.fn(async () => ({
+        ...size,
+        saveAsync: jest.fn(async () => ({ uri: `${uri}#resized`, ...size })),
+      })),
+    };
+    return context;
+  });
+  return {
+    ImageManipulator: { manipulate },
+    SaveFormat: { JPEG: "jpeg", PNG: "png", WEBP: "webp" },
+  };
+});

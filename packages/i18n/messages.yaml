@@ -327,6 +327,62 @@ errors.session_revoked:
   sv: Du har loggats ut från den här enheten. Logga in med din bank för att fortsätta.
   machine: { fi: true, sv: true }
 
+errors.unsupported_media_type:
+  en: The request body is not in a form the API accepts.
+  description: API error message (415) when a route was called with a content type it does not take (a JSON body on the photo upload, for example).
+  fi: Pyynnön sisältö ei ole muodossa, jonka rajapinta hyväksyy.
+  sv: Begärans innehåll är inte i ett format som API:et tar emot.
+  machine: { fi: true, sv: true }
+
+errors.photo_unsupported:
+  en: This file is not a photo Kuutti can use. Choose a JPEG, PNG or WebP picture.
+  description: Photo upload (415), the bytes are not a JPEG, PNG or WebP (an animated GIF, a HEIC, a video).
+  fi: Tämä tiedosto ei ole kuva, jota Kuutti voi käyttää. Valitse JPEG-, PNG- tai WebP-kuva.
+  sv: Den här filen är inte ett foto som Kuutti kan använda. Välj en JPEG-, PNG- eller WebP-bild.
+  machine: { fi: true, sv: true }
+
+errors.photo_invalid:
+  en: The photo could not be read. Try another picture.
+  description: Photo upload (422), the decoder could not read the file (a damaged or lying file).
+  fi: Kuvaa ei voitu lukea. Kokeile toista kuvaa.
+  sv: Fotot kunde inte läsas. Prova en annan bild.
+  machine: { fi: true, sv: true }
+
+errors.photo_too_many_pixels:
+  en: The photo is too large. Choose a smaller picture.
+  description: Photo upload (422), the image has more pixels than the cap; the app pre-resizes, so this is a picture that bypassed the app.
+  fi: Kuva on liian suuri. Valitse pienempi kuva.
+  sv: Fotot är för stort. Välj en mindre bild.
+  machine: { fi: true, sv: true }
+
+errors.photo_limit:
+  en: You already have the maximum number of photos. Remove one to add another.
+  description: Photo upload (409), the account has max_photos photos.
+  fi: Sinulla on jo enimmäismäärä kuvia. Poista yksi lisätäksesi toisen.
+  sv: Du har redan det största antalet foton. Ta bort ett för att lägga till ett annat.
+  machine: { fi: true, sv: true }
+
+errors.photo_order_invalid:
+  en: The photo order did not include every photo. Reload and try again.
+  description: Photo reorder (400), the list did not name each of the account's photos exactly once (the app's view was stale).
+  fi: Kuvien järjestys ei sisältänyt kaikkia kuvia. Lataa uudelleen ja yritä taas.
+  sv: Fotoordningen innehöll inte alla foton. Ladda om och försök igen.
+  machine: { fi: true, sv: true }
+
+errors.media_busy:
+  en: Many photos are being processed right now. Try again in a moment.
+  description: Photo upload (503 with Retry-After), image processing is at its concurrency limit.
+  fi: Kuvia käsitellään juuri nyt paljon. Yritä hetken kuluttua uudelleen.
+  sv: Många foton bearbetas just nu. Försök igen om en stund.
+  machine: { fi: true, sv: true }
+
+errors.media_unavailable:
+  en: Photos are not available right now.
+  description: Photo routes (503) when the API has no object storage configured (a developer's machine without the S3 stand-in, an environment before the media module is applied).
+  fi: Kuvat eivät ole juuri nyt käytettävissä.
+  sv: Foton är inte tillgängliga just nu.
+  machine: { fi: true, sv: true }
+
 signIn.title:
   en: Sign in
   description: Sign-in screen heading.
@@ -531,3 +587,268 @@ admin.source.offer:
 admin.source.unavailable:
   en: Source code (AGPL-3.0). The API cannot be reached, so the address of this deployment's source is not known right now.
   description: Moderation panel footer when the health request failed.
+
+photos.title:
+  en: Your photos
+  description: Photos screen heading; also the button on the home screen that opens it.
+  fi: Kuvasi
+  sv: Dina foton
+  machine: { fi: true, sv: true }
+
+photos.explain:
+  en: "Up to {max, plural, one {# photo} other {# photos}}. The first one is your main photo. A new photo is checked before anyone else sees it."
+  description: Photos screen, the paragraph under the heading. {max} is max_photos from the API.
+  fi: "Enintään {max, plural, one {# kuva} other {# kuvaa}}. Ensimmäinen on pääkuvasi. Uusi kuva tarkistetaan, ennen kuin kukaan muu näkee sen."
+  sv: "Högst {max, plural, one {# foto} other {# foton}}. Det första är ditt huvudfoto. Ett nytt foto granskas innan någon annan ser det."
+  machine: { fi: true, sv: true }
+
+photos.count:
+  en: "{photos, plural, one {# photo} other {# photos}}, at most {max, number}"
+  description: Photos screen, how many photos there are and the allowed number. Both are plain numbers after a comma, so no language inflects them.
+  fi: "{photos, plural, one {# kuva} other {# kuvaa}}, enintään {max, number}"
+  sv: "{photos, plural, one {# foto} other {# foton}}, högst {max, number}"
+  machine: { fi: true, sv: true }
+
+photos.empty:
+  en: No photos yet.
+  description: Photos screen, when the account has no photos.
+  fi: Ei vielä kuvia.
+  sv: Inga foton ännu.
+  machine: { fi: true, sv: true }
+
+photos.add:
+  en: Add a photo
+  description: Photos screen, the button that opens the phone's photo picker.
+  fi: Lisää kuva
+  sv: Lägg till ett foto
+  machine: { fi: true, sv: true }
+
+photos.picking:
+  en: Choosing a photo…
+  description: Photos screen, while the phone's picker is open.
+  fi: Valitaan kuvaa…
+  sv: Väljer foto…
+  machine: { fi: true, sv: true }
+
+photos.preparing:
+  en: Preparing the photo…
+  description: Photos screen, while the picked photo is checked and resized on the phone, before anything is sent.
+  fi: Valmistellaan kuvaa…
+  sv: Förbereder fotot…
+  machine: { fi: true, sv: true }
+
+photos.uploading:
+  en: "Uploading… {percent, number} %"
+  description: Photos screen, upload progress. {percent} is a whole number 0 to 100.
+  fi: "Lähetetään… {percent, number} %"
+  sv: "Laddar upp… {percent, number} %"
+  machine: { fi: true, sv: true }
+
+photos.state.pending:
+  en: Waiting for review
+  description: Photos screen, badge on a photo that moderation has not looked at yet; only the owner sees the photo.
+  fi: Odottaa tarkistusta
+  sv: Väntar på granskning
+  machine: { fi: true, sv: true }
+
+photos.state.queued:
+  en: Being reviewed
+  description: Photos screen, badge on a photo a person is reviewing.
+  fi: Tarkistuksessa
+  sv: Granskas
+  machine: { fi: true, sv: true }
+
+photos.state.approved:
+  en: Visible to others
+  description: Photos screen, badge on a photo that passed moderation.
+  fi: Näkyy muille
+  sv: Syns för andra
+  machine: { fi: true, sv: true }
+
+photos.state.rejected:
+  en: Not accepted
+  description: Photos screen, badge on a photo moderation refused; the reason arrives with the moderation feature.
+  fi: Ei hyväksytty
+  sv: Inte godkänt
+  machine: { fi: true, sv: true }
+
+photos.main:
+  en: Main photo
+  description: Photos screen, label on the first photo.
+  fi: Pääkuva
+  sv: Huvudfoto
+  machine: { fi: true, sv: true }
+
+photos.open:
+  en: "Open photo {position, number}"
+  description: Photos screen, screen-reader label of a photo tile; tapping opens it large. {position} counts from 1.
+  fi: "Avaa kuva {position, number}"
+  sv: "Öppna foto {position, number}"
+  machine: { fi: true, sv: true }
+
+photos.makeMain:
+  en: Make main photo
+  description: Photos screen, button that moves a photo to the first position.
+  fi: Aseta pääkuvaksi
+  sv: Gör till huvudfoto
+  machine: { fi: true, sv: true }
+
+photos.moveEarlier:
+  en: Move earlier
+  description: Photos screen, button that moves a photo one step towards the front.
+  fi: Siirrä aiemmaksi
+  sv: Flytta framåt
+  machine: { fi: true, sv: true }
+
+photos.moveLater:
+  en: Move later
+  description: Photos screen, button that moves a photo one step towards the back.
+  fi: Siirrä myöhemmäksi
+  sv: Flytta bakåt
+  machine: { fi: true, sv: true }
+
+photos.remove:
+  en: Remove
+  description: Photos screen, button that asks to remove a photo.
+  fi: Poista
+  sv: Ta bort
+  machine: { fi: true, sv: true }
+
+photos.remove.title:
+  en: Remove this photo?
+  description: Photos screen, heading of the confirmation before a photo is removed.
+  fi: Poistetaanko tämä kuva?
+  sv: Ta bort det här fotot?
+  machine: { fi: true, sv: true }
+
+photos.remove.body:
+  en: It disappears from your profile at once and cannot be brought back.
+  description: Photos screen, text of the confirmation before a photo is removed.
+  fi: Se poistuu profiilistasi heti, eikä sitä voi palauttaa.
+  sv: Det försvinner från din profil direkt och kan inte tas tillbaka.
+  machine: { fi: true, sv: true }
+
+photos.remove.confirm:
+  en: Remove photo
+  description: Photos screen, the confirming button of the removal dialog.
+  fi: Poista kuva
+  sv: Ta bort fotot
+  machine: { fi: true, sv: true }
+
+photos.remove.cancel:
+  en: Keep it
+  description: Photos screen, the cancelling button of the removal dialog.
+  fi: Säilytä
+  sv: Behåll
+  machine: { fi: true, sv: true }
+
+photos.dialog.close:
+  en: Close
+  description: Photos screen, screen-reader label of the close control of the removal dialog.
+  fi: Sulje
+  sv: Stäng
+  machine: { fi: true, sv: true }
+
+photos.notice.dismiss:
+  en: OK
+  description: Photos screen, the button that dismisses a notice.
+  fi: OK
+  sv: OK
+
+photos.refused.local:
+  en: This photo cannot be used.
+  description: Photos screen, the on-device check refused the picked photo; nothing was sent. Deliberately says no more.
+  fi: Tätä kuvaa ei voi käyttää.
+  sv: Det här fotot kan inte användas.
+  machine: { fi: true, sv: true }
+
+photos.error.permission:
+  en: Kuutti could not open your photos. Allow access in the phone's settings and try again.
+  description: Photos screen, the photo library could not be opened (permission denied).
+  fi: Kuutti ei päässyt kuviisi. Salli pääsy puhelimen asetuksista ja yritä uudelleen.
+  sv: Kuutti kunde inte öppna dina foton. Tillåt åtkomst i telefonens inställningar och försök igen.
+  machine: { fi: true, sv: true }
+
+photos.error.generic:
+  en: The photo could not be uploaded. Try again.
+  description: Photos screen, any upload failure without a more specific text (network, an unexpected answer).
+  fi: Kuvan lähetys ei onnistunut. Yritä uudelleen.
+  sv: Fotot kunde inte laddas upp. Försök igen.
+  machine: { fi: true, sv: true }
+
+photos.error.photo_limit:
+  en: You already have the maximum number of photos. Remove one to add another.
+  description: Photos screen, the API refused the upload because the account is at max_photos.
+  fi: Sinulla on jo enimmäismäärä kuvia. Poista yksi lisätäksesi toisen.
+  sv: Du har redan det största antalet foton. Ta bort ett för att lägga till ett annat.
+  machine: { fi: true, sv: true }
+
+photos.error.photo_unsupported:
+  en: This file is not a photo Kuutti can use. Choose a JPEG, PNG or WebP picture.
+  description: Photos screen, the API refused the file type.
+  fi: Tämä tiedosto ei ole kuva, jota Kuutti voi käyttää. Valitse JPEG-, PNG- tai WebP-kuva.
+  sv: Den här filen är inte ett foto som Kuutti kan använda. Välj en JPEG-, PNG- eller WebP-bild.
+  machine: { fi: true, sv: true }
+
+photos.error.photo_invalid:
+  en: The photo could not be read. Try another picture.
+  description: Photos screen, the API could not decode the picture.
+  fi: Kuvaa ei voitu lukea. Kokeile toista kuvaa.
+  sv: Fotot kunde inte läsas. Prova en annan bild.
+  machine: { fi: true, sv: true }
+
+photos.error.tooLarge:
+  en: The photo is too large. Choose a smaller picture.
+  description: Photos screen, the API refused the size (payload_too_large or photo_too_many_pixels).
+  fi: Kuva on liian suuri. Valitse pienempi kuva.
+  sv: Fotot är för stort. Välj en mindre bild.
+  machine: { fi: true, sv: true }
+
+photos.error.media_busy:
+  en: Many photos are being processed right now. Try again in a moment.
+  description: Photos screen, the API answered 503 media_busy.
+  fi: Kuvia käsitellään juuri nyt paljon. Yritä hetken kuluttua uudelleen.
+  sv: Många foton bearbetas just nu. Försök igen om en stund.
+  machine: { fi: true, sv: true }
+
+photos.error.photo_order_invalid:
+  en: The photo order was out of date, so it was reloaded. Try the move again.
+  description: Photos screen, the API refused a reorder because the app's list was stale (a photo added or removed elsewhere); the screen has already reloaded the list.
+  fi: Kuvien järjestys oli vanhentunut, joten se ladattiin uudelleen. Kokeile siirtoa uudelleen.
+  sv: Fotoordningen var inaktuell, så den laddades om. Försök flytta igen.
+  machine: { fi: true, sv: true }
+
+photos.error.media_unavailable:
+  en: Photos are not available right now.
+  description: Photos screen, the API has no photo storage configured (503 media_unavailable).
+  fi: Kuvat eivät ole juuri nyt käytettävissä.
+  sv: Foton är inte tillgängliga just nu.
+  machine: { fi: true, sv: true }
+
+photos.zoom.label:
+  en: "Photo {position, number} / {total, number}, full size"
+  description: Zoom screen, screen-reader label of the large photo. {position} counts from 1; {total} is how many photos there are.
+  fi: "Kuva {position, number} / {total, number}, täysikokoinen"
+  sv: "Foto {position, number} / {total, number}, full storlek"
+  machine: { fi: true, sv: true }
+
+photos.zoom.back:
+  en: Back to your photos
+  description: Zoom screen, the button that returns to the photos screen.
+  fi: Takaisin kuviisi
+  sv: Tillbaka till dina foton
+  machine: { fi: true, sv: true }
+
+photos.imageLabel:
+  en: "Photo {position, number} / {total, number}"
+  description: Screen-reader label of one photo in the grid. {position} counts from 1; {total} is how many photos there are.
+  fi: "Kuva {position, number} / {total, number}"
+  sv: "Foto {position, number} / {total, number}"
+  machine: { fi: true, sv: true }
+
+smoke.photos.open:
+  en: Your photos
+  description: Home (smoke) screen, the button that opens the photos screen when the device is signed in.
+  fi: Kuvasi
+  sv: Dina foton
+  machine: { fi: true, sv: true }

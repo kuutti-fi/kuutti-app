@@ -16,7 +16,7 @@ The four surfaces that matter most, in order: the OIDC exchange with Telia, the 
 - [ ] CORS: product API routes refuse browser origins; only the admin SPA, the waitlist site, and a pull-request preview's own web origin are allowlisted.
 - [ ] No debug or introspection routes outside `NODE_ENV=development`.
 - [ ] Deployed configuration comes only from SSM Parameter Store via the instance role; `.env` is local-only.
-- [ ] CloudFront is the only public entry; nothing listens on plain HTTP.
+- [ ] CloudFront is the only public entry; nothing listens on plain HTTP. (ADR-005: the distribution fronts the API once `media_enabled` is set; the box still admits 443 from anywhere because Dokploy and the previews are served there directly, and 80 for the ACME challenge. `cloudfront_only_ingress` is the switch; the follow-up that lets it flip is in ADR-005.)
 
 ## Supply chain
 
@@ -32,13 +32,13 @@ The four surfaces that matter most, in order: the OIDC exchange with Telia, the 
 - [ ] HMAC-SHA256 with the permanent SSM key is used for the hetu and for nothing else.
 - [ ] Session tokens are random 256-bit values, stored hashed, compared in constant time.
 - [ ] The hetu HMAC key and the Telia signing key are never in the database, the repo, logs, or the Dokploy control plane.
-- [ ] TLS terminates at CloudFront; internal hops stay inside the VPC.
+- [ ] TLS terminates at CloudFront; internal hops stay inside the VPC. (ADR-005: viewer TLS at CloudFront after the cutover; the hop to the box is HTTPS over the public address to `origin.api.<env>`, not inside the VPC, until the ingress switch above flips.)
 
 ## Injection
 
 - [ ] Drizzle query builder only. Any raw `sql` template carries a reviewer comment explaining why.
 - [ ] All input passes through a zod schema from `packages/schema` at the route boundary, including query strings, headers used for logic, and WebSocket messages.
-- [ ] Uploaded images are re-encoded by sharp with `limitInputPixels`; the original bytes are never stored or served.
+- [x] Uploaded images are re-encoded by sharp with `limitInputPixels`; the original bytes are never stored or served. (#48: `apps/api/src/media/pipeline.ts`; the pixel cap is applied to the file header before the decoder, the route tests read the stored bytes back.)
 
 ## Insecure design
 
@@ -66,11 +66,11 @@ The four surfaces that matter most, in order: the OIDC exchange with Telia, the 
 - [ ] Structured logs carry `account_id` and request id, never hetu, message text, email, or `seeks`.
 - [ ] Moderator actions, disclosure requests, and photo views by staff write to the immutable audit table.
 - [ ] A test asserts that known PII patterns do not appear in log output.
-- [ ] Signed URL issuance is logged per account (photo id, variant, time).
+- [x] Signed URL issuance is logged per account (photo id, variant, time). (#48: a `photo_access` row and a log line per issuance, `apps/api/src/media/photos.ts`.)
 
 ## Mishandling of exceptional conditions
 
 - [ ] No empty `catch` blocks; errors are logged with context and rethrown or mapped.
 - [ ] Error responses are generic; detail goes to logs and Sentry.
 - [ ] Rate-limited and moderation-gated endpoints fail closed.
-- [ ] Image processing returns 503 with `Retry-After` above the concurrency limit instead of queueing unbounded work.
+- [x] Image processing returns 503 with `Retry-After` above the concurrency limit instead of queueing unbounded work. (#48: `p-limit` at the vCPU count, checked before the work is queued.)

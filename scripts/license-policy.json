@@ -79,6 +79,46 @@
       "name": "qrcode-terminal",
       "license": "Apache 2.0",
       "reason": "Apache-2.0 spelled without the SPDX hyphen. Transitive of eas-cli, which prints QR codes in the terminal; not distributed."
+    },
+    {
+      "name": "@img/sharp-libvips",
+      "license": "LGPL-3.0-or-later",
+      "reason": "libvips, the image library behind sharp (#48, rule 4: uploads are re-encoded by the API). Prebuilt per platform under @img/sharp-libvips-<platform> and loaded by the sharp addon at runtime, on the API box only: never in the mobile bundle or the admin panel, so LICENSE-EXCEPTION is untouched, and LGPL-3.0 permits this use from AGPL-3.0 code (LGPL section 4). Nothing in libvips is modified. This bare entry names the family; the platform entries below are its builds."
+    },
+    {
+      "name": "@img/sharp-libvips-darwin-arm64",
+      "license": "LGPL-3.0-or-later",
+      "reason": "libvips prebuilt for darwin-arm64; see @img/sharp-libvips."
+    },
+    {
+      "name": "@img/sharp-libvips-darwin-x64",
+      "license": "LGPL-3.0-or-later",
+      "reason": "libvips prebuilt for darwin-x64; see @img/sharp-libvips."
+    },
+    {
+      "name": "@img/sharp-libvips-linux-arm64",
+      "license": "LGPL-3.0-or-later",
+      "reason": "libvips prebuilt for linux-arm64; see @img/sharp-libvips."
+    },
+    {
+      "name": "@img/sharp-libvips-linux-x64",
+      "license": "LGPL-3.0-or-later",
+      "reason": "libvips prebuilt for linux-x64; see @img/sharp-libvips."
+    },
+    {
+      "name": "@img/sharp-libvips-linux-arm",
+      "license": "LGPL-3.0-or-later",
+      "reason": "libvips prebuilt for linux-arm; see @img/sharp-libvips."
+    },
+    {
+      "name": "@img/sharp-libvips-linuxmusl-arm64",
+      "license": "LGPL-3.0-or-later",
+      "reason": "libvips prebuilt for linuxmusl-arm64; see @img/sharp-libvips."
+    },
+    {
+      "name": "@img/sharp-libvips-linuxmusl-x64",
+      "license": "LGPL-3.0-or-later",
+      "reason": "libvips prebuilt for linuxmusl-x64; see @img/sharp-libvips."
     }
   ]
 }

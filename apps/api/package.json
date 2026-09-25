@@ -13,19 +13,24 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@aws-sdk/client-s3": "^3.1131.0",
-    "@aws-sdk/client-ssm": "^3.1131.0",
+    "@aws-sdk/client-s3": "^3.1139.0",
+    "@aws-sdk/client-ssm": "^3.1139.0",
+    "@aws-sdk/cloudfront-signer": "^3.1138.0",
+    "@aws-sdk/s3-request-presigner": "^3.1139.0",
     "@hono/node-server": "^2.1.1",
     "@hono/zod-openapi": "^1.6.3",
     "@kuutti/db": "workspace:*",
     "@kuutti/i18n": "workspace:*",
     "@kuutti/schema": "workspace:*",
     "@sentry/node": "^10.75.0",
+    "blurhash": "^2.0.5",
     "hono": "^4.13.7",
     "jose": "^6.2.12",
     "openid-client": "^6.8.8",
+    "p-limit": "^7.3.3",
     "pg": "^8.23.0",
     "pino": "^10.3.1",
+    "sharp": "^0.35.4",
     "zod": "^4.6.2"
   },
   "devDependencies": {

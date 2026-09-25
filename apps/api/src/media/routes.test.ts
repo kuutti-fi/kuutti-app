@@ -1,0 +1,392 @@
+import { ErrorResponse, PHOTO_MAX_BYTES, Photo, PhotoList, PhotoUrlResponse } from "@kuutti/schema";
+import { describe, expect } from "vitest";
+import { createApp } from "../app.ts";
+import { signedInAccount, withMatchingConfig } from "../test/account.ts";
+import { captureLogger, type TestContext, test, testConfig } from "../test/harness.ts";
+import {
+  fixtureGif,
+  fixtureHugeJpegHeader,
+  fixtureJpeg,
+  fixturePng,
+  TEST_KEY_PAIR_ID,
+  TEST_MEDIA_BASE,
+  testMediaDeps,
+} from "../test/media.ts";
+import { objectKey } from "./store.ts";
+
+// The photo routes end to end (#48): real Postgres in a rolled-back
+// transaction, a memory store standing in for the bucket, a CloudFront signer
+// over a test key. Happy path, validation failure, unauthenticated and
+// wrong-user for every route (CLAUDE.md Testing), plus the caps.
+
+const MAX_PHOTOS = 3;
+
+async function appWith(ctx: TestContext, options: { concurrency?: number; media?: false } = {}) {
+  await withMatchingConfig(ctx.client, { max_photos: MAX_PHOTOS });
+  const { logger, lines } = await captureLogger();
+  const media = testMediaDeps({ concurrency: options.concurrency ?? 2 });
+  const app = createApp({
+    config: testConfig(),
+    logger,
+    db: ctx.client,
+    ...(options.media === false ? {} : { media: media.deps }),
+  });
+  return { app, store: media.store, logs: lines };
+}
+
+function multipart(bytes: Uint8Array, type = "image/jpeg", field = "photo"): FormData {
+  const form = new FormData();
+  // A copy into a plain ArrayBuffer: Blob refuses a view over a SharedArrayBuffer by type.
+  form.append(
+    field,
+    new Blob([new Uint8Array(bytes).buffer as ArrayBuffer], { type }),
+    "photo.jpg",
+  );
+  return form;
+}
+
+async function upload(
+  app: ReturnType<typeof createApp>,
+  headers: Record<string, string>,
+  bytes: Uint8Array,
+  type = "image/jpeg",
+) {
+  return app.request("/photos", { method: "POST", headers, body: multipart(bytes, type) });
+}
+
+async function errorCode(res: Response): Promise<string> {
+  return ErrorResponse.parse(await res.json()).error.code;
+}
+
+describe("photo routes", () => {
+  test("an upload is stored as three WebP variants under a content address, no original, and listed as pending", async ({
+    ctx,
+  }) => {
+    const { app, store, logs } = await appWith(ctx);
+    const me = await signedInAccount(ctx.client);
+    const input = await fixtureJpeg({ width: 1200, height: 1600 });
+
+    const res = await upload(app, me.headers, input);
+    expect(res.status).toBe(201);
+    const photo = Photo.parse(await res.json());
+    expect(photo).toMatchObject({ state: "pending", position: 0, width: 1200, height: 1600 });
+
+    const keys = [...store.objects.keys()];
+    expect(keys).toHaveLength(3);
+    const contentKey = keys[0]?.split("/")[1] ?? "";
+    expect(contentKey).toMatch(/^[0-9a-f]{64}$/);
+    expect(new Set(keys)).toEqual(
+      new Set(["thumb", "card", "full"].map((v) => `media/${contentKey}/${v}.webp`)),
+    );
+    for (const bytes of store.objects.values()) {
+      expect(Buffer.from(bytes.subarray(0, 4)).toString("latin1")).toBe("RIFF"); // WebP, not the JPEG
+      expect(Buffer.from(bytes).equals(input)).toBe(false);
+    }
+    const row = await ctx.client.query(
+      "SELECT account_id, key, state, position FROM photo WHERE id = $1",
+      [photo.id],
+    );
+    expect(row.rows[0]).toEqual({
+      account_id: me.accountId,
+      key: contentKey,
+      state: "pending",
+      position: 0,
+    });
+
+    const list = await app.request("/photos", { headers: me.headers });
+    expect(list.status).toBe(200);
+    const body = PhotoList.parse(await list.json());
+    expect(body.maxPhotos).toBe(MAX_PHOTOS);
+    expect(body.photos.map((p) => p.id)).toEqual([photo.id]);
+    // The key is never in a response or a log line.
+    expect(JSON.stringify(body)).not.toContain(contentKey);
+    expect(JSON.stringify(logs())).not.toContain(contentKey);
+  });
+
+  test("a signed URL is issued for each variant of one's own photo, logged, and written to photo_access", async ({
+    ctx,
+  }) => {
+    const { app, logs } = await appWith(ctx);
+    const me = await signedInAccount(ctx.client);
+    const photo = Photo.parse(
+      await (await upload(app, me.headers, await fixturePng(400, 300))).json(),
+    );
+    const before = Date.now();
+    for (const variant of ["thumb", "card", "full"] as const) {
+      const res = await app.request(`/photos/${photo.id}/${variant}`, { headers: me.headers });
+      expect(res.status).toBe(200);
+      const body = PhotoUrlResponse.parse(await res.json());
+      expect(body.variant).toBe(variant);
+      const url = new URL(body.url);
+      expect(url.origin + url.pathname).toMatch(
+        new RegExp(`^${TEST_MEDIA_BASE}/media/[0-9a-f]{64}/${variant}\\.webp$`),
+      );
+      expect(url.searchParams.get("Key-Pair-Id")).toBe(TEST_KEY_PAIR_ID);
+      expect(url.searchParams.get("Signature")).toBeTruthy();
+      const expires = new Date(body.expiresAt).getTime() - before;
+      expect(expires).toBeGreaterThan(14 * 60 * 1000);
+      expect(expires).toBeLessThanOrEqual(15 * 60 * 1000 + 5_000);
+    }
+    const access = await ctx.client.query(
+      "SELECT account_id, photo_id, variant FROM photo_access ORDER BY at",
+      [],
+    );
+    expect(access.rows).toEqual([
+      { account_id: me.accountId, photo_id: photo.id, variant: "thumb" },
+      { account_id: me.accountId, photo_id: photo.id, variant: "card" },
+      { account_id: me.accountId, photo_id: photo.id, variant: "full" },
+    ]);
+    const issued = logs().filter((l) => l.msg === "photo url issued");
+    expect(issued).toHaveLength(3);
+    expect(issued[0]).toMatchObject({
+      accountId: me.accountId,
+      photoId: photo.id,
+      variant: "thumb",
+    });
+    expect(issued[0]?.at).toBeDefined();
+  });
+
+  test("validation: no photo part, a JSON body, a declared type outside the list, and lying bytes", async ({
+    ctx,
+  }) => {
+    const { app, store } = await appWith(ctx);
+    const me = await signedInAccount(ctx.client);
+
+    const empty = new FormData();
+    empty.append("note", "hello");
+    const noPart = await app.request("/photos", {
+      method: "POST",
+      headers: me.headers,
+      body: empty,
+    });
+    expect(noPart.status).toBe(400);
+    expect(await errorCode(noPart)).toBe("validation_failed");
+
+    const json = await app.request("/photos", {
+      method: "POST",
+      headers: { ...me.headers, "content-type": "application/json" },
+      body: JSON.stringify({ photo: "x" }),
+    });
+    expect(json.status).toBe(415);
+    expect(await errorCode(json)).toBe("unsupported_media_type");
+
+    const gif = await upload(app, me.headers, await fixtureGif(), "image/gif");
+    expect(gif.status).toBe(400);
+    expect(await errorCode(gif)).toBe("validation_failed");
+
+    // The declared type is not trusted: GIF bytes labelled JPEG are refused by the header check.
+    const lying = await upload(app, me.headers, await fixtureGif(), "image/jpeg");
+    expect(lying.status).toBe(415);
+    expect(await errorCode(lying)).toBe("photo_unsupported");
+
+    const text = await upload(app, me.headers, Buffer.from("not a picture"), "image/png");
+    expect(text.status).toBe(415);
+
+    expect(store.objects.size).toBe(0);
+    const rows = await ctx.client.query("SELECT count(*) AS n FROM photo");
+    expect(Number(rows.rows[0]?.n)).toBe(0);
+  });
+
+  test("the caps: 40 megapixels is refused from the header, over 10 MB before any byte is decoded", async ({
+    ctx,
+  }) => {
+    const { app, store } = await appWith(ctx);
+    const me = await signedInAccount(ctx.client);
+
+    const huge = await upload(app, me.headers, fixtureHugeJpegHeader());
+    expect(huge.status).toBe(422);
+    expect(await errorCode(huge)).toBe("photo_too_many_pixels");
+
+    const big = new Uint8Array(PHOTO_MAX_BYTES + 1);
+    big.set([0xff, 0xd8, 0xff]);
+    const tooLarge = await upload(app, me.headers, big);
+    expect(tooLarge.status).toBe(413);
+    expect(await errorCode(tooLarge)).toBe("payload_too_large");
+
+    // The app-wide 1 MB cap does not apply to the upload: a 2 MB picture is fine.
+    const twoMb = await fixtureJpeg({ width: 1600, height: 1600, exif: false });
+    expect(twoMb.length).toBeLessThan(PHOTO_MAX_BYTES);
+    const ok = await upload(app, me.headers, twoMb);
+    expect(ok.status).toBe(201);
+    expect(store.objects.size).toBe(3);
+  });
+
+  test("above the concurrency limit the upload answers 503 with Retry-After", async ({ ctx }) => {
+    const { app } = await appWith(ctx, { concurrency: 1 });
+    const me = await signedInAccount(ctx.client);
+    const bytes = await fixtureJpeg({ width: 1000, height: 1000, exif: false });
+    const [a, b] = await Promise.all([
+      upload(app, me.headers, bytes),
+      upload(app, me.headers, bytes),
+    ]);
+    const statuses = [a.status, b.status].sort();
+    expect(statuses).toEqual([201, 503]);
+    const busy = a.status === 503 ? a : b;
+    expect(busy.headers.get("retry-after")).toBe("5");
+    expect(await errorCode(busy)).toBe("media_busy");
+  });
+
+  test("max_photos from matching_config caps the account", async ({ ctx }) => {
+    const { app } = await appWith(ctx);
+    const me = await signedInAccount(ctx.client);
+    for (let i = 0; i < MAX_PHOTOS; i += 1) {
+      const res = await upload(app, me.headers, await fixturePng(300 + i, 300));
+      expect(res.status).toBe(201);
+    }
+    const over = await upload(app, me.headers, await fixturePng(999, 300));
+    expect(over.status).toBe(409);
+    expect(await errorCode(over)).toBe("photo_limit");
+    const list = PhotoList.parse(
+      await (await app.request("/photos", { headers: me.headers })).json(),
+    );
+    expect(list.photos.map((p) => p.position)).toEqual([0, 1, 2]);
+  });
+
+  test("the order is the owner's; positions are renumbered; an incomplete order is refused", async ({
+    ctx,
+  }) => {
+    const { app } = await appWith(ctx);
+    const me = await signedInAccount(ctx.client);
+    const ids: string[] = [];
+    for (let i = 0; i < 3; i += 1) {
+      ids.push(
+        Photo.parse(await (await upload(app, me.headers, await fixturePng(320 + i, 200))).json())
+          .id,
+      );
+    }
+    const reorder = (order: unknown) =>
+      app.request("/photos/order", {
+        method: "PUT",
+        headers: { ...me.headers, "content-type": "application/json" },
+        body: JSON.stringify({ order }),
+      });
+
+    const res = await reorder([ids[2], ids[0], ids[1]]);
+    expect(res.status).toBe(200);
+    const list = PhotoList.parse(await res.json());
+    expect(list.photos.map((p) => p.id)).toEqual([ids[2], ids[0], ids[1]]);
+    expect(list.photos.map((p) => p.position)).toEqual([0, 1, 2]);
+
+    const partial = await reorder([ids[0], ids[1]]);
+    expect(partial.status).toBe(400);
+    expect(await errorCode(partial)).toBe("photo_order_invalid");
+    const duplicate = await reorder([ids[0], ids[0], ids[1]]);
+    expect(await errorCode(duplicate)).toBe("photo_order_invalid");
+    expect((await reorder(["not-a-uuid"])).status).toBe(400);
+    expect((await reorder([])).status).toBe(400);
+  });
+
+  test("deleting removes the row and closes the gap; the objects go only when no other row shares them", async ({
+    ctx,
+  }) => {
+    const { app, store } = await appWith(ctx);
+    const a = await signedInAccount(ctx.client, "a");
+    const b = await signedInAccount(ctx.client, "b");
+    const shared = await fixtureJpeg({ width: 900, height: 700, exif: false });
+    const first = Photo.parse(await (await upload(app, a.headers, shared)).json());
+    const second = Photo.parse(
+      await (await upload(app, a.headers, await fixturePng(500, 500))).json(),
+    );
+    const theirs = Photo.parse(await (await upload(app, b.headers, shared)).json());
+    expect(store.objects.size).toBe(6); // the shared picture is one set of objects
+    const sharedKey = (
+      await ctx.client.query<{ key: string }>("SELECT key FROM photo WHERE id = $1", [first.id])
+    ).rows[0]?.key;
+    expect(
+      (await ctx.client.query("SELECT key FROM photo WHERE id = $1", [theirs.id])).rows[0]?.key,
+    ).toBe(sharedKey);
+
+    const gone = await app.request(`/photos/${first.id}`, { method: "DELETE", headers: a.headers });
+    expect(gone.status).toBe(204);
+    expect(store.objects.has(objectKey(sharedKey ?? "", "full"))).toBe(true); // B still has it
+    const list = PhotoList.parse(
+      await (await app.request("/photos", { headers: a.headers })).json(),
+    );
+    expect(list.photos).toHaveLength(1);
+    expect(list.photos[0]).toMatchObject({ id: second.id, position: 0 });
+
+    expect(
+      (await app.request(`/photos/${theirs.id}`, { method: "DELETE", headers: b.headers })).status,
+    ).toBe(204);
+    expect(store.objects.has(objectKey(sharedKey ?? "", "full"))).toBe(false);
+    expect(store.objects.size).toBe(3);
+
+    expect(
+      (await app.request(`/photos/${first.id}`, { method: "DELETE", headers: a.headers })).status,
+    ).toBe(404);
+    expect(
+      (await app.request("/photos/not-a-uuid", { method: "DELETE", headers: a.headers })).status,
+    ).toBe(400);
+  });
+
+  test("wrong user: another account's photo is not listed, served, deleted or reordered", async ({
+    ctx,
+  }) => {
+    const { app } = await appWith(ctx);
+    const a = await signedInAccount(ctx.client, "a");
+    const b = await signedInAccount(ctx.client, "b");
+    const photo = Photo.parse(
+      await (await upload(app, a.headers, await fixturePng(400, 400))).json(),
+    );
+
+    const list = PhotoList.parse(
+      await (await app.request("/photos", { headers: b.headers })).json(),
+    );
+    expect(list.photos).toEqual([]);
+    const url = await app.request(`/photos/${photo.id}/thumb`, { headers: b.headers });
+    expect(url.status).toBe(404);
+    expect(await errorCode(url)).toBe("not_found");
+    expect(
+      (await app.request(`/photos/${photo.id}`, { method: "DELETE", headers: b.headers })).status,
+    ).toBe(404);
+    const order = await app.request("/photos/order", {
+      method: "PUT",
+      headers: { ...b.headers, "content-type": "application/json" },
+      body: JSON.stringify({ order: [photo.id] }),
+    });
+    expect(order.status).toBe(400);
+    expect(await errorCode(order)).toBe("photo_order_invalid");
+
+    // Nothing of B's touched A's photo: no access row, still A's, still at position 0.
+    const access = await ctx.client.query(
+      "SELECT count(*) AS n FROM photo_access WHERE account_id = $1",
+      [b.accountId],
+    );
+    expect(Number(access.rows[0]?.n)).toBe(0);
+    const still = await app.request(`/photos/${photo.id}/thumb`, { headers: a.headers });
+    expect(still.status).toBe(200);
+  });
+
+  test("unauthenticated: every photo route answers 401 before reading anything", async ({
+    ctx,
+  }) => {
+    const { app, store } = await appWith(ctx);
+    const id = "6f1c1c4e-9a8e-4a0b-9c3a-0c8d1e2f3a4b";
+    const attempts = [
+      app.request("/photos"),
+      app.request("/photos", { method: "POST", body: multipart(await fixturePng(64, 64)) }),
+      app.request(`/photos/${id}`, { method: "DELETE" }),
+      app.request("/photos/order", {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ order: [id] }),
+      }),
+      app.request(`/photos/${id}/thumb`),
+    ];
+    for (const res of await Promise.all(attempts)) {
+      expect(res.status).toBe(401);
+      expect(await errorCode(res)).toBe("unauthenticated");
+    }
+    expect(store.objects.size).toBe(0);
+  });
+
+  test("without object storage the photo routes answer media_unavailable", async ({ ctx }) => {
+    const { app } = await appWith(ctx, { media: false });
+    const me = await signedInAccount(ctx.client);
+    const list = await app.request("/photos", { headers: me.headers });
+    expect(list.status).toBe(503);
+    expect(await errorCode(list)).toBe("media_unavailable");
+    const up = await upload(app, me.headers, await fixturePng(64, 64));
+    expect(up.status).toBe(503);
+  });
+});

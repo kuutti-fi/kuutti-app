@@ -49,6 +49,23 @@ const Env = z.object({
     .enum(["true", "false"])
     .default("false")
     .transform((v) => v === "true"),
+  // Photo delivery (#48, TD-8, ADR-005): the distribution's origin
+  // (https://api.<env>.kuutti.app; objects are signed under /media/), the id
+  // of our CloudFront public key, and the private half from
+  // /kuutti/<env>/cloudfront-signing-key. All three or none: with them URLs
+  // are CloudFront signed URLs; without them a developer's stand-in presigns its
+  // own, and a deployed environment has no photos (media/wiring.ts).
+  // https only: a signed URL over plain HTTP would hand the picture and its
+  // signature to the network, and no CloudFront distribution speaks HTTP to us.
+  MEDIA_URL_BASE: z.url({ protocol: /^https$/ }).optional(),
+  CLOUDFRONT_KEY_PAIR_ID: z
+    .string()
+    .regex(/^[A-Z0-9]{13,20}$/, "a CloudFront public key id")
+    .optional(),
+  CLOUDFRONT_SIGNING_KEY: z.string().min(1).optional(),
+  // sharp runs this many uploads at once; above it the upload answers 503
+  // (rules/api.md Media). Defaults to the vCPU count; tests set 1.
+  IMAGE_CONCURRENCY: z.coerce.number().int().min(1).max(64).optional(),
 
   // Bank identification (M2, docs/vendors/telia.md): the mock IdP locally, the
   // Telia broker on staging and production. The issuer's endpoints and keys come
@@ -187,8 +204,14 @@ export function parseConfig(raw: Record<string, string | undefined>): Config {
   // instance role; what it must never hold in memory is dropped here, so a
   // preview process cannot reach the environment's own database even by
   // accident. The preview role from db-app-role.sh is the real boundary.
+  // The same for photos (#48, ADR-005): staging's bucket and signing key
+  // would make a preview a writer of staging's objects, refcounted against
+  // the wrong database; a preview has no media and its photo routes answer 503.
   if (preview) {
     env.DB_APP_PASSWORD = undefined;
+    env.MEDIA_URL_BASE = undefined;
+    env.CLOUDFRONT_KEY_PAIR_ID = undefined;
+    env.CLOUDFRONT_SIGNING_KEY = undefined;
   }
   return {
     ...env,
