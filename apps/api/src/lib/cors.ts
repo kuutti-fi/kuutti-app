@@ -9,6 +9,9 @@ export function corsAllowlist(allowed: ReadonlySet<string>) {
   return cors({
     origin: (origin) => (allowed.has(origin) ? origin : null),
     allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE"],
+    // The admin panel sends its bearer token and JSON bodies from its own
+    // origin (#49): both headers must pass the preflight, or nothing does.
+    allowHeaders: ["Authorization", "Content-Type"],
     maxAge: 600,
   });
 }

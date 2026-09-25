@@ -9,16 +9,18 @@ import {
   type IdentityBroker,
   isTeliaIssuer,
   OidcBroker,
+  sweepAdminSessions,
   sweepSessions,
   teliaKeyIds,
 } from "./identity/index.ts";
-import { scheduleNightly } from "./jobs/nightly.ts";
+import { type NightlyJob, scheduleNightly } from "./jobs/nightly.ts";
 import { type Config, ConfigError, loadConfig } from "./lib/config.ts";
 import { createLogger } from "./lib/logger.ts";
 import { ensurePreviewDatabase } from "./lib/preview-database.ts";
 import { flushSentry, initSentry, sentryReporter } from "./lib/sentry.ts";
 import { buildInfo } from "./lib/version.ts";
-import { createMediaDeps } from "./media/index.ts";
+import { createMediaDeps, sweepPendingPhotos } from "./media/index.ts";
+import { auditBoundary } from "./safety/index.ts";
 
 async function main(): Promise<void> {
   let config: Config;
@@ -130,6 +132,15 @@ async function main(): Promise<void> {
   // Migrations run before the server listens, under the advisory lock (rule 10).
   const migration = await migrate(pool, resolve(config.MIGRATIONS_DIR));
   logger.info(migration, "migrations");
+  // The audit table's role boundary (#49, ADR-006) is set by the maintainer,
+  // not by a migration: a deployed box says so at every boot until it is.
+  const audit = await auditBoundary(pool);
+  // A preview runs as kuutti_preview, owner of its own throwaway database: no boundary there by design.
+  if (!audit.enforced && (config.APP_ENV === "staging" || config.APP_ENV === "production")) {
+    logger.warn(audit, "audit boundary not enforced: run infra/scripts/db-audit-owner.sh");
+  } else {
+    logger.info(audit, "audit boundary");
+  }
 
   // Previews are always seeded (rules/db.md); the seed is idempotent, so every
   // boot converges on the same ponds and matching_config.
@@ -159,10 +170,21 @@ async function main(): Promise<void> {
   });
   // Nightly housekeeping inside the process (rules/api.md): ended sessions and
   // stale login attempts (#35). The round builder and the research export join here.
-  scheduleNightly(
-    [{ name: "sweep-sessions", run: () => sweepSessions({ db: pool, now: () => new Date() }) }],
-    logger,
-  );
+  const now = () => new Date();
+  const jobs: NightlyJob[] = [
+    { name: "sweep-sessions", run: () => sweepSessions({ db: pool, now }) },
+    { name: "sweep-admin-sessions", run: () => sweepAdminSessions({ db: pool, now }) },
+  ];
+  // Photos the automatic check missed get one more look (#49); none without a moderator.
+  const mediaDeps = media.deps;
+  const moderator = mediaDeps?.moderator;
+  if (mediaDeps && moderator) {
+    jobs.push({
+      name: "moderate-pending-photos",
+      run: () => sweepPendingPhotos({ db: pool, logger, now, moderator, store: mediaDeps.store }),
+    });
+  }
+  scheduleNightly(jobs, logger);
 
   const server = serve({ fetch: app.fetch, port: config.PORT, hostname: "0.0.0.0" }, (address) => {
     logger.info(

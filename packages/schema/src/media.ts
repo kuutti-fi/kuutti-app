@@ -62,6 +62,15 @@ export const PhotoUploadRequest = z
   .meta({ id: "PhotoUploadRequest" });
 export type PhotoUploadRequest = z.infer<typeof PhotoUploadRequest>;
 
+/**
+ * Why a moderator said no (#49): a closed list the owner is told in words,
+ * never the label names behind it.
+ */
+export const PhotoRejectionReason = z
+  .enum(["nudity", "no_person", "several_people", "minor", "violence", "contact_details", "other"])
+  .meta({ id: "PhotoRejectionReason" });
+export type PhotoRejectionReason = z.infer<typeof PhotoRejectionReason>;
+
 /** What the owner knows about one of their photos. Never the key, never a URL. */
 export const Photo = z
   .object({
@@ -72,6 +81,9 @@ export const Photo = z
     width: z.int().positive().meta({ description: "Of the full variant." }),
     height: z.int().positive().meta({ description: "Of the full variant." }),
     state: PhotoState,
+    rejectionReason: PhotoRejectionReason.nullable().meta({
+      description: "Set when state is rejected: the reason the owner is told.",
+    }),
     position: z
       .int()
       .min(0)

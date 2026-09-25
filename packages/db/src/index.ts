@@ -15,6 +15,7 @@ export {
   type PoolClient,
   type PoolOptions,
   type Queryable,
+  transaction,
 } from "./pool.ts";
 export * from "./schema/index.ts";
 export {

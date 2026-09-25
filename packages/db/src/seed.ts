@@ -34,6 +34,10 @@ export const MATCHING_CONFIG_V1 = {
   shown_cooldown_days: 30, // TD-12
   silent_match_archive_days: 7, // TD-13
   max_photos: 6, // #48: photos per account; the grid and the upload route read it
+  // #49: a moderation label at or above this confidence sends the photo to a person,
+  // and a photo needs one face found at or above this confidence to be approved without one.
+  photo_moderation_label_threshold: 60,
+  photo_moderation_face_threshold: 90,
 } as const;
 
 /**

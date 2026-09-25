@@ -15,7 +15,8 @@
     "generate": "drizzle-kit generate",
     "check": "drizzle-kit check",
     "migrate": "node --env-file-if-exists=../../.env --import tsx src/cli/migrate.ts",
-    "seed": "node --env-file-if-exists=../../.env --import tsx src/cli/seed.ts"
+    "seed": "node --env-file-if-exists=../../.env --import tsx src/cli/seed.ts",
+    "moderator": "node --env-file-if-exists=../../.env --import tsx src/cli/moderator.ts"
   },
   "dependencies": {
     "drizzle-orm": "^0.45.2",

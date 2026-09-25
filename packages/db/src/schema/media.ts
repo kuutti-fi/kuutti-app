@@ -1,6 +1,7 @@
 import {
   index,
   integer,
+  jsonb,
   pgEnum,
   pgTable,
   smallint,
@@ -8,7 +9,7 @@ import {
   timestamp,
   uuid,
 } from "drizzle-orm/pg-core";
-import { account } from "./identity.ts";
+import { account, identity } from "./identity.ts";
 
 /**
  * A photo row is the account's; the object behind it is shared (#48, TD-2,
@@ -21,6 +22,16 @@ import { account } from "./identity.ts";
  */
 export const photoState = pgEnum("photo_state", ["pending", "approved", "queued", "rejected"]);
 export const photoVariant = pgEnum("photo_variant", ["thumb", "card", "full"]);
+/** The closed list a moderator chooses from; the owner is told it in words (#49). */
+export const photoRejectionReason = pgEnum("photo_rejection_reason", [
+  "nudity",
+  "no_person",
+  "several_people",
+  "minor",
+  "violence",
+  "contact_details",
+  "other",
+]);
 
 export const photo = pgTable(
   "photo",
@@ -37,6 +48,8 @@ export const photo = pgTable(
     height: integer("height").notNull(),
     // pending until moderation (#49) says otherwise; the owner sees it, nobody else.
     state: photoState("state").notNull().default("pending"),
+    // Set with state rejected by a moderator's decision; the app shows its text.
+    rejectionReason: photoRejectionReason("rejection_reason"),
     // 0 is the main photo. The owner orders; the API renumbers 0..n-1.
     position: smallint("position").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -74,3 +87,39 @@ export type NewPhoto = typeof photo.$inferInsert;
 export type PhotoState = Photo["state"];
 export type PhotoAccess = typeof photoAccess.$inferSelect;
 export type NewPhotoAccess = typeof photoAccess.$inferInsert;
+
+/**
+ * What moderation saw and decided for one photo (#49, TD-8, ADR-006). The
+ * automatic check writes the labels Rekognition returned (bounded, with
+ * confidences) and its outcome; a moderator's decision is written over it
+ * with who decided and why. Labels are kept for the profile tips (#56) and
+ * nothing else; the image itself never comes back from Rekognition. The row
+ * goes with the photo.
+ */
+export const photoDecision = pgEnum("photo_decision", ["approved", "queued", "rejected"]);
+
+export const photoReview = pgTable(
+  "photo_review",
+  {
+    photoId: uuid("photo_id")
+      .primaryKey()
+      .references(() => photo.id, { onDelete: "cascade" }),
+    // [{ name, parentName, confidence }], at most 50, from DetectModerationLabels.
+    labels: jsonb("labels").notNull(),
+    // Faces DetectFaces found above the configured confidence.
+    faces: integer("faces").notNull(),
+    // What the automatic check did not like, by label name or "no_face"; empty when approved.
+    flagged: text("flagged").array().notNull(),
+    modelVersion: text("model_version"),
+    checkedAt: timestamp("checked_at", { withTimezone: true }),
+    decision: photoDecision("decision").notNull(),
+    // A moderator's decision: who (identity, never account) and when. Null while automatic.
+    decidedBy: uuid("decided_by").references(() => identity.id),
+    decidedAt: timestamp("decided_at", { withTimezone: true }),
+    reason: photoRejectionReason("reason"),
+  },
+  (table) => [index("photo_review_decision_idx").on(table.decision, table.checkedAt)],
+);
+
+export type PhotoReview = typeof photoReview.$inferSelect;
+export type NewPhotoReview = typeof photoReview.$inferInsert;

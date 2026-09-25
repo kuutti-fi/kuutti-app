@@ -66,6 +66,24 @@ describe("parseConfig", () => {
     expect([...named.corsAllowedOrigins]).toEqual(["https://admin.kuutti.fi", "https://kuutti.fi"]);
   });
 
+  it("allows only https browser origins in production", () => {
+    expect(() =>
+      parseConfig({
+        DATABASE_URL: "postgres://x",
+        APP_ENV: "production",
+        ADMIN_APP_URL: "https://admin.kuutti.app",
+        CORS_ALLOWED_ORIGINS: "https://admin.kuutti.app, http://localhost:5173",
+      }),
+    ).toThrow(/https origins only/);
+    expect(
+      parseConfig({
+        DATABASE_URL: "postgres://x",
+        APP_ENV: "staging",
+        CORS_ALLOWED_ORIGINS: "http://localhost:5173",
+      }).corsAllowedOrigins.has("http://localhost:5173"),
+    ).toBe(true);
+  });
+
   it("takes the placeholder HMAC key in development only", () => {
     const zeros = "0".repeat(64);
     expect(parseConfig({ DATABASE_URL: "postgres://x", HETU_HMAC_KEY: zeros }).HETU_HMAC_KEY).toBe(
@@ -79,6 +97,25 @@ describe("parseConfig", () => {
     expect(() =>
       parseConfig({ DATABASE_URL: "postgres://x", HETU_HMAC_KEY: "ab".repeat(31) }),
     ).toThrow(/32 bytes/);
+  });
+});
+
+describe("parseConfig for the staff login (#49)", () => {
+  it("defaults the panel's address to Vite locally and refuses that default in production", () => {
+    expect(parseConfig({ DATABASE_URL: "postgres://x" }).ADMIN_APP_URL).toBe(
+      "http://localhost:5173",
+    );
+    expect(() =>
+      parseConfig({ APP_ENV: "production", NODE_ENV: "production", DATABASE_URL: "postgres://x" }),
+    ).toThrow(/ADMIN_APP_URL: production needs/);
+    expect(
+      parseConfig({
+        APP_ENV: "production",
+        NODE_ENV: "production",
+        DATABASE_URL: "postgres://x",
+        ADMIN_APP_URL: "https://admin.kuutti.app",
+      }).ADMIN_APP_URL,
+    ).toBe("https://admin.kuutti.app");
   });
 });
 

@@ -18,7 +18,8 @@ describe("route table", () => {
     const guardedAt = new Map<string, number>();
     const routes: { key: string; path: string; index: number }[] = [];
     app.routes.forEach(({ method, path, handler }, index) => {
-      if (handler.name === "requireSession") {
+      // The product guard or the staff guard (#49): either makes the route non-public.
+      if (handler.name === "requireSession" || handler.name === "requireAdmin") {
         if (!guardedAt.has(path)) guardedAt.set(path, index);
         return;
       }

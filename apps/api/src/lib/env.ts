@@ -1,4 +1,5 @@
 import type { Locale, TFunction } from "@kuutti/i18n";
+import type { ModeratorRole } from "@kuutti/schema";
 import type { RequestIdVariables } from "hono/request-id";
 
 /**
@@ -12,6 +13,11 @@ export type AppEnv = {
     t: TFunction;
     accountId?: string;
     sessionId?: string;
+    /** After the admin guard (#49): the member of staff, by identity, and their current role. */
+    adminIdentityId?: string;
+    adminRole?: ModeratorRole;
+    adminSessionId?: string;
+    adminExpiresAt?: string;
   };
 };
 

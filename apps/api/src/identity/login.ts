@@ -2,6 +2,7 @@ import { randomBytes } from "node:crypto";
 import type { Queryable } from "@kuutti/db";
 import type { AuthCallbackQuery, AuthExchangeResponse, AuthPlatform } from "@kuutti/schema";
 import { AppError } from "../lib/errors.ts";
+import { ADMIN_PLATFORM, completeAdminLogin } from "./admin-session.ts";
 import { BrokerError, type BrokerIdentity, type IdentityBroker } from "./broker.ts";
 import {
   AUTH_REQUEST_TTL_MS,
@@ -19,6 +20,8 @@ export type LoginDeps = {
   broker: IdentityBroker;
   hmacKey: Buffer;
   now: () => Date;
+  /** Where an admin login's browser is sent back to (#49). */
+  adminAppUrl: string;
 };
 
 /** /auth/start: remember state and nonce, send the browser to the bank chooser. */
@@ -54,6 +57,28 @@ export async function completeLogin(
   if (!request || request.codeHash !== null || request.expiresAt.getTime() <= now.getTime()) {
     throw new AppError(400, "auth_state_mismatch", "This login attempt is unknown or has expired");
   }
+  // From here the attempt is known, and so is where its browser belongs: a
+  // refusal of a staff attempt (#49) carries the platform, so the route sends
+  // the browser to the panel, not to the app.
+  try {
+    return await finishLogin(deps, input, request, now);
+  } catch (error) {
+    if (request.platform === ADMIN_PLATFORM && error instanceof AppError) {
+      throw new AppError(error.status, error.code, error.message, {
+        ...(typeof error.detail === "object" && error.detail !== null ? error.detail : {}),
+        platform: ADMIN_PLATFORM,
+      });
+    }
+    throw error;
+  }
+}
+
+async function finishLogin(
+  deps: LoginDeps,
+  input: { callbackUrl: URL; query: AuthCallbackQuery },
+  request: NonNullable<Awaited<ReturnType<typeof repo.findAuthRequestByState>>>,
+  now: Date,
+): Promise<URL> {
   if (input.query.error) {
     // The person backed out at the bank (guide 2.5.2: access_denied, no code):
     // not a failure of anything. Any other code reaches the log (OAuth codes
@@ -70,6 +95,16 @@ export async function completeLogin(
   const derived = await deriveFromBroker(deps, input.callbackUrl, request, now);
   if (!derived.adult) {
     throw new AppError(403, "auth_under_18", "Kuutti is for adults only");
+  }
+
+  // A staff login (#49) resolves to an identity with a role and creates nothing.
+  if (request.platform === ADMIN_PLATFORM) {
+    return completeAdminLogin(deps, {
+      request,
+      hetuHmac: derived.hetuHmac,
+      reference: derived.reference,
+      now,
+    });
   }
 
   const { accountId, outcome } = await resolveAccount(deps, derived, now);

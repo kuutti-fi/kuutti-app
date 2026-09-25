@@ -24,7 +24,11 @@ describe("OpenAPI document", () => {
   it("is absent in production", async () => {
     const { logger } = await captureLogger();
     const app = createApp({
-      config: testConfig({ APP_ENV: "production", NODE_ENV: "production" }),
+      config: testConfig({
+        APP_ENV: "production",
+        NODE_ENV: "production",
+        ADMIN_APP_URL: "https://admin.kuutti.app",
+      }),
       logger,
       db: { query: async () => ({ rows: [], rowCount: 0, command: "", oid: 0, fields: [] }) },
     });

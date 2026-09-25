@@ -51,6 +51,8 @@ describe("seed", () => {
           shown_cooldown_days: 30,
           silent_match_archive_days: 7,
           max_photos: 6,
+          photo_moderation_label_threshold: 60,
+          photo_moderation_face_threshold: 90,
         });
         expect(byKey).toEqual(MATCHING_CONFIG_V1);
       } finally {

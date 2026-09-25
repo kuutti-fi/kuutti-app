@@ -83,6 +83,8 @@ export const ERROR_MESSAGE_KEYS = {
   photo_order_invalid: "errors.photo_order_invalid",
   media_busy: "errors.media_busy",
   media_unavailable: "errors.media_unavailable",
+  admin_not_allowed: "errors.admin_not_allowed",
+  admin_forbidden: "errors.admin_forbidden",
 } as const satisfies Record<string, MessageKey>;
 
 export type LocalisedErrorCode = keyof typeof ERROR_MESSAGE_KEYS;

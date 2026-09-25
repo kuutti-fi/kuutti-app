@@ -5,11 +5,13 @@ import { requestId } from "hono/request-id";
 import { secureHeaders } from "hono/secure-headers";
 import { healthRoutes } from "./health/index.ts";
 import {
+  adminSessionStore,
   authRoutes,
   type IdentityBroker,
   sessionStore,
   wellKnownRoutes,
 } from "./identity/index.ts";
+import { requireAdmin } from "./lib/admin-middleware.ts";
 import { requireSession } from "./lib/auth-middleware.ts";
 import type { Config } from "./lib/config.ts";
 import { corsAllowlist } from "./lib/cors.ts";
@@ -25,7 +27,7 @@ import { requestLocale } from "./lib/i18n.ts";
 import { type Logger, requestLogger } from "./lib/logger.ts";
 import { openApiDocument } from "./lib/openapi.ts";
 import { rateLimit } from "./lib/rate-limit.ts";
-import { type MediaDeps, photoRoutes, UPLOAD_ROUTE } from "./media/index.ts";
+import { type MediaDeps, photoAdminRoutes, photoRoutes, UPLOAD_ROUTE } from "./media/index.ts";
 
 export type { AppEnv };
 
@@ -54,6 +56,8 @@ export const PUBLIC_ROUTES = new Set([
   "POST /auth/refresh",
   "GET /.well-known/assetlinks.json",
   "GET /.well-known/apple-app-site-association",
+  "GET /admin/auth/start",
+  "POST /admin/auth/exchange",
 ]);
 
 export function createApp(deps: Deps) {
@@ -96,14 +100,26 @@ export function createApp(deps: Deps) {
   app.onError(onError<AppEnv>(deps.logger, deps.report));
   app.notFound(notFound<AppEnv>());
 
-  // One guard for every route that reads user data (rule 6); app.test.ts
-  // checks that no route outside PUBLIC_ROUTES is registered without it.
+  // One guard for every route that reads user data (rule 6), and one for
+  // staff (#49, checklist line 10) with the roles a route admits; app.test.ts
+  // checks that no route outside PUBLIC_ROUTES is registered without one.
   const guard = requireSession({ db: deps.db, store: sessionStore });
+  const anyStaff = requireAdmin({
+    db: deps.db,
+    store: adminSessionStore,
+    roles: ["moderator", "admin", "researcher"],
+  });
+  const moderators = requireAdmin({
+    db: deps.db,
+    store: adminSessionStore,
+    roles: ["moderator", "admin"],
+  });
 
   app.route("/", healthRoutes(deps));
-  app.route("/", authRoutes(deps, guard));
+  app.route("/", authRoutes(deps, guard, anyStaff));
   app.route("/", wellKnownRoutes(deps));
   app.route("/", photoRoutes(deps, guard));
+  app.route("/", photoAdminRoutes(deps, moderators));
 
   // The bearer scheme the session routes declare (#35); the tokens themselves
   // are opaque, so the scheme is all the contract says about them.

@@ -10,6 +10,7 @@ import type { LimitFunction } from "p-limit";
 import { AppError } from "../lib/errors.ts";
 import type { Logger } from "../lib/logger.ts";
 import { matchingConfigNumber } from "../lib/matching-config.ts";
+import { type Moderator, moderatePhoto } from "./moderation.ts";
 import { PipelineError, processPhoto } from "./pipeline.ts";
 import * as repo from "./repo.ts";
 import { type MediaStore, objectKey, WEBP } from "./store.ts";
@@ -21,6 +22,8 @@ export type MediaDeps = {
   signer: UrlSigner;
   /** p-limit at the vCPU count (rules/api.md Media); above it the upload answers 503. */
   limit: LimitFunction;
+  /** The automatic check (#49); absent in a bare test app, and the photo stays pending. */
+  moderator?: Moderator;
 };
 
 export type PhotoServiceDeps = MediaDeps & { db: Queryable; logger: Logger; now: () => Date };
@@ -29,6 +32,8 @@ export const RETRY_AFTER_SECONDS = 5;
 export const MAX_PHOTOS_KEY = "max_photos";
 
 const toPhoto = ({ key: _key, ...photo }: repo.PhotoRow): Photo => photo;
+
+export { toPhoto };
 
 export async function listPhotos(deps: PhotoServiceDeps, accountId: string): Promise<PhotoList> {
   const [rows, maxPhotos] = await Promise.all([
@@ -123,6 +128,16 @@ export async function uploadPhoto(
     { accountId: input.accountId, photoId: row.id, width: row.width, height: row.height },
     "photo stored",
   );
+  // Moderation before anyone else sees it (#49): the card variant is what
+  // Rekognition looks at, and the row moves from pending here or stays
+  // pending for the nightly retry when the check fails.
+  if (deps.moderator) {
+    const decided = await moderatePhoto(
+      { db: deps.db, logger: deps.logger, moderator: deps.moderator, now: deps.now },
+      { photoId: row.id, accountId: input.accountId, card: processed.variants.card },
+    );
+    if (decided) return toPhoto({ ...row, state: decided.decision });
+  }
   return toPhoto(row);
 }
 

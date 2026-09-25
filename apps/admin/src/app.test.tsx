@@ -1,7 +1,8 @@
 import { I18nProvider } from "@kuutti/i18n/react";
 import { cleanup, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "./app.tsx";
+import { StaffSessionProvider } from "./features/identity/index.ts";
 import { i18n } from "./i18n.ts";
 import { apiUrl } from "./source-offer.tsx";
 
@@ -19,7 +20,9 @@ function renderApp(answer: () => Promise<Response>) {
   vi.stubGlobal("fetch", vi.fn(answer));
   render(
     <I18nProvider i18n={i18n}>
-      <App />
+      <StaffSessionProvider>
+        <App />
+      </StaffSessionProvider>
     </I18nProvider>,
   );
 }
@@ -28,15 +31,22 @@ const json = (body: unknown) =>
   new Response(JSON.stringify(body), { headers: { "content-type": "application/json" } });
 
 describe("App", () => {
+  beforeEach(() => {
+    window.sessionStorage.clear();
+    window.history.replaceState(null, "", "/");
+  });
   // Without vitest globals, Testing Library does not unmount between tests by itself.
   afterEach(() => {
     cleanup();
     vi.unstubAllGlobals();
   });
 
-  it("renders the placeholder heading from messages.yaml", () => {
+  it("renders the heading from messages.yaml and, signed out, the bank login", async () => {
     renderApp(async () => json(health));
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Kuutti admin");
+    expect(
+      await screen.findByRole("button", { name: "Sign in with your bank" }),
+    ).toBeInTheDocument();
   });
 
   it("offers the source the running API names, with its commit (AGPL-3.0 section 13)", async () => {

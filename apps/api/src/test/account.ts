@@ -1,5 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
 import type { Queryable } from "@kuutti/db";
+import type { ModeratorRole } from "@kuutti/schema";
 import { hashToken } from "../lib/auth-middleware.ts";
 
 /**
@@ -65,4 +66,51 @@ export async function withMatchingConfig(
       [key, JSON.stringify(value)],
     );
   }
+}
+
+export type Staff = {
+  identityId: string;
+  sessionId: string;
+  accessToken: string;
+  role: ModeratorRole;
+  headers: { authorization: string };
+};
+
+/**
+ * A member of staff (#49): an identity with a moderator_roles row and one
+ * admin session, written straight into the test transaction. Plain SQL for
+ * the same reason as signedInAccount.
+ */
+export async function staffSession(
+  db: Queryable,
+  role: ModeratorRole = "moderator",
+  label?: string,
+): Promise<Staff> {
+  const who = label ?? `staff-${randomBytes(6).toString("hex")}`;
+  const hetuHmac = createHash("sha256").update(`kuutti test staff: ${who}`).digest("hex");
+  const identity = await db.query<{ id: string }>(
+    "INSERT INTO identity (hetu_hmac) VALUES ($1) RETURNING id",
+    [hetuHmac],
+  );
+  const identityId = identity.rows[0]?.id;
+  if (!identityId) throw new Error("test staff identity not written");
+  await db.query(
+    "INSERT INTO moderator_roles (identity_id, role, granted_by) VALUES ($1, $2, 'test')",
+    [identityId, role],
+  );
+  const accessToken = randomBytes(32).toString("base64url");
+  const session = await db.query<{ id: string }>(
+    `INSERT INTO admin_session (identity_id, role, access_hash, expires_at)
+     VALUES ($1, $2, $3, $4) RETURNING id`,
+    [identityId, role, hashToken(accessToken), new Date(Date.now() + 8 * 60 * 60 * 1000)],
+  );
+  const sessionId = session.rows[0]?.id;
+  if (!sessionId) throw new Error("test admin session not written");
+  return {
+    identityId,
+    sessionId,
+    accessToken,
+    role,
+    headers: { authorization: `Bearer ${accessToken}` },
+  };
 }

@@ -5,6 +5,7 @@ import { readJournal } from "./journal.ts";
 import { migrate } from "./migrate.ts";
 import { migrationsStatus } from "./migrations.ts";
 import { createPool } from "./pool.ts";
+import { MATCHING_CONFIG_V1 } from "./seed.ts";
 import { withTemporaryDatabase } from "./test/temporary-database.ts";
 
 const MIGRATIONS = resolve(import.meta.dirname, "..", "drizzle");
@@ -52,6 +53,21 @@ describe("migrate", () => {
     });
   });
 
+  it("carries matching_config version 1, the same rows as the seed", async () => {
+    await withTemporaryDatabase(async (url) => {
+      const pool = createPool({ connectionString: url, max: 2 });
+      try {
+        await migrate(pool, MIGRATIONS);
+        const { rows } = await pool.query<{ key: string; value: unknown }>(
+          "SELECT key, value FROM matching_config WHERE version = 1 ORDER BY key",
+        );
+        expect(Object.fromEntries(rows.map((r) => [r.key, r.value]))).toEqual(MATCHING_CONFIG_V1);
+      } finally {
+        await pool.end();
+      }
+    });
+  });
+
   it("is a no-op the second time", async () => {
     await withTemporaryDatabase(async (url) => {
       const pool = createPool({ connectionString: url, max: 2 });
@@ -63,11 +79,15 @@ describe("migrate", () => {
         );
         expect(tables.rows.map((r) => r.table_name)).toEqual([
           "account",
+          "admin_session",
+          "audit_log",
           "auth_request",
           "identity",
           "matching_config",
+          "moderator_roles",
           "photo",
           "photo_access",
+          "photo_review",
           "ponds",
           "session",
         ]);

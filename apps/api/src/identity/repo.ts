@@ -1,4 +1,5 @@
 import type { Account, AuthRequest, Identity, Queryable } from "@kuutti/db";
+import type { ModeratorRole } from "@kuutti/schema";
 
 // Raw parameterised SQL rather than the Drizzle builder (rules/api.md asks for
 // a reason): `Deps.db` is the `Queryable` seam through which the test harness
@@ -51,6 +52,7 @@ const authRequestFrom = (r: Row): AuthRequest => ({
   codeUsedAt: (r.code_used_at as Date | null) ?? null,
   accountId: (r.account_id as string | null) ?? null,
   outcome: (r.outcome as string | null) ?? null,
+  identityId: (r.identity_id as string | null) ?? null,
 });
 
 export type BrokerReference = {
@@ -403,6 +405,108 @@ export async function deleteDeadSessions(
 export async function deleteExpiredAuthRequests(db: Queryable, now: Date): Promise<number> {
   const result = await db.query(
     "DELETE FROM auth_request WHERE expires_at < $1 AND (code_expires_at IS NULL OR code_expires_at < $1)",
+    [now],
+  );
+  return result.rowCount ?? 0;
+}
+
+// Staff (#49, rules/admin.md): a role on the identity row is the allowlist;
+// an admin session is its own table, eight hours, no refresh, hashed token.
+
+export async function findModeratorRole(
+  db: Queryable,
+  identityId: string,
+): Promise<ModeratorRole | null> {
+  const { rows } = await db.query<{ role: ModeratorRole }>(
+    "SELECT role FROM moderator_roles WHERE identity_id = $1",
+    [identityId],
+  );
+  return rows[0]?.role ?? null;
+}
+
+/** An admin login's one-time code resolves to an identity, never to an account. */
+export async function attachAdminCode(
+  db: Queryable,
+  input: { id: string; codeHash: string; codeExpiresAt: Date; identityId: string },
+): Promise<void> {
+  await db.query(
+    `UPDATE auth_request SET code_hash = $2, code_expires_at = $3, identity_id = $4, outcome = 'admin'
+     WHERE id = $1`,
+    [input.id, input.codeHash, input.codeExpiresAt, input.identityId],
+  );
+}
+
+export type AdminSessionRow = {
+  id: string;
+  identityId: string;
+  role: ModeratorRole;
+  expiresAt: Date;
+  revokedAt: Date | null;
+};
+
+const adminSessionFrom = (r: Row): AdminSessionRow => ({
+  id: r.id as string,
+  identityId: r.identity_id as string,
+  role: r.role as ModeratorRole,
+  expiresAt: r.expires_at as Date,
+  revokedAt: (r.revoked_at as Date | null) ?? null,
+});
+
+export async function insertAdminSession(
+  db: Queryable,
+  input: { identityId: string; role: ModeratorRole; accessHash: string; expiresAt: Date; at: Date },
+): Promise<AdminSessionRow> {
+  const { rows } = await db.query<Row>(
+    `INSERT INTO admin_session (identity_id, role, access_hash, expires_at, created_at, last_used_at)
+     VALUES ($1, $2, $3, $4, $5, $5) RETURNING id, identity_id, role, expires_at, revoked_at`,
+    [input.identityId, input.role, input.accessHash, input.expiresAt, input.at],
+  );
+  const row = rows[0];
+  if (!row) throw new Error("admin_session insert returned no row");
+  return adminSessionFrom(row);
+}
+
+/** The admin guard's lookup: the session with the identity's standing and its current role. */
+export async function findAdminSessionByAccessHash(
+  db: Queryable,
+  accessHash: string,
+): Promise<
+  (AdminSessionRow & { identityStanding: string; currentRole: ModeratorRole | null }) | null
+> {
+  const { rows } = await db.query<Row>(
+    `SELECT s.id, s.identity_id, s.role, s.expires_at, s.revoked_at, i.standing, m.role AS current_role
+     FROM admin_session s JOIN identity i ON i.id = s.identity_id
+     LEFT JOIN moderator_roles m ON m.identity_id = s.identity_id
+     WHERE s.access_hash = $1`,
+    [accessHash],
+  );
+  const r = rows[0];
+  if (!r) return null;
+  return {
+    ...adminSessionFrom(r),
+    identityStanding: r.standing as string,
+    currentRole: (r.current_role as ModeratorRole | null) ?? null,
+  };
+}
+
+export async function touchAdminSession(db: Queryable, id: string, at: Date): Promise<void> {
+  await db.query("UPDATE admin_session SET last_used_at = $2 WHERE id = $1 AND last_used_at < $2", [
+    id,
+    at,
+  ]);
+}
+
+export async function revokeAdminSession(db: Queryable, id: string, at: Date): Promise<void> {
+  await db.query("UPDATE admin_session SET revoked_at = $2 WHERE id = $1 AND revoked_at IS NULL", [
+    id,
+    at,
+  ]);
+}
+
+/** Expired or ended admin sessions: gone with the nightly sweep. */
+export async function deleteDeadAdminSessions(db: Queryable, now: Date): Promise<number> {
+  const result = await db.query(
+    "DELETE FROM admin_session WHERE expires_at < $1 OR revoked_at IS NOT NULL",
     [now],
   );
   return result.rowCount ?? 0;

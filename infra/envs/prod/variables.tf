@@ -42,6 +42,18 @@ variable "alert_email" {
   default     = null
 }
 
+variable "admin_app_url" {
+  description = "Where the staff login returns to and the moderation panel lives (#49, ADR-006): /kuutti/prod/admin-app-url. The panel's own host, static behind CloudFront (CLAUDE.md); must be https in production."
+  type        = string
+  default     = "https://admin.kuutti.app"
+}
+
+variable "cors_allowed_origins" {
+  description = "Browser origins the API answers (rule 8: the admin panel and the waitlist site only), comma separated: /kuutti/prod/cors-allowed-origins. The panel's origin must be here or its preflight fails."
+  type        = string
+  default     = "https://admin.kuutti.app"
+}
+
 variable "media_enabled" {
   description = "Photos (#48, ADR-005): the media bucket, the CloudFront distribution in front of the API and the bucket, and the signed-URL key group. Flipped to true in the cutover commit, after the maintainer has created /kuutti/<env>/cloudfront-signing-key in SSM, committed its public half as cloudfront-signing-key.pub.pem next to this file, and given the api application the origin.api.<env> domain in Dokploy (infra/README.md, Media)."
   type        = bool

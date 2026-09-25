@@ -1,7 +1,7 @@
 # The one API box per environment (TD-4, project context §2): t4g.small, Ubuntu
 # 24.04 arm64, an Elastic IP, and an instance role that reaches exactly its own
 # SSM prefix, its own log group and its backup prefix (TD-19, TD-4 access rule).
-# The bucket, Rekognition and SES arrive with M3 and M5, never earlier.
+# The bucket (modules/media, #48) and Rekognition (#49) arrive with M3, SES with M5.
 
 data "aws_caller_identity" "current" {}
 data "aws_region" "current" {}
@@ -99,6 +99,16 @@ data "aws_iam_policy_document" "api" {
       variable = "kms:ViaService"
       values   = ["ssm.${local.region}.amazonaws.com", "s3.${local.region}.amazonaws.com"]
     }
+  }
+
+  # Photo moderation (#49, ADR-006): the two detect calls and nothing else of
+  # Rekognition. Detect actions take no resource, hence "*"; the images are
+  # bytes in the request and nothing is stored on the Rekognition side.
+  statement {
+    sid       = "RekognitionDetect"
+    effect    = "Allow"
+    actions   = ["rekognition:DetectModerationLabels", "rekognition:DetectFaces"]
+    resources = ["*"]
   }
 
   statement {

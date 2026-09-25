@@ -44,6 +44,7 @@ const photo = (n: number) => ({
   width: 1600,
   height: 1200,
   state: n === 1 ? "approved" : "pending",
+  rejectionReason: null,
   position: n - 1,
   createdAt: "2026-09-25T12:00:00.000Z",
 });
@@ -112,6 +113,19 @@ describe("PhotosScreen", () => {
     expect(found).toHaveLength(8);
     expect(screen.getByRole("button", { name: "Move later" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Make main photo" })).toBeTruthy();
+  });
+
+  it("a rejected photo says why in words, never a label name", async () => {
+    fetchMock([
+      answersList({
+        photos: [{ ...photo(1), state: "rejected", rejectionReason: "no_person" }],
+        maxPhotos: 3,
+      }),
+      answersUrls,
+    ]);
+    await show(<PhotosScreen />);
+    expect(await screen.findByText(/A profile photo has to show you/)).toBeTruthy();
+    expect(screen.queryByText("Not accepted")).toBeNull();
   });
 
   it("opens the zoom screen for a tapped photo with what its label needs", async () => {
