@@ -1,0 +1,53 @@
+import { useRouter } from "expo-router";
+import { View } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { Button } from "@/components/ui/button";
+import { Text } from "@/components/ui/text";
+import { useT } from "@/lib/locale";
+import { useHapticTap } from "@/theme/haptics";
+import { PhotoImage } from "./PhotoImage";
+
+export type PhotoZoomParams = {
+  id: string;
+  blurhash: string;
+  /** 1-based, for the label. */
+  position: number;
+  total: number;
+};
+
+/**
+ * The one screen that asks for the full variant (rules/mobile.md Images):
+ * everywhere else a photo is a thumb or a card. Opened from the grid with what
+ * the label needs; nothing is fetched here but the URL.
+ */
+export function PhotoZoomScreen({ id, blurhash, position, total }: PhotoZoomParams) {
+  const { t } = useT();
+  const router = useRouter();
+  const tap = useHapticTap();
+  return (
+    <SafeAreaView className="flex-1 bg-background">
+      <View className="flex-row items-center justify-between px-4 py-2">
+        <Button
+          variant="ghost"
+          accessibilityLabel={t("photos.zoom.back")}
+          onPress={() => {
+            tap();
+            router.back();
+          }}
+        >
+          <Text>{t("photos.zoom.back")}</Text>
+        </Button>
+      </View>
+      <View className="flex-1 bg-background">
+        <PhotoImage
+          id={id}
+          variant="full"
+          blurhash={blurhash}
+          contentFit="contain"
+          accessibilityLabel={t("photos.zoom.label", { position, total })}
+          style={{ flex: 1 }}
+        />
+      </View>
+    </SafeAreaView>
+  );
+}

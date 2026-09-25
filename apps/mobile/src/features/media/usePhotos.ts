@@ -1,0 +1,170 @@
+import type { Photo, PhotoList } from "@kuutti/schema";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { ApiError } from "@/lib/api";
+import { deletePhoto, listPhotos, reorderPhotos, uploadPhoto } from "./client";
+import { checkPhoto } from "./localCheck";
+import { pickPhoto, prepareForUpload } from "./pick";
+
+export type PhotosBusy =
+  | { kind: "idle" }
+  | { kind: "picking" }
+  | { kind: "preparing" }
+  | { kind: "uploading"; percent: number }
+  | { kind: "removing"; id: string }
+  | { kind: "reordering" };
+
+/** What the screen tells the person after something did not go as asked; one at a time. */
+export type PhotosNotice =
+  | { kind: "refused_local" }
+  | { kind: "permission" }
+  | { kind: "error"; code: string | undefined };
+
+export type PhotosState = {
+  status: "loading" | "ready" | "error";
+  list: PhotoList | null;
+  busy: PhotosBusy;
+  notice: PhotosNotice | null;
+};
+
+/**
+ * The person's photos and everything they can do to them (#48). Adding a photo
+ * is a chain on the phone before anything is sent: pick, the on-device check,
+ * the pre-resize; a refusal by the check stops it with no request made. Order
+ * changes are optimistic and reloaded from the API when refused.
+ */
+export function usePhotos() {
+  const [state, setState] = useState<PhotosState>({
+    status: "loading",
+    list: null,
+    busy: { kind: "idle" },
+    notice: null,
+  });
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+  const update = useCallback((patch: Partial<PhotosState>) => {
+    if (mounted.current) setState((previous) => ({ ...previous, ...patch }));
+  }, []);
+
+  const reload = useCallback(async () => {
+    try {
+      const list = await listPhotos();
+      update({ status: "ready", list });
+    } catch (error) {
+      update({ status: "error", notice: { kind: "error", code: codeOf(error) } });
+    }
+  }, [update]);
+
+  useEffect(() => {
+    void reload();
+  }, [reload]);
+
+  const add = useCallback(async () => {
+    update({ busy: { kind: "picking" }, notice: null });
+    try {
+      const picked = await pickPhoto();
+      if (picked.kind === "cancelled") return update({ busy: { kind: "idle" } });
+      if (picked.kind === "denied") {
+        return update({ busy: { kind: "idle" }, notice: { kind: "permission" } });
+      }
+      update({ busy: { kind: "preparing" } });
+      // The check sees the picked file, before the resize and before any byte leaves the phone.
+      if ((await checkPhoto(picked.asset.uri)) === "refuse") {
+        return update({ busy: { kind: "idle" }, notice: { kind: "refused_local" } });
+      }
+      const prepared = await prepareForUpload(picked.asset);
+      update({ busy: { kind: "uploading", percent: 0 } });
+      const photo = await uploadPhoto(prepared, (fraction) =>
+        update({ busy: { kind: "uploading", percent: Math.round(fraction * 100) } }),
+      );
+      setState((previous) => ({
+        ...previous,
+        busy: { kind: "idle" },
+        list: previous.list
+          ? { ...previous.list, photos: [...previous.list.photos, photo] }
+          : previous.list,
+      }));
+    } catch (error) {
+      update({ busy: { kind: "idle" }, notice: { kind: "error", code: codeOf(error) } });
+    }
+  }, [update]);
+
+  const remove = useCallback(
+    async (id: string) => {
+      update({ busy: { kind: "removing", id }, notice: null });
+      try {
+        await deletePhoto(id);
+        setState((previous) => ({
+          ...previous,
+          busy: { kind: "idle" },
+          list: previous.list
+            ? renumber(
+                previous.list,
+                previous.list.photos.filter((p) => p.id !== id),
+              )
+            : null,
+        }));
+      } catch (error) {
+        update({ busy: { kind: "idle" }, notice: { kind: "error", code: codeOf(error) } });
+      }
+    },
+    [update],
+  );
+
+  const reorder = useCallback(
+    async (photos: Photo[]) => {
+      const before = state.list;
+      if (!before) return;
+      update({ busy: { kind: "reordering" }, notice: null, list: renumber(before, photos) });
+      try {
+        const list = await reorderPhotos(photos.map((p) => p.id));
+        update({ busy: { kind: "idle" }, list });
+      } catch (error) {
+        update({ busy: { kind: "idle" }, notice: { kind: "error", code: codeOf(error) } });
+        await reload();
+      }
+    },
+    [state.list, update, reload],
+  );
+
+  /** One step towards the front (-1) or the back (+1). */
+  const move = useCallback(
+    (id: string, delta: -1 | 1) => {
+      const photos = state.list?.photos ?? [];
+      const from = photos.findIndex((p) => p.id === id);
+      const to = from + delta;
+      if (from < 0 || to < 0 || to >= photos.length) return Promise.resolve();
+      const next = [...photos];
+      const [moving] = next.splice(from, 1);
+      if (moving) next.splice(to, 0, moving);
+      return reorder(next);
+    },
+    [state.list, reorder],
+  );
+
+  const makeMain = useCallback(
+    (id: string) => {
+      const photos = state.list?.photos ?? [];
+      const chosen = photos.find((p) => p.id === id);
+      if (!chosen || photos[0]?.id === id) return Promise.resolve();
+      return reorder([chosen, ...photos.filter((p) => p.id !== id)]);
+    },
+    [state.list, reorder],
+  );
+
+  const dismissNotice = useCallback(() => update({ notice: null }), [update]);
+
+  return { ...state, reload, add, remove, move, makeMain, dismissNotice };
+}
+
+function renumber(list: PhotoList, photos: Photo[]): PhotoList {
+  return { ...list, photos: photos.map((photo, position) => ({ ...photo, position })) };
+}
+
+function codeOf(error: unknown): string | undefined {
+  return error instanceof ApiError ? error.code : undefined;
+}

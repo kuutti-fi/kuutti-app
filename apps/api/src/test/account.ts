@@ -1,0 +1,68 @@
+import { createHash, randomBytes } from "node:crypto";
+import type { Queryable } from "@kuutti/db";
+import { hashToken } from "../lib/auth-middleware.ts";
+
+/**
+ * A verified account with one live device session, written straight into the
+ * test transaction: what a route test needs to call a guarded route as
+ * somebody. Plain SQL rather than the identity slice's functions, because a
+ * test of another slice may not import identity's internals (rules/layout.md)
+ * and a bank login through the routes is the identity tests' business.
+ */
+export type SignedIn = {
+  accountId: string;
+  sessionId: string;
+  accessToken: string;
+  /** Ready for `app.request(path, { headers })`. */
+  headers: { authorization: string };
+};
+
+export async function signedInAccount(db: Queryable, label?: string): Promise<SignedIn> {
+  const who = label ?? randomBytes(6).toString("hex");
+  // A hash of the label, never of any code: no bank login maps to it.
+  const hetuHmac = createHash("sha256").update(`kuutti test account: ${who}`).digest("hex");
+  const identity = await db.query<{ id: string }>(
+    "INSERT INTO identity (hetu_hmac) VALUES ($1) RETURNING id",
+    [hetuHmac],
+  );
+  const identityId = identity.rows[0]?.id;
+  if (!identityId) throw new Error("test identity not written");
+  const account = await db.query<{ id: string }>(
+    "INSERT INTO account (identity_id, state, birth_year, birth_month) VALUES ($1, 'active', 1990, 6) RETURNING id",
+    [identityId],
+  );
+  const accountId = account.rows[0]?.id;
+  if (!accountId) throw new Error("test account not written");
+
+  const accessToken = randomBytes(32).toString("base64url");
+  const refreshToken = randomBytes(32).toString("base64url");
+  const now = Date.now();
+  const session = await db.query<{ id: string }>(
+    `INSERT INTO session (account_id, platform, access_hash, access_expires_at, refresh_hash, expires_at)
+     VALUES ($1, 'ios', $2, $3, $4, $5) RETURNING id`,
+    [
+      accountId,
+      hashToken(accessToken),
+      new Date(now + 15 * 60 * 1000),
+      hashToken(refreshToken),
+      new Date(now + 90 * 24 * 60 * 60 * 1000),
+    ],
+  );
+  const sessionId = session.rows[0]?.id;
+  if (!sessionId) throw new Error("test session not written");
+  return { accountId, sessionId, accessToken, headers: { authorization: `Bearer ${accessToken}` } };
+}
+
+/** matching_config rows a test needs, upserted inside its transaction (rolled back with it). */
+export async function withMatchingConfig(
+  db: Queryable,
+  values: Record<string, number>,
+): Promise<void> {
+  for (const [key, value] of Object.entries(values)) {
+    await db.query(
+      `INSERT INTO matching_config (version, key, value, created_by) VALUES (1, $1, $2::jsonb, 'test')
+       ON CONFLICT (key, version) DO UPDATE SET value = EXCLUDED.value`,
+      [key, JSON.stringify(value)],
+    );
+  }
+}

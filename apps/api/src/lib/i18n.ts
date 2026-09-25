@@ -75,6 +75,14 @@ export const ERROR_MESSAGE_KEYS = {
   auth_cancelled: "errors.auth_cancelled",
   session_expired: "errors.session_expired",
   session_revoked: "errors.session_revoked",
+  unsupported_media_type: "errors.unsupported_media_type",
+  photo_unsupported: "errors.photo_unsupported",
+  photo_invalid: "errors.photo_invalid",
+  photo_too_many_pixels: "errors.photo_too_many_pixels",
+  photo_limit: "errors.photo_limit",
+  photo_order_invalid: "errors.photo_order_invalid",
+  media_busy: "errors.media_busy",
+  media_unavailable: "errors.media_unavailable",
 } as const satisfies Record<string, MessageKey>;
 
 export type LocalisedErrorCode = keyof typeof ERROR_MESSAGE_KEYS;

@@ -66,6 +66,8 @@ describe("migrate", () => {
           "auth_request",
           "identity",
           "matching_config",
+          "photo",
+          "photo_access",
           "ponds",
           "session",
         ]);

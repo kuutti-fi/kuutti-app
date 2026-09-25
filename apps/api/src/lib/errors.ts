@@ -62,7 +62,13 @@ export function onError<E extends Env>(
     if (err instanceof HTTPException) {
       const status = err.status as ContentfulStatusCode;
       const code =
-        status === 413 ? "payload_too_large" : status === 401 ? "unauthenticated" : "http_error";
+        status === 413
+          ? "payload_too_large"
+          : status === 415
+            ? "unsupported_media_type"
+            : status === 401
+              ? "unauthenticated"
+              : "http_error";
       logger.warn({ requestId, status }, err.message);
       return c.json(localisedEnvelope(c, code), status);
     }

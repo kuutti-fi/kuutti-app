@@ -90,16 +90,40 @@ resource "aws_db_subnet_group" "this" {
 
 resource "aws_security_group" "api" {
   name        = "${local.name}-api"
-  description = "The API instance: HTTPS and HTTP from anywhere (Traefik terminates TLS), SSH only from the maintainer list."
+  description = "The API instance: HTTPS from anywhere or from CloudFront only (cloudfront_only_ingress), HTTP for ACME and the redirect, SSH only from the maintainer list."
   vpc_id      = aws_vpc.this.id
 
   tags = { Name = "${local.name}-api" }
 }
 
 resource "aws_vpc_security_group_ingress_rule" "api_https" {
+  count = var.cloudfront_only_ingress ? 0 : 1
+
   security_group_id = aws_security_group.api.id
   description       = "HTTPS"
   cidr_ipv4         = "0.0.0.0/0"
+  ip_protocol       = "tcp"
+  from_port         = 443
+  to_port           = 443
+}
+
+# CloudFront-only ingress (ADR-005, audit F141): the managed prefix list of
+# CloudFront's origin-facing addresses is the only source of HTTPS, so a
+# request that did not pass the distribution, its TLS and its headers cannot
+# reach the API. Switched on per environment once everything on 443 is behind
+# the distribution (see the variable).
+data "aws_ec2_managed_prefix_list" "cloudfront" {
+  count = var.cloudfront_only_ingress ? 1 : 0
+
+  name = "com.amazonaws.global.cloudfront.origin-facing"
+}
+
+resource "aws_vpc_security_group_ingress_rule" "api_https_cloudfront" {
+  count = var.cloudfront_only_ingress ? 1 : 0
+
+  security_group_id = aws_security_group.api.id
+  description       = "HTTPS from CloudFront only"
+  prefix_list_id    = data.aws_ec2_managed_prefix_list.cloudfront[0].id
   ip_protocol       = "tcp"
   from_port         = 443
   to_port           = 443
