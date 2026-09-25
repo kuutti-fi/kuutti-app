@@ -1067,3 +1067,101 @@ admin.queue.decisionFailed:
 admin.forbidden:
   en: Your role does not allow the photo queue.
   description: Admin panel, a researcher signed in; the queue is for moderators and admins.
+
+account.title:
+  en: Your account
+  description: Home (smoke) screen, heading of the card with the data export and the deletion, until the profile gives it a home.
+  fi: Tilisi
+  sv: Ditt konto
+  machine: { fi: true, sv: true }
+
+account.export.button:
+  en: Download my data
+  description: Account card, the button that fetches everything Kuutti holds about the person and hands it to the share sheet (a file download on the web).
+  fi: Lataa tietoni
+  sv: Ladda ner mina uppgifter
+  machine: { fi: true, sv: true }
+
+account.export.explain:
+  en: A file with everything Kuutti holds about you, and nothing about anyone else.
+  description: Account card, text under the export button.
+  fi: Tiedosto, jossa on kaikki, mitä Kuutti tietää sinusta, eikä mitään kenestäkään muusta.
+  sv: En fil med allt Kuutti har om dig, och inget om någon annan.
+  machine: { fi: true, sv: true }
+
+account.export.working:
+  en: Preparing your data…
+  description: Account card, while the export is fetched.
+  fi: Valmistellaan tietojasi…
+  sv: Förbereder dina uppgifter…
+  machine: { fi: true, sv: true }
+
+account.export.title:
+  en: Your Kuutti data
+  description: The title of the share sheet the export is handed to.
+  fi: Kuutti-tietosi
+  sv: Dina Kuutti-uppgifter
+  machine: { fi: true, sv: true }
+
+account.export.failed:
+  en: The download did not work. Try again.
+  description: Account card, the export request failed.
+  fi: Lataus ei onnistunut. Yritä uudelleen.
+  sv: Nedladdningen misslyckades. Försök igen.
+  machine: { fi: true, sv: true }
+
+account.delete.button:
+  en: Delete my account
+  description: Account card, the button that opens the deletion confirmation.
+  fi: Poista tilini
+  sv: Ta bort mitt konto
+  machine: { fi: true, sv: true }
+
+account.delete.title:
+  en: Delete your account?
+  description: Deletion confirmation, heading.
+  fi: Poistetaanko tilisi?
+  sv: Ta bort ditt konto?
+  machine: { fi: true, sv: true }
+
+account.delete.body:
+  en: "Your photos, your devices and your data go now and cannot be brought back. A new account is possible after {days, plural, one {# day} other {# days}}."
+  description: Deletion confirmation, text; {days} is the cooldown before the same person may register again.
+  fi: "Kuvasi, laitteesi ja tietosi poistuvat nyt, eikä niitä voi palauttaa. Uuden tilin voi luoda {days, plural, one {# päivän} other {# päivän}} kuluttua."
+  sv: "Dina foton, dina enheter och dina uppgifter försvinner nu och kan inte tas tillbaka. Ett nytt konto är möjligt efter {days, plural, one {# dag} other {# dagar}}."
+  machine: { fi: true, sv: true }
+
+account.delete.confirm:
+  en: Delete everything
+  description: Deletion confirmation, the confirming button.
+  fi: Poista kaikki
+  sv: Ta bort allt
+  machine: { fi: true, sv: true }
+
+account.delete.cancel:
+  en: Keep my account
+  description: Deletion confirmation, the cancelling button.
+  fi: Säilytä tilini
+  sv: Behåll mitt konto
+  machine: { fi: true, sv: true }
+
+account.delete.close:
+  en: Close
+  description: Deletion confirmation, screen-reader label of the close control.
+  fi: Sulje
+  sv: Stäng
+  machine: { fi: true, sv: true }
+
+account.delete.working:
+  en: Deleting your account…
+  description: Account card, while the deletion request runs.
+  fi: Poistetaan tiliäsi…
+  sv: Tar bort ditt konto…
+  machine: { fi: true, sv: true }
+
+account.delete.failed:
+  en: The deletion did not go through. Try again.
+  description: Account card, the deletion request failed.
+  fi: Poisto ei onnistunut. Yritä uudelleen.
+  sv: Borttagningen gick inte igenom. Försök igen.
+  machine: { fi: true, sv: true }

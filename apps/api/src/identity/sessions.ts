@@ -49,6 +49,10 @@ export async function issueSession(
     expiresAt: refreshExpiresAt,
     at: now,
   });
+  // The account was erased between the callback and the exchange (#51): the
+  // code reads as spent, and the person signs in again into a fresh account
+  // once the cooldown has passed.
+  if (!row) throw new AppError(401, "auth_code_used", "This code is unknown, used or expired");
   return {
     sessionId: row.id,
     accessToken: tokens.accessToken,

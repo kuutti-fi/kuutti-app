@@ -309,6 +309,326 @@
           "expiresAt"
         ]
       },
+      "AccountDeletionRequest": {
+        "type": "object",
+        "properties": {
+          "confirm": {
+            "type": "boolean",
+            "enum": [
+              true
+            ],
+            "description": "Must be true: the person confirmed in the app."
+          }
+        },
+        "required": [
+          "confirm"
+        ],
+        "additionalProperties": false
+      },
+      "AccountExport": {
+        "type": "object",
+        "properties": {
+          "exportedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "account": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "state": {
+                "type": "string",
+                "minLength": 1
+              },
+              "registeredAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "birthYear": {
+                "type": "integer",
+                "nullable": true
+              },
+              "birthMonth": {
+                "type": "integer",
+                "nullable": true
+              }
+            },
+            "required": [
+              "id",
+              "state",
+              "registeredAt",
+              "birthYear",
+              "birthMonth"
+            ]
+          },
+          "identity": {
+            "type": "object",
+            "properties": {
+              "firstSeenAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "lastBankLoginAt": {
+                "type": "string",
+                "nullable": true,
+                "format": "date-time"
+              },
+              "loginLevel": {
+                "type": "string",
+                "nullable": true
+              },
+              "deletionCount": {
+                "type": "integer",
+                "minimum": 0
+              }
+            },
+            "required": [
+              "firstSeenAt",
+              "lastBankLoginAt",
+              "loginLevel",
+              "deletionCount"
+            ]
+          },
+          "sessions": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "sessionId": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "platform": {
+                  "$ref": "#/components/schemas/AuthPlatform"
+                },
+                "createdAt": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "lastUsedAt": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "expiresAt": {
+                  "type": "string",
+                  "format": "date-time"
+                }
+              },
+              "required": [
+                "sessionId",
+                "platform",
+                "createdAt",
+                "lastUsedAt",
+                "expiresAt"
+              ]
+            }
+          },
+          "photos": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ExportedPhoto"
+            },
+            "maxItems": 50
+          },
+          "photoAccessLog": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "photoId": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "variant": {
+                  "$ref": "#/components/schemas/PhotoVariant"
+                },
+                "at": {
+                  "type": "string",
+                  "format": "date-time"
+                }
+              },
+              "required": [
+                "photoId",
+                "variant",
+                "at"
+              ]
+            },
+            "maxItems": 1000
+          }
+        },
+        "required": [
+          "exportedAt",
+          "account",
+          "identity",
+          "sessions",
+          "photos",
+          "photoAccessLog"
+        ]
+      },
+      "ExportedPhoto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/PhotoId"
+          },
+          "blurhash": {
+            "type": "string",
+            "minLength": 6,
+            "maxLength": 200,
+            "description": "Placeholder the app paints before the thumb arrives (computed from the thumb)."
+          },
+          "width": {
+            "type": "integer",
+            "minimum": 0,
+            "exclusiveMinimum": true,
+            "description": "Of the full variant."
+          },
+          "height": {
+            "type": "integer",
+            "minimum": 0,
+            "exclusiveMinimum": true,
+            "description": "Of the full variant."
+          },
+          "state": {
+            "$ref": "#/components/schemas/PhotoState"
+          },
+          "rejectionReason": {
+            "type": "string",
+            "nullable": true,
+            "enum": [
+              "nudity",
+              "no_person",
+              "several_people",
+              "minor",
+              "violence",
+              "contact_details",
+              "other",
+              null
+            ],
+            "description": "Set when state is rejected: the reason the owner is told."
+          },
+          "position": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "0 is the main photo; the owner sets the order."
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "urls": {
+            "$ref": "#/components/schemas/SignedVariantUrls"
+          },
+          "review": {
+            "type": "object",
+            "nullable": true,
+            "properties": {
+              "decision": {
+                "type": "string",
+                "enum": [
+                  "approved",
+                  "queued",
+                  "rejected"
+                ]
+              },
+              "reason": {
+                "$ref": "#/components/schemas/PhotoRejectionReason"
+              },
+              "decidedByStaff": {
+                "type": "boolean",
+                "description": "True when a person decided, false when the automatic check did."
+              },
+              "decidedAt": {
+                "type": "string",
+                "nullable": true,
+                "format": "date-time"
+              }
+            },
+            "required": [
+              "decision",
+              "reason",
+              "decidedByStaff",
+              "decidedAt"
+            ],
+            "description": "The moderation outcome; label names are not part of it."
+          }
+        },
+        "required": [
+          "id",
+          "blurhash",
+          "width",
+          "height",
+          "state",
+          "rejectionReason",
+          "position",
+          "createdAt",
+          "urls",
+          "review"
+        ]
+      },
+      "PhotoId": {
+        "type": "string",
+        "format": "uuid"
+      },
+      "PhotoState": {
+        "type": "string",
+        "enum": [
+          "pending",
+          "approved",
+          "queued",
+          "rejected"
+        ]
+      },
+      "SignedVariantUrls": {
+        "type": "object",
+        "nullable": true,
+        "properties": {
+          "thumb": {
+            "type": "string",
+            "format": "uri"
+          },
+          "card": {
+            "type": "string",
+            "format": "uri"
+          },
+          "full": {
+            "type": "string",
+            "format": "uri"
+          }
+        },
+        "required": [
+          "thumb",
+          "card",
+          "full"
+        ],
+        "description": "Fifteen-minute URLs, one per variant."
+      },
+      "PhotoRejectionReason": {
+        "type": "string",
+        "nullable": true,
+        "enum": [
+          "nudity",
+          "no_person",
+          "several_people",
+          "minor",
+          "violence",
+          "contact_details",
+          "other",
+          null
+        ]
+      },
+      "PhotoVariant": {
+        "type": "string",
+        "enum": [
+          "thumb",
+          "card",
+          "full"
+        ],
+        "description": "thumb: 200×200 for lists. card: 800×1067 when a profile is opened. full: 1600 px long edge, requested only from the zoom screen."
+      },
       "PhotoList": {
         "type": "object",
         "properties": {
@@ -394,19 +714,6 @@
           "createdAt"
         ]
       },
-      "PhotoId": {
-        "type": "string",
-        "format": "uuid"
-      },
-      "PhotoState": {
-        "type": "string",
-        "enum": [
-          "pending",
-          "approved",
-          "queued",
-          "rejected"
-        ]
-      },
       "PhotoUploadRequest": {
         "type": "object",
         "properties": {
@@ -458,15 +765,6 @@
           "variant",
           "expiresAt"
         ]
-      },
-      "PhotoVariant": {
-        "type": "string",
-        "enum": [
-          "thumb",
-          "card",
-          "full"
-        ],
-        "description": "thumb: 200×200 for lists. card: 800×1067 when a profile is opened. full: 1600 px long edge, requested only from the zoom screen."
       },
       "PhotoReviewQueue": {
         "type": "object",
@@ -600,20 +898,6 @@
           "photoId",
           "state",
           "rejectionReason"
-        ]
-      },
-      "PhotoRejectionReason": {
-        "type": "string",
-        "nullable": true,
-        "enum": [
-          "nudity",
-          "no_person",
-          "several_people",
-          "minor",
-          "violence",
-          "contact_details",
-          "other",
-          null
         ]
       },
       "PhotoDecisionRequest": {
@@ -1122,6 +1406,85 @@
         "responses": {
           "204": {
             "description": "The session is ended."
+          },
+          "401": {
+            "description": "unauthenticated, session_expired or session_revoked.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/account/delete": {
+      "post": {
+        "summary": "Delete this account",
+        "description": "Erasure per TD-7: every session, login attempt, photo (with its objects unless another account shares them), review row and fetch log entry goes; the account row stays as an anonymised tombstone and the identity keeps a deletion count and a 30-day cooldown before a new account. The audit log is untouched. The body confirms; the app asks first.",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AccountDeletionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Erased. Every token of this account has stopped working."
+          },
+          "400": {
+            "description": "Validation failed (confirm missing).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "unauthenticated, session_expired or session_revoked.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/account/export": {
+      "get": {
+        "summary": "Everything Kuutti holds about this account",
+        "description": "One JSON document: the account, the identity's dates and login level, the devices signed in, the photos with fifteen-minute URLs and their moderation outcome, and the person's own fetch log. Nothing about anyone else.",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The export.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountExport"
+                }
+              }
+            }
           },
           "401": {
             "description": "unauthenticated, session_expired or session_revoked.",

@@ -1,4 +1,4 @@
-import { AuthExchangeResponse } from "@kuutti/schema";
+import { AccountExport, AuthExchangeResponse } from "@kuutti/schema";
 import * as React from "react";
 import { ApiError, api } from "@/lib/api";
 import {
@@ -24,6 +24,10 @@ type SessionApi = SessionState & {
   signIn: (code: string) => Promise<"created" | "resumed">;
   signOut: () => Promise<void>;
   signOutEverywhere: () => Promise<void>;
+  /** Everything Kuutti holds about the person (#51), as the API answers it. */
+  exportData: () => Promise<AccountExport>;
+  /** Erasure per TD-7 (#51); the device is signed out locally at once. */
+  deleteAccount: () => Promise<void>;
 };
 
 const SessionContext = React.createContext<SessionApi | null>(null);
@@ -74,9 +78,31 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     await clearSession();
   }, []);
 
+  const exportData = React.useCallback(async () => {
+    const { data, error, response } = await api.GET("/account/export");
+    if (!data) {
+      throw new ApiError(`export answered ${response.status}`, response.status, error?.error.code);
+    }
+    return AccountExport.parse(data);
+  }, []);
+
+  // The API has already ended every token of the account when it answers 204;
+  // the local store follows. A failure leaves the session in place.
+  const deleteAccount = React.useCallback(async () => {
+    const { error, response } = await api.POST("/account/delete", { body: { confirm: true } });
+    if (!response.ok) {
+      throw new ApiError(
+        `deletion answered ${response.status}`,
+        response.status,
+        error?.error.code,
+      );
+    }
+    await clearSession();
+  }, []);
+
   const value = React.useMemo<SessionApi>(
-    () => ({ ...state, signIn, signOut, signOutEverywhere }),
-    [state, signIn, signOut, signOutEverywhere],
+    () => ({ ...state, signIn, signOut, signOutEverywhere, exportData, deleteAccount }),
+    [state, signIn, signOut, signOutEverywhere, exportData, deleteAccount],
   );
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;
 }

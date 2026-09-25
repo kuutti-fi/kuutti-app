@@ -39,7 +39,8 @@ export const identity = pgTable(
     authenticatedAt: timestamp("authenticated_at", { withTimezone: true }),
     acr: text("acr"),
     amr: text("amr").array(),
-    // Erasure (TD-7): the account row goes, this row stays and counts.
+    // Erasure (TD-7, #51): the account row becomes an anonymised tombstone
+    // (state deleted), this row stays and counts.
     deletionCount: integer("deletion_count").notNull().default(0),
     // No new account before this instant after a self-deletion (TD-7 cooldown).
     reregisterAfter: timestamp("reregister_after", { withTimezone: true }),
@@ -70,9 +71,10 @@ export const account = pgTable(
     state: accountState("state").notNull().default("registered"),
     stateChangedAt: timestamp("state_changed_at", { withTimezone: true }),
     // Age is year and month only (rule 3), derived from the code at
-    // registration and gone with the account at erasure.
-    birthYear: smallint("birth_year").notNull(),
-    birthMonth: smallint("birth_month").notNull(),
+    // registration; nulled at erasure (#51), when the row stays as the
+    // anonymised tombstone of a deleted account.
+    birthYear: smallint("birth_year"),
+    birthMonth: smallint("birth_month"),
     registeredAt: timestamp("registered_at", { withTimezone: true }).notNull().defaultNow(),
     deletedAt: timestamp("deleted_at", { withTimezone: true }),
   },

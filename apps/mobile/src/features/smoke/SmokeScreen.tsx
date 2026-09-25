@@ -13,7 +13,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Icon } from "@/components/ui/icon";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Text } from "@/components/ui/text";
-import { useSession } from "@/features/identity";
+import { AccountActions, useSession } from "@/features/identity";
 import { apiBaseUrl, fetchHealth } from "@/lib/api";
 import { useT } from "@/lib/locale";
 import { cn } from "@/lib/utils";
@@ -188,6 +188,9 @@ export function SmokeScreen() {
             )}
           </View>
         </Card>
+
+        {/* Export and deletion (#51) until the profile gives them a home. */}
+        <AccountActions />
 
         <Button
           accessibilityLabel={t("smoke.retry")}

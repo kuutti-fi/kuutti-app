@@ -14,6 +14,7 @@ export type SignedIn = {
   accountId: string;
   sessionId: string;
   accessToken: string;
+  refreshToken: string;
   /** Ready for `app.request(path, { headers })`. */
   headers: { authorization: string };
 };
@@ -51,7 +52,13 @@ export async function signedInAccount(db: Queryable, label?: string): Promise<Si
   );
   const sessionId = session.rows[0]?.id;
   if (!sessionId) throw new Error("test session not written");
-  return { accountId, sessionId, accessToken, headers: { authorization: `Bearer ${accessToken}` } };
+  return {
+    accountId,
+    sessionId,
+    accessToken,
+    refreshToken,
+    headers: { authorization: `Bearer ${accessToken}` },
+  };
 }
 
 /** matching_config rows a test needs, upserted inside its transaction (rolled back with it). */
