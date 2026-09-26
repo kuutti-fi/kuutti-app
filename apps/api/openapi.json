@@ -486,6 +486,9 @@
               ]
             },
             "maxItems": 1000
+          },
+          "research": {
+            "$ref": "#/components/schemas/ResearchExport"
           }
         },
         "required": [
@@ -497,7 +500,8 @@
           "sessions",
           "profile",
           "photos",
-          "photoAccessLog"
+          "photoAccessLog",
+          "research"
         ]
       },
       "Gender": {
@@ -1003,6 +1007,204 @@
           "full"
         ],
         "description": "thumb: 200×200 for lists. card: 800×1067 when a profile is opened. full: 1600 px long edge, requested only from the zoom screen."
+      },
+      "ResearchExport": {
+        "type": "object",
+        "properties": {
+          "enrolled": {
+            "type": "boolean"
+          },
+          "since": {
+            "type": "string",
+            "nullable": true,
+            "format": "date-time"
+          },
+          "consentVersion": {
+            "type": "string",
+            "nullable": true,
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "events": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ResearchEventRecord"
+            },
+            "maxItems": 1000
+          }
+        },
+        "required": [
+          "enrolled",
+          "since",
+          "consentVersion",
+          "events"
+        ]
+      },
+      "ResearchEventRecord": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "consentVersion": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "pond": {
+            "type": "string",
+            "nullable": true,
+            "minLength": 1,
+            "maxLength": 60
+          },
+          "ageBand": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 12
+          },
+          "snapshot": {
+            "$ref": "#/components/schemas/ResearchSnapshot"
+          },
+          "props": {
+            "type": "object",
+            "additionalProperties": {
+              "nullable": true
+            }
+          }
+        },
+        "required": [
+          "name",
+          "at",
+          "consentVersion",
+          "pond",
+          "ageBand",
+          "snapshot",
+          "props"
+        ]
+      },
+      "ResearchSnapshot": {
+        "type": "object",
+        "properties": {
+          "gender": {
+            "$ref": "#/components/schemas/Gender"
+          },
+          "fields": {
+            "$ref": "#/components/schemas/ResearchFields"
+          }
+        },
+        "required": [
+          "gender",
+          "fields"
+        ],
+        "additionalProperties": false
+      },
+      "ResearchFields": {
+        "type": "object",
+        "properties": {
+          "languages": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "fi",
+                "sv",
+                "en",
+                "ru",
+                "et",
+                "uk",
+                "ar",
+                "so",
+                "de",
+                "fr",
+                "es",
+                "other"
+              ]
+            },
+            "minItems": 1,
+            "maxItems": 5
+          },
+          "intent": {
+            "type": "string",
+            "enum": [
+              "long_term",
+              "short_term",
+              "figuring_out",
+              "friends"
+            ]
+          },
+          "relationship": {
+            "type": "string",
+            "enum": [
+              "monogamous",
+              "open",
+              "polyamorous",
+              "lat",
+              "undecided"
+            ]
+          },
+          "kids": {
+            "type": "string",
+            "enum": [
+              "have_want_more",
+              "have_done",
+              "want_someday",
+              "dont_want",
+              "not_sure"
+            ]
+          },
+          "smoking": {
+            "type": "string",
+            "enum": [
+              "no",
+              "sometimes",
+              "yes",
+              "snus"
+            ]
+          },
+          "alcohol": {
+            "type": "string",
+            "enum": [
+              "never",
+              "sometimes",
+              "often"
+            ]
+          },
+          "education": {
+            "type": "string",
+            "enum": [
+              "secondary",
+              "vocational",
+              "bachelor",
+              "master",
+              "doctorate",
+              "other"
+            ]
+          },
+          "field": {
+            "type": "string",
+            "enum": [
+              "tech",
+              "engineering",
+              "business",
+              "arts",
+              "science",
+              "health",
+              "education",
+              "law",
+              "social",
+              "trades",
+              "service",
+              "other"
+            ]
+          }
+        },
+        "additionalProperties": false
       },
       "PhotoList": {
         "type": "object",

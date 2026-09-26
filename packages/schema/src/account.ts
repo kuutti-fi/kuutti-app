@@ -4,6 +4,7 @@ import { AuthPlatform } from "./identity.ts";
 import { Photo, PhotoRejectionReason, PhotoVariant } from "./media.ts";
 import { ConsentRecord, Gender, PondSummary, PreferencesResponse } from "./onboarding.ts";
 import { ProfileDocument } from "./profile.ts";
+import { ResearchExport } from "./research.ts";
 
 /**
  * The account's own lifecycle (#51, TD-7): deletion per the erasure table and
@@ -93,6 +94,8 @@ export const AccountExport = z
     photoAccessLog: z
       .array(z.object({ photoId: z.uuid(), variant: PhotoVariant, at: z.iso.datetime() }))
       .max(1000),
+    /** What research holds (#50, ADR-011): the enrolment and the events, never the research_id. */
+    research: ResearchExport,
   })
   .meta({ id: "AccountExport" });
 export type AccountExport = z.infer<typeof AccountExport>;

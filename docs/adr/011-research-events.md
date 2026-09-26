@@ -1,0 +1,48 @@
+# ADR-011: The research_id mapping, server-side track(), and the partitioned events table
+
+- Status: accepted
+- Date: 2026-09-26
+- Follows: TD-5 (research use of events needs its own yes), TD-7 (the erasure table names the `research_id` mapping), CLAUDE.md rules 5, 6 and 10, `.claude/rules/db.md` (`events`: append-only, monthly partitions, 90-day retention, keyed by `research_id`), `.claude/rules/schema.md` (the event registry), `.claude/rules/api.md` (events and logs; nightly jobs), ADR-007 §4, ADR-009 §2, ADR-010 §4 and its consequences; issue #50
+
+## Context
+
+The research opt-in exists as a consent row bound to a wording (#46). Nothing yet turns what happens in the app into data a researcher may read, and the rules say how that data must look: never joinable to a person once the yes is withdrawn, never carrying message text, free text, e-mail or raw `seeks`, kept ninety days, partitioned by month. #50 had one line of body; this ADR fixes the shape, the write path and the retention, so that the rounds of M4 add their events to a registry rather than invent a pipeline.
+
+## Decision
+
+1. **Enrolment is a row while the research consent is active.** `research_subject(account_id, research_id, consent_version, enrolled_at)`, migration 0014. Written in the transaction that records a research consent, deleted in the one that withdraws it and by `eraseAccount` (the erasure table's row). `research_id` is `gen_random_uuid()`, derived from nothing about the person, so nothing recomputes it once the row is gone; a later opt-in is a new pseudonym and the old events stay unlinkable. The id appears in no response and no log line; the export shows the enrolment and the events, not the id (rules/schema.md). What could rebuild a deleted mapping is a value shared between an event and a row that keeps the account: the consent row's `given_at` survives withdrawal and erasure as proof (ADR-010 §5), and the tombstone keeps `registered_at`. So an event's `at` is truncated to the hour, and the opt-in's distance from registration is whole days, never seconds (security review of #50). A holder of the whole database could still correlate an opt-in event with a consent given in the same quiet hour; that holder is the association, and the research partner gets the Parquet copy without the operational tables (§8).
+2. **`track()` is the one door, server-side only.** `track(deps, accountId, name, props)` in `apps/api/src/research/track.ts`: `name` must be a key of `RESEARCH_EVENTS` (a compile error otherwise), `props` are parsed by that entry's strict schema (a failure is logged with the paths, never the values, and dropped), the mapping row is read, share-locked for the rest of the transaction, together with what the snapshot needs (none: no consent, no event, nothing logged), one row is inserted; a withdrawal or an erasure that races the event waits for it, so no event lands after the consent ended. The insert runs in its own transaction, or a savepoint when the caller is inside one, and a failure of any kind, a missing partition included, is a warning and a dropped event: research data never fails a person's action. No route accepts events from a client.
+3. **Every event carries the same four things**, stamped by the API from the rows at that moment, never by the caller: `consent_version` from the mapping row (the wording the person read, ADR-010 §4, not the build's current one); `pond` as the slug, null before the person chose one (the API takes the onboarding answers in any order, ADR-010 §9); `age_band` from the bank-verified year and month by the Finnish calendar as the card counts age (`18-24`, `25-29`, `30-34`, `35-39`, `40-49`, `50+`; rule 3: never a day); `snapshot` = self-declared gender plus the profile registry's closed-list fields. Which fields enter is computed from the registry in `packages/schema/src/research.ts`: kinds `single` and `multi` only, never `text`, never a field flagged `specialCategory` (ADR-009 §2), and a stored value that no longer parses is left out. `seeks` is not a profile field and never enters.
+4. **The registry ships with two events.** `research_opt_in { sinceRegistrationD, accountActive }` (when in their journey people join; activation happens before the research screen in the app's order, so an activation event would mostly find no mapping) and `profile_saved { complete, approvedPhotos }` (do profiles get finished). Each entry names the question it answers; no props schema has a string field, and a test keeps it so. The round, like, pass, match and message events are M4's, added to the registry with their questions.
+5. **The table is what rules/db.md says, as a custom migration.** `events(id, at, name, research_id, consent_version, pond, age_band, snapshot jsonb, props jsonb)`, `PARTITION BY RANGE (at)`, primary key `(at, id)`, indexes on `(research_id, at)` and `(name, at)`, no foreign key to the mapping (the events outlive it). Drizzle's DSL cannot express a partitioned table, so migration 0015 is `drizzle-kit generate --custom` with the SQL below (rule 10). UPDATE, DELETE and TRUNCATE are refused by triggers as on `audit_log` (0006): a row trigger on a partitioned table is cloned onto every partition, present and future; a statement trigger is not, so the migration's TRUNCATE trigger guards the parent and `ensureEventPartitions` creates the same trigger on each partition it makes, so `TRUNCATE events_YYYY_MM` by name is refused too. What no trigger stops is `DROP TABLE` of a partition, which is the retention, and the owner disabling the trigger, which the separate owner role of ADR-006 closes in M4.
+
+   ```sql
+   CREATE TABLE "events" (
+     "id" uuid DEFAULT gen_random_uuid() NOT NULL,
+     "at" timestamp with time zone NOT NULL,
+     "name" text NOT NULL,
+     "research_id" uuid NOT NULL,
+     "consent_version" text NOT NULL,
+     "pond" text,
+     "age_band" text NOT NULL,
+     "snapshot" jsonb NOT NULL,
+     "props" jsonb NOT NULL,
+     PRIMARY KEY ("at", "id")
+   ) PARTITION BY RANGE ("at");
+   CREATE INDEX "events_research_id_at_idx" ON "events" ("research_id", "at");
+   CREATE INDEX "events_name_at_idx" ON "events" ("name", "at");
+   CREATE OR REPLACE FUNCTION events_immutable() RETURNS trigger ...;  -- RAISE EXCEPTION, as audit_log_immutable
+   CREATE TRIGGER events_no_update_or_delete BEFORE UPDATE OR DELETE ON "events" FOR EACH ROW EXECUTE FUNCTION events_immutable();
+   CREATE TRIGGER events_no_truncate BEFORE TRUNCATE ON "events" FOR EACH STATEMENT EXECUTE FUNCTION events_immutable();
+   ```
+
+6. **Partitions are created ahead, never on demand.** `events_YYYY_MM` with half-open UTC month bounds (research reads months; the Finnish day is the budgets' concern). `ensureEventPartitions` creates the current and the next month, idempotently and under an advisory transaction lock (two containers starting at once take turns), at boot right after the migrations and in the nightly job `research-events-partitions`, which also runs `pruneEventPartitions`: a partition whose range began `EVENTS_RETENTION_DAYS = 90` days ago or earlier is dropped whole. The binding research text promises "enintään 90 päivää", at most 90 days (`legal.research.summary`), so the drop is keyed on the month's oldest row: a row lives between about 60 and 90 days, never longer; research loses the tail of every month a little early, which is the right side to err on. The retention is a named constant with its rule cited, not a `matching_config` row: a data-protection rule, not a matching knob. The API test setup creates the same partitions the boot does.
+7. **Erasure and export.** `eraseAccount` deletes the mapping row and reports it; the events stay. The export gains `research: { enrolled, since, consentVersion, events }` with the newest thousand events as `{ name, at, consentVersion, pond, ageBand, snapshot, props }`, read through a join on the mapping row so the query is scoped by the account (rule 6) and finds nothing after withdrawal (rule 5). The rows are read back leniently (a retired option or event name exports as stored or is left out), since one old row must not fail the right of access. A newer research wording accepted while enrolled moves the mapping row's `consent_version` to it and keeps the pseudonym and the enrolment time; events written before keep the version of their day. The rows are the person's own coarse data and the right of access reads widely; whether they belong in the export is the maintainer's to confirm.
+8. **Nothing streams anywhere.** Events live in the main Postgres: at 5,000 users the volume is a few inserts a second at most, storage encryption is RDS's, and application-level encryption of payloads would protect only against a reader who has the database but not the API host and its keys, while making the events unqueryable. The Parquet export for the research partner is its own change; where that copy leaves the box is where encryption to the partner's key belongs.
+
+## Consequences
+
+- Two tables (`research_subject`, `events`), migrations 0014 (generated) and 0015 (custom); one nightly job; one boot step.
+- `profile → research` and `identity → research` are the only edges into the slice; `research → media` for the Finnish calendar month, and `research` reads `ponds` and `profile.fields` from packages/db read-only, so that `profile` can emit events without the research slice importing it back (rules/layout.md).
+- The seed leaves the research consent to the flow, as it does the other consents.
+- Open, and the maintainer's: the age bands; the two events and their props; the events in the export; a fresh pseudonym on every re-consent; the Parquet export and the researcher's read access, and when in M4 the owner role of ADR-006 lands.

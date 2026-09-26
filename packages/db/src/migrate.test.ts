@@ -84,6 +84,7 @@ describe("migrate", () => {
           "auth_request",
           "card_shown",
           "consent",
+          "events",
           "identity",
           "matching_config",
           "moderator_roles",
@@ -93,6 +94,7 @@ describe("migrate", () => {
           "ponds",
           "preferences",
           "profile",
+          "research_subject",
           "session",
         ]);
       } finally {
