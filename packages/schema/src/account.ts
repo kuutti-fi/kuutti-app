@@ -1,6 +1,9 @@
 import { z } from "zod";
+import { AccountState } from "./account-state.ts";
 import { AuthPlatform } from "./identity.ts";
 import { Photo, PhotoRejectionReason, PhotoVariant } from "./media.ts";
+import { ConsentRecord, Gender, PondSummary, PreferencesResponse } from "./onboarding.ts";
+import { ProfileDocument } from "./profile.ts";
 
 /**
  * The account's own lifecycle (#51, TD-7): deletion per the erasure table and
@@ -50,18 +53,6 @@ export type ExportedPhoto = z.infer<typeof ExportedPhoto>;
  * month, no personal identity code (only its keyed hash, which is omitted
  * because it identifies nothing without the key).
  */
-/** The account row's state; mirrors the database enum `account_state` (a test in apps/api keeps the two equal). */
-export const AccountState = z.enum([
-  "registered",
-  "active",
-  "paused",
-  "shadow_banned",
-  "suspended",
-  "banned",
-  "deleted",
-]);
-export type AccountState = z.infer<typeof AccountState>;
-
 export const AccountExport = z
   .object({
     exportedAt: z.iso.datetime(),
@@ -71,7 +62,14 @@ export const AccountExport = z
       registeredAt: z.iso.datetime(),
       birthYear: z.int().nullable(),
       birthMonth: z.int().nullable(),
+      /** Self-declared (#46); null before onboarding and after erasure. */
+      gender: Gender.nullable(),
+      pond: PondSummary.nullable(),
     }),
+    /** The two hard rows onboarding writes (#46): whom the person seeks and the age window. */
+    preferences: PreferencesResponse,
+    /** Every consent ever given, withdrawn ones included: the proof of consent (#46, ADR-010). Bounded by the churn cap, not by a page. */
+    consents: z.array(ConsentRecord).max(10_000),
     identity: z.object({
       firstSeenAt: z.iso.datetime(),
       lastBankLoginAt: z.iso.datetime().nullable(),
@@ -88,6 +86,8 @@ export const AccountExport = z
         expiresAt: z.iso.datetime(),
       }),
     ),
+    /** The profile as written (#47); null when never saved. */
+    profile: ProfileDocument.nullable(),
     photos: z.array(ExportedPhoto).max(50),
     /** The person's own fetches of their photos (the exposure log of TD-6), newest first, at most 1000. */
     photoAccessLog: z

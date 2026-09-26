@@ -90,6 +90,846 @@ smoke.retry:
   sv: Försök igen
   machine: { fi: true, sv: true }
 
+# --- Profile (#47) ---
+
+profile.title:
+  en: "Your profile"
+  description: "Heading of the profile edit screen (#47)."
+  fi: "Profiilisi"
+  sv: "Din profil"
+  machine: { fi: true, sv: true }
+
+profile.explain:
+  en: "What others see on your card: choices from lists, a few lines in your own words, and up to three prompts. No contact details before a match."
+  description: "Lead text of the profile edit screen; the plain-text rule in one sentence."
+  fi: "Mitä muut näkevät kortillasi: valintoja listoista, muutama rivi omin sanoin ja enintään kolme kysymystä. Ei yhteystietoja ennen mätsiä."
+  sv: "Det andra ser på ditt kort: val från listor, några rader med egna ord och upp till tre frågor. Inga kontaktuppgifter före en match."
+  machine: { fi: true, sv: true }
+
+profile.home.open:
+  en: "Your profile"
+  description: "Button on the home screen that opens the profile (#47)."
+  fi: "Profiilisi"
+  sv: "Din profil"
+  machine: { fi: true, sv: true }
+
+profile.loading:
+  en: "Loading your profile…"
+  description: "Shown while GET /profile is in flight."
+  fi: "Ladataan profiiliasi…"
+  sv: "Läser in din profil…"
+  machine: { fi: true, sv: true }
+
+profile.failed:
+  en: "Your profile could not be loaded. Try again."
+  description: "GET /profile failed."
+  fi: "Profiilia ei voitu ladata. Yritä uudelleen."
+  sv: "Profilen kunde inte läsas in. Försök igen."
+  machine: { fi: true, sv: true }
+
+profile.retry:
+  en: "Try again"
+  description: "Retry button after a failed load."
+  fi: "Yritä uudelleen"
+  sv: "Försök igen"
+  machine: { fi: true, sv: true }
+
+profile.save:
+  en: "Save"
+  description: "The save button of the profile screen."
+  fi: "Tallenna"
+  sv: "Spara"
+  machine: { fi: true, sv: true }
+
+profile.saving:
+  en: "Saving…"
+  description: "Shown while PUT /profile is in flight."
+  fi: "Tallennetaan…"
+  sv: "Sparar…"
+  machine: { fi: true, sv: true }
+
+profile.saved:
+  en: "Saved."
+  description: "Notice after a successful save."
+  fi: "Tallennettu."
+  sv: "Sparat."
+  machine: { fi: true, sv: true }
+
+profile.error.generic:
+  en: "Saving did not work. Check the fields and try again."
+  description: "Notice after a refused save without a more specific text (validation_failed and the rest)."
+  fi: "Tallennus ei onnistunut. Tarkista kentät ja yritä uudelleen."
+  sv: "Det gick inte att spara. Kontrollera fälten och försök igen."
+  machine: { fi: true, sv: true }
+
+profile.error.text_contact_details:
+  en: "Your text has an e-mail address, a link, a phone number or a social media handle. Those come after a match."
+  description: "Notice after a save refused with text_contact_details (#47, the plain-text rule)."
+  fi: "Tekstissäsi on sähköpostiosoite, linkki, puhelinnumero tai somekäyttäjänimi. Ne tulevat mätsin jälkeen."
+  sv: "Din text har en e-postadress, en länk, ett telefonnummer eller ett användarnamn på sociala medier. De kommer efter en match."
+  machine: { fi: true, sv: true }
+
+profile.displayName.label:
+  en: "Name on your card"
+  description: "Label of the display name field."
+  fi: "Nimi kortillasi"
+  sv: "Namn på ditt kort"
+  machine: { fi: true, sv: true }
+
+profile.displayName.hint:
+  en: "How you want to be called, up to {max, number} characters."
+  description: "Hint under the display name field; {max} is the character cap."
+  fi: "Millä nimellä haluat tulla kutsutuksi, enintään {max, number} merkkiä."
+  sv: "Vad du vill bli kallad, högst {max, number} tecken."
+  machine: { fi: true, sv: true }
+
+profile.bio.label:
+  en: "About you"
+  description: "Label of the bio field."
+  fi: "Sinusta"
+  sv: "Om dig"
+  machine: { fi: true, sv: true }
+
+profile.bio.hint:
+  en: "{min, number} characters or more count as a bio; or answer two prompts instead."
+  description: "Hint under the bio field; {min} is the completeness threshold."
+  fi: "Vähintään {min, number} merkkiä lasketaan esittelyksi; tai vastaa kahteen kysymykseen."
+  sv: "{min, number} tecken eller fler räknas som en presentation; eller svara på två frågor i stället."
+  machine: { fi: true, sv: true }
+
+profile.bio.orPreset:
+  en: "Or pick a line instead"
+  description: "Heading of the three canned placeholder bios."
+  fi: "Tai valitse valmis rivi"
+  sv: "Eller välj en färdig rad"
+  machine: { fi: true, sv: true }
+
+profile.bioPreset.lazy_nice_fellow:
+  en: "I was too lazy to write anything here, so this placeholder says I am a nice fellow."
+  description: "Placeholder bio option (#47)."
+  fi: "Olin liian laiska kirjoittamaan tänne mitään, joten tämä täyteteksti kertoo, että olen mukava tyyppi."
+  sv: "Jag var för lat för att skriva något här, så den här platshållaren säger att jag är en trevlig typ."
+  machine: { fi: true, sv: true }
+
+profile.bioPreset.ask_me_instead:
+  en: "Ask me. I answer better than I write."
+  description: "Placeholder bio option."
+  fi: "Kysy minulta. Vastaan paremmin kuin kirjoitan."
+  sv: "Fråga mig. Jag svarar bättre än jag skriver."
+  machine: { fi: true, sv: true }
+
+profile.bioPreset.photos_speak:
+  en: "The photos say it. The rest over coffee."
+  description: "Placeholder bio option."
+  fi: "Kuvat kertovat. Loput kahvilla."
+  sv: "Bilderna säger det. Resten över en kaffe."
+  machine: { fi: true, sv: true }
+
+profile.field.languages:
+  en: "Languages"
+  description: "Label of the languages field of the profile registry (#47)."
+  fi: "Kielet"
+  sv: "Språk"
+  machine: { fi: true, sv: true }
+
+profile.field.intent:
+  en: "Looking for"
+  description: "Label of the intent field of the profile registry (#47)."
+  fi: "Etsin"
+  sv: "Söker"
+  machine: { fi: true, sv: true }
+
+profile.field.relationship:
+  en: "Relationship type"
+  description: "Label of the relationship field of the profile registry (#47)."
+  fi: "Suhteen tyyppi"
+  sv: "Typ av relation"
+  machine: { fi: true, sv: true }
+
+profile.field.kids:
+  en: "Kids"
+  description: "Label of the kids field of the profile registry (#47)."
+  fi: "Lapset"
+  sv: "Barn"
+  machine: { fi: true, sv: true }
+
+profile.field.smoking:
+  en: "Smoking"
+  description: "Label of the smoking field of the profile registry (#47)."
+  fi: "Tupakointi"
+  sv: "Rökning"
+  machine: { fi: true, sv: true }
+
+profile.field.alcohol:
+  en: "Alcohol"
+  description: "Label of the alcohol field of the profile registry (#47)."
+  fi: "Alkoholi"
+  sv: "Alkohol"
+  machine: { fi: true, sv: true }
+
+profile.field.education:
+  en: "Education"
+  description: "Label of the education field of the profile registry (#47)."
+  fi: "Koulutus"
+  sv: "Utbildning"
+  machine: { fi: true, sv: true }
+
+profile.field.field:
+  en: "Field"
+  description: "Label of the field field of the profile registry (#47)."
+  fi: "Ala"
+  sv: "Bransch"
+  machine: { fi: true, sv: true }
+
+profile.field.campus:
+  en: "Campus or guild"
+  description: "Label of the campus field of the profile registry (#47)."
+  fi: "Kampus tai kilta"
+  sv: "Campus eller gille"
+  machine: { fi: true, sv: true }
+
+profile.campus.hint:
+  en: "In your own words, up to {max, number} characters."
+  description: "Hint under the campus or guild field."
+  fi: "Omin sanoin, enintään {max, number} merkkiä."
+  sv: "Med egna ord, högst {max, number} tecken."
+  machine: { fi: true, sv: true }
+
+profile.option.languages.fi:
+  en: "Finnish"
+  description: "Option fi of the languages field (#47 registry)."
+  fi: "suomi"
+  sv: "finska"
+  machine: { fi: true, sv: true }
+
+profile.option.languages.sv:
+  en: "Swedish"
+  description: "Option sv of the languages field (#47 registry)."
+  fi: "ruotsi"
+  sv: "svenska"
+  machine: { fi: true, sv: true }
+
+profile.option.languages.en:
+  en: "English"
+  description: "Option en of the languages field (#47 registry)."
+  fi: "englanti"
+  sv: "engelska"
+  machine: { fi: true, sv: true }
+
+profile.option.languages.ru:
+  en: "Russian"
+  description: "Option ru of the languages field (#47 registry)."
+  fi: "venäjä"
+  sv: "ryska"
+  machine: { fi: true, sv: true }
+
+profile.option.languages.et:
+  en: "Estonian"
+  description: "Option et of the languages field (#47 registry)."
+  fi: "viro"
+  sv: "estniska"
+  machine: { fi: true, sv: true }
+
+profile.option.languages.uk:
+  en: "Ukrainian"
+  description: "Option uk of the languages field (#47 registry)."
+  fi: "ukraina"
+  sv: "ukrainska"
+  machine: { fi: true, sv: true }
+
+profile.option.languages.ar:
+  en: "Arabic"
+  description: "Option ar of the languages field (#47 registry)."
+  fi: "arabia"
+  sv: "arabiska"
+  machine: { fi: true, sv: true }
+
+profile.option.languages.so:
+  en: "Somali"
+  description: "Option so of the languages field (#47 registry)."
+  fi: "somali"
+  sv: "somaliska"
+  machine: { fi: true, sv: true }
+
+profile.option.languages.de:
+  en: "German"
+  description: "Option de of the languages field (#47 registry)."
+  fi: "saksa"
+  sv: "tyska"
+  machine: { fi: true, sv: true }
+
+profile.option.languages.fr:
+  en: "French"
+  description: "Option fr of the languages field (#47 registry)."
+  fi: "ranska"
+  sv: "franska"
+  machine: { fi: true, sv: true }
+
+profile.option.languages.es:
+  en: "Spanish"
+  description: "Option es of the languages field (#47 registry)."
+  fi: "espanja"
+  sv: "spanska"
+  machine: { fi: true, sv: true }
+
+profile.option.languages.other:
+  en: "Another language"
+  description: "Option other of the languages field (#47 registry)."
+  fi: "Muu kieli"
+  sv: "Ett annat språk"
+  machine: { fi: true, sv: true }
+
+profile.option.intent.long_term:
+  en: "Something long-term"
+  description: "Option long_term of the intent field (#47 registry)."
+  fi: "Jotain pitkäaikaista"
+  sv: "Något långvarigt"
+  machine: { fi: true, sv: true }
+
+profile.option.intent.short_term:
+  en: "Something short-term"
+  description: "Option short_term of the intent field (#47 registry)."
+  fi: "Jotain lyhytaikaista"
+  sv: "Något kortvarigt"
+  machine: { fi: true, sv: true }
+
+profile.option.intent.figuring_out:
+  en: "Still figuring it out"
+  description: "Option figuring_out of the intent field (#47 registry)."
+  fi: "Selvittelen vielä"
+  sv: "Håller på att lista ut det"
+  machine: { fi: true, sv: true }
+
+profile.option.intent.friends:
+  en: "Friends"
+  description: "Option friends of the intent field (#47 registry)."
+  fi: "Ystäviä"
+  sv: "Vänner"
+  machine: { fi: true, sv: true }
+
+profile.option.relationship.monogamous:
+  en: "Monogamous"
+  description: "Option monogamous of the relationship field (#47 registry)."
+  fi: "Monogaminen"
+  sv: "Monogam"
+  machine: { fi: true, sv: true }
+
+profile.option.relationship.open:
+  en: "Open relationship"
+  description: "Option open of the relationship field (#47 registry)."
+  fi: "Avoin suhde"
+  sv: "Öppen relation"
+  machine: { fi: true, sv: true }
+
+profile.option.relationship.polyamorous:
+  en: "Polyamorous"
+  description: "Option polyamorous of the relationship field (#47 registry)."
+  fi: "Polyamorinen"
+  sv: "Polyamorös"
+  machine: { fi: true, sv: true }
+
+profile.option.relationship.lat:
+  en: "Living apart together"
+  description: "Option lat of the relationship field (#47 registry)."
+  fi: "Erillissuhde"
+  sv: "Särbo"
+  machine: { fi: true, sv: true }
+
+profile.option.relationship.undecided:
+  en: "Undecided"
+  description: "Option undecided of the relationship field (#47 registry)."
+  fi: "En ole päättänyt"
+  sv: "Obestämd"
+  machine: { fi: true, sv: true }
+
+profile.option.kids.have_want_more:
+  en: "Have kids, want more"
+  description: "Option have_want_more of the kids field (#47 registry)."
+  fi: "On lapsia, haluan lisää"
+  sv: "Har barn, vill ha fler"
+  machine: { fi: true, sv: true }
+
+profile.option.kids.have_done:
+  en: "Have kids, that is enough"
+  description: "Option have_done of the kids field (#47 registry)."
+  fi: "On lapsia, se riittää"
+  sv: "Har barn, det räcker"
+  machine: { fi: true, sv: true }
+
+profile.option.kids.want_someday:
+  en: "Want kids someday"
+  description: "Option want_someday of the kids field (#47 registry)."
+  fi: "Haluan lapsia joskus"
+  sv: "Vill ha barn någon gång"
+  machine: { fi: true, sv: true }
+
+profile.option.kids.dont_want:
+  en: "Do not want kids"
+  description: "Option dont_want of the kids field (#47 registry)."
+  fi: "En halua lapsia"
+  sv: "Vill inte ha barn"
+  machine: { fi: true, sv: true }
+
+profile.option.kids.not_sure:
+  en: "Not sure"
+  description: "Option not_sure of the kids field (#47 registry)."
+  fi: "En ole varma"
+  sv: "Inte säker"
+  machine: { fi: true, sv: true }
+
+profile.option.smoking.no:
+  en: "No"
+  description: "Option no of the smoking field (#47 registry)."
+  fi: "En"
+  sv: "Nej"
+  machine: { fi: true, sv: true }
+
+profile.option.smoking.sometimes:
+  en: "Sometimes"
+  description: "Option sometimes of the smoking field (#47 registry)."
+  fi: "Joskus"
+  sv: "Ibland"
+  machine: { fi: true, sv: true }
+
+profile.option.smoking.yes:
+  en: "Yes"
+  description: "Option yes of the smoking field (#47 registry)."
+  fi: "Kyllä"
+  sv: "Ja"
+  machine: { fi: true, sv: true }
+
+profile.option.smoking.snus:
+  en: "Snus"
+  description: "Option snus of the smoking field (#47 registry)."
+  fi: "Nuuskaa"
+  sv: "Snus"
+  machine: { fi: true, sv: true }
+
+profile.option.alcohol.never:
+  en: "Never"
+  description: "Option never of the alcohol field (#47 registry)."
+  fi: "En koskaan"
+  sv: "Aldrig"
+  machine: { fi: true, sv: true }
+
+profile.option.alcohol.sometimes:
+  en: "Sometimes"
+  description: "Option sometimes of the alcohol field (#47 registry)."
+  fi: "Joskus"
+  sv: "Ibland"
+  machine: { fi: true, sv: true }
+
+profile.option.alcohol.often:
+  en: "Often"
+  description: "Option often of the alcohol field (#47 registry)."
+  fi: "Usein"
+  sv: "Ofta"
+  machine: { fi: true, sv: true }
+
+profile.option.education.secondary:
+  en: "Upper secondary"
+  description: "Option secondary of the education field (#47 registry)."
+  fi: "Toinen aste"
+  sv: "Gymnasium"
+  machine: { fi: true, sv: true }
+
+profile.option.education.vocational:
+  en: "Vocational"
+  description: "Option vocational of the education field (#47 registry)."
+  fi: "Ammatillinen"
+  sv: "Yrkesutbildning"
+  machine: { fi: true, sv: true }
+
+profile.option.education.bachelor:
+  en: "Bachelor's degree"
+  description: "Option bachelor of the education field (#47 registry)."
+  fi: "Kandidaatti"
+  sv: "Kandidat"
+  machine: { fi: true, sv: true }
+
+profile.option.education.master:
+  en: "Master's degree"
+  description: "Option master of the education field (#47 registry)."
+  fi: "Maisteri"
+  sv: "Magister"
+  machine: { fi: true, sv: true }
+
+profile.option.education.doctorate:
+  en: "Doctorate"
+  description: "Option doctorate of the education field (#47 registry)."
+  fi: "Tohtori"
+  sv: "Doktor"
+  machine: { fi: true, sv: true }
+
+profile.option.education.other:
+  en: "Other"
+  description: "Option other of the education field (#47 registry)."
+  fi: "Muu"
+  sv: "Annat"
+  machine: { fi: true, sv: true }
+
+profile.option.field.tech:
+  en: "Tech"
+  description: "Option tech of the field field (#47 registry)."
+  fi: "Teknologia"
+  sv: "Teknik"
+  machine: { fi: true, sv: true }
+
+profile.option.field.engineering:
+  en: "Engineering"
+  description: "Option engineering of the field field (#47 registry)."
+  fi: "Insinööriala"
+  sv: "Ingenjör"
+  machine: { fi: true, sv: true }
+
+profile.option.field.business:
+  en: "Business"
+  description: "Option business of the field field (#47 registry)."
+  fi: "Kauppa"
+  sv: "Ekonomi"
+  machine: { fi: true, sv: true }
+
+profile.option.field.arts:
+  en: "Arts and culture"
+  description: "Option arts of the field field (#47 registry)."
+  fi: "Taide ja kulttuuri"
+  sv: "Konst och kultur"
+  machine: { fi: true, sv: true }
+
+profile.option.field.science:
+  en: "Science"
+  description: "Option science of the field field (#47 registry)."
+  fi: "Tiede"
+  sv: "Vetenskap"
+  machine: { fi: true, sv: true }
+
+profile.option.field.health:
+  en: "Health care"
+  description: "Option health of the field field (#47 registry)."
+  fi: "Terveysala"
+  sv: "Vård"
+  machine: { fi: true, sv: true }
+
+profile.option.field.education:
+  en: "Education"
+  description: "Option education of the field field (#47 registry)."
+  fi: "Kasvatus ja opetus"
+  sv: "Utbildning"
+  machine: { fi: true, sv: true }
+
+profile.option.field.law:
+  en: "Law"
+  description: "Option law of the field field (#47 registry)."
+  fi: "Oikeustiede"
+  sv: "Juridik"
+  machine: { fi: true, sv: true }
+
+profile.option.field.social:
+  en: "Social sciences"
+  description: "Option social of the field field (#47 registry)."
+  fi: "Yhteiskuntatieteet"
+  sv: "Samhällsvetenskap"
+  machine: { fi: true, sv: true }
+
+profile.option.field.trades:
+  en: "Trades"
+  description: "Option trades of the field field (#47 registry)."
+  fi: "Käsityöammatit"
+  sv: "Hantverk"
+  machine: { fi: true, sv: true }
+
+profile.option.field.service:
+  en: "Service"
+  description: "Option service of the field field (#47 registry)."
+  fi: "Palveluala"
+  sv: "Service"
+  machine: { fi: true, sv: true }
+
+profile.option.field.other:
+  en: "Other"
+  description: "Option other of the field field (#47 registry)."
+  fi: "Muu"
+  sv: "Annat"
+  machine: { fi: true, sv: true }
+
+profile.prompt.sunday:
+  en: "My ideal Sunday"
+  description: "Prompt sunday (#47); the person answers it in a line or two."
+  fi: "Täydellinen sunnuntaini"
+  sv: "Min perfekta söndag"
+  machine: { fi: true, sv: true }
+
+profile.prompt.proud_of:
+  en: "Something I am quietly proud of"
+  description: "Prompt proud_of (#47); the person answers it in a line or two."
+  fi: "Jotain, mistä olen hiljaa ylpeä"
+  sv: "Något jag är stilla stolt över"
+  machine: { fi: true, sv: true }
+
+profile.prompt.argue_about:
+  en: "I will happily argue about"
+  description: "Prompt argue_about (#47); the person answers it in a line or two."
+  fi: "Väittelen mielelläni aiheesta"
+  sv: "Jag diskuterar gärna om"
+  machine: { fi: true, sv: true }
+
+profile.prompt.unpopular_opinion:
+  en: "An unpopular opinion I hold"
+  description: "Prompt unpopular_opinion (#47); the person answers it in a line or two."
+  fi: "Epäsuosittu mielipiteeni"
+  sv: "En impopulär åsikt jag har"
+  machine: { fi: true, sv: true }
+
+profile.prompt.teach_me:
+  en: "Teach me"
+  description: "Prompt teach_me (#47); the person answers it in a line or two."
+  fi: "Opeta minulle"
+  sv: "Lär mig"
+  machine: { fi: true, sv: true }
+
+profile.prompt.first_date:
+  en: "A good first date is"
+  description: "Prompt first_date (#47); the person answers it in a line or two."
+  fi: "Hyvät ensitreffit ovat"
+  sv: "En bra första dejt är"
+  machine: { fi: true, sv: true }
+
+profile.prompt.never_again:
+  en: "Never again"
+  description: "Prompt never_again (#47); the person answers it in a line or two."
+  fi: "En enää koskaan"
+  sv: "Aldrig igen"
+  machine: { fi: true, sv: true }
+
+profile.prompt.overrated:
+  en: "Overrated"
+  description: "Prompt overrated (#47); the person answers it in a line or two."
+  fi: "Yliarvostettua"
+  sv: "Överskattat"
+  machine: { fi: true, sv: true }
+
+profile.prompt.hidden_talent:
+  en: "My hidden talent"
+  description: "Prompt hidden_talent (#47); the person answers it in a line or two."
+  fi: "Salainen taitoni"
+  sv: "Min dolda talang"
+  machine: { fi: true, sv: true }
+
+profile.prompt.last_laugh:
+  en: "The last thing that made me laugh"
+  description: "Prompt last_laugh (#47); the person answers it in a line or two."
+  fi: "Viimeksi nauratti"
+  sv: "Det senaste som fick mig att skratta"
+  machine: { fi: true, sv: true }
+
+profile.prompt.three_things:
+  en: "Three things I cannot live without"
+  description: "Prompt three_things (#47); the person answers it in a line or two."
+  fi: "Kolme asiaa, joita en voi elää ilman"
+  sv: "Tre saker jag inte kan leva utan"
+  machine: { fi: true, sv: true }
+
+profile.prompt.ask_me:
+  en: "Ask me about"
+  description: "Prompt ask_me (#47); the person answers it in a line or two."
+  fi: "Kysy minulta"
+  sv: "Fråga mig om"
+  machine: { fi: true, sv: true }
+
+profile.prompts.label:
+  en: "Prompts"
+  description: "Heading of the prompts section."
+  fi: "Kysymykset"
+  sv: "Frågor"
+  machine: { fi: true, sv: true }
+
+profile.prompts.hint:
+  en: "Pick up to {max, number} and answer each in a line or two."
+  description: "Hint under the prompts heading; {max} is the cap."
+  fi: "Valitse enintään {max, number} ja vastaa kuhunkin rivillä tai kahdella."
+  sv: "Välj upp till {max, number} och svara på var och en med en rad eller två."
+  machine: { fi: true, sv: true }
+
+profile.prompts.answer:
+  en: "Your answer to: {prompt}"
+  description: "Accessibility label of a prompt's answer field; {prompt} is the prompt text."
+  fi: "Vastauksesi kysymykseen: {prompt}"
+  sv: "Ditt svar på: {prompt}"
+  machine: { fi: true, sv: true }
+
+profile.prompts.remove:
+  en: "Remove the prompt: {prompt}"
+  description: "Accessibility label of the remove button of one prompt."
+  fi: "Poista kysymys: {prompt}"
+  sv: "Ta bort frågan: {prompt}"
+  machine: { fi: true, sv: true }
+
+profile.prompts.removeButton:
+  en: "Remove"
+  description: "Visible text of the button that removes a prompt; its accessibility label names the prompt."
+  fi: "Poista"
+  sv: "Ta bort"
+  machine: { fi: true, sv: true }
+
+profile.prompts.pick:
+  en: "Add a prompt"
+  description: "Heading of the list of prompts still available."
+  fi: "Lisää kysymys"
+  sv: "Lägg till en fråga"
+  machine: { fi: true, sv: true }
+
+profile.completeness.title:
+  en: "Before your card can be shown"
+  description: "Heading of the completeness checklist."
+  fi: "Ennen kuin korttisi voidaan näyttää"
+  sv: "Innan ditt kort kan visas"
+  machine: { fi: true, sv: true }
+
+profile.completeness.complete:
+  en: "Your card is complete."
+  description: "Shown when nothing is missing."
+  fi: "Korttisi on valmis."
+  sv: "Ditt kort är klart."
+  machine: { fi: true, sv: true }
+
+profile.completeness.display_name:
+  en: "A name on the card"
+  description: "Missing item."
+  fi: "Nimi kortille"
+  sv: "Ett namn på kortet"
+  machine: { fi: true, sv: true }
+
+profile.completeness.photos:
+  en: "At least {min, number} approved photos"
+  description: "Missing item; {min} is the threshold."
+  fi: "Vähintään {min, number} hyväksyttyä kuvaa"
+  sv: "Minst {min, number} godkända foton"
+  machine: { fi: true, sv: true }
+
+profile.completeness.bio_or_prompts:
+  en: "A bio of {min, number} characters, or two answered prompts"
+  description: "Missing item; {min} is the bio threshold."
+  fi: "Vähintään {min, number} merkin esittely tai kaksi vastattua kysymystä"
+  sv: "En presentation på {min, number} tecken eller två besvarade frågor"
+  machine: { fi: true, sv: true }
+
+profile.completeness.seeks:
+  en: "Whom you are looking for (set in onboarding)"
+  description: "Missing item that onboarding (#46) sets."
+  fi: "Ketä etsit (asetetaan aloituksessa)"
+  sv: "Vem du söker (anges i introduktionen)"
+  machine: { fi: true, sv: true }
+
+profile.completeness.age_window:
+  en: "Your age window (set in onboarding)"
+  description: "Missing item that onboarding (#46) sets."
+  fi: "Ikähaarukkasi (asetetaan aloituksessa)"
+  sv: "Ditt åldersspann (anges i introduktionen)"
+  machine: { fi: true, sv: true }
+
+profile.card.open:
+  en: "See your card"
+  description: "Button that opens the card preview."
+  fi: "Katso korttisi"
+  sv: "Se ditt kort"
+  machine: { fi: true, sv: true }
+
+profile.card.title:
+  en: "Your card"
+  description: "Heading of the card preview screen."
+  fi: "Korttisi"
+  sv: "Ditt kort"
+  machine: { fi: true, sv: true }
+
+profile.card.explain:
+  en: "This is what others see."
+  description: "Lead text of the card preview."
+  fi: "Tämän muut näkevät."
+  sv: "Det här ser andra."
+  machine: { fi: true, sv: true }
+
+profile.card.empty:
+  en: "Save your profile first, then come back here."
+  description: "Card preview before the first save."
+  fi: "Tallenna profiilisi ensin ja tule sitten takaisin."
+  sv: "Spara din profil först och kom sedan tillbaka."
+  machine: { fi: true, sv: true }
+
+profile.card.loading:
+  en: "Loading your card…"
+  description: "Shown while GET /profile/card is in flight."
+  fi: "Ladataan korttiasi…"
+  sv: "Läser in ditt kort…"
+  machine: { fi: true, sv: true }
+
+profile.card.failed:
+  en: "Your card could not be loaded."
+  description: "GET /profile/card failed."
+  fi: "Korttia ei voitu ladata."
+  sv: "Kortet kunde inte läsas in."
+  machine: { fi: true, sv: true }
+
+profile.card.verifiedAge:
+  en: "{years, number}, age verified by your bank"
+  description: "The age line on the card (#47): whole years from the bank-verified year and month."
+  fi: "{years, number}, ikä varmistettu pankistasi"
+  sv: "{years, number}, ålder verifierad av din bank"
+  machine: { fi: true, sv: true }
+
+profile.card.photoLabel:
+  en: "Photo {position, number} of {total, number}"
+  description: "Screen-reader label of a card photo."
+  fi: "Kuva {position, number} / {total, number}"
+  sv: "Foto {position, number} av {total, number}"
+  machine: { fi: true, sv: true }
+
+profile.card.back:
+  en: "Back to your profile"
+  description: "Back button of the card preview."
+  fi: "Takaisin profiiliisi"
+  sv: "Tillbaka till din profil"
+  machine: { fi: true, sv: true }
+
+# --- Legal texts (#46, ADR-010): binding Finnish wording, versioned, never machine-translated. ---
+# DRAFTS: the maintainer and the association's counsel replace these before
+# launch; a new wording is a new consent_version and everyone is asked again.
+
+legal.terms.title:
+  en: "Terms of use"
+  description: "Heading of the terms consent (#46). Binding legal text; the Finnish is the wording that counts."
+  fi: "Käyttöehdot"
+  consent_version: "2026-09-draft-1"
+
+legal.terms.summary:
+  en: "DRAFT: Kuutti is a free dating service run by a registered association for adults living in Finland. Every account is verified with a Finnish bank login. You agree to treat other members with respect, to upload only photos of yourself, and not to copy or collect other members' photos or profiles. Kuutti may remove content and close accounts that break these terms."
+  description: "The terms the person accepts by version (#46). DRAFT wording; the full text is a page of #53."
+  fi: "LUONNOS: Kuutti on rekisteröidyn yhdistyksen ylläpitämä maksuton deittipalvelu Suomessa asuville täysi-ikäisille. Jokainen tili varmistetaan suomalaisella pankkitunnistautumisella. Sitoudut kohtelemaan muita jäseniä kunnioittavasti, lataamaan vain kuvia itsestäsi sekä olemaan kopioimatta tai keräämättä muiden jäsenten kuvia tai profiileja. Kuutti voi poistaa sisältöä ja sulkea tilejä, jotka rikkovat näitä ehtoja."
+  consent_version: "2026-09-draft-1"
+
+legal.privacy.title:
+  en: "Privacy"
+  description: "Heading of the privacy consent (#46). Binding legal text."
+  fi: "Tietosuoja"
+  consent_version: "2026-09-draft-1"
+
+legal.privacy.summary:
+  en: "DRAFT: Kuutti stores your year and month of birth, a keyed hash of your personal identity code, your self-declared gender, whom you seek, your age window, your area, your profile and photos, and a log of the photos you fetch. It never stores your personal identity code, your legal sex, your name from the bank or your date of birth. You can download everything and delete your account at any time; deletion removes your profile, photos and preferences and keeps only what the law requires."
+  description: "The privacy summary the person accepts by version (#46). DRAFT wording; the full policy is a page of #53."
+  fi: "LUONNOS: Kuutti tallentaa syntymävuotesi ja -kuukautesi, henkilötunnuksesi avaimellisen tiivisteen, itse ilmoittamasi sukupuolen, kenen seuraa etsit, ikähaarukkasi, alueesi, profiilisi ja kuvasi sekä lokin hakemistasi kuvista. Se ei koskaan tallenna henkilötunnustasi, juridista sukupuoltasi, pankin ilmoittamaa nimeäsi tai syntymäaikaasi. Voit ladata kaikki tietosi ja poistaa tilisi milloin tahansa; poisto hävittää profiilin, kuvat ja asetukset ja säilyttää vain sen, mitä laki vaatii."
+  consent_version: "2026-09-draft-1"
+
+legal.research.title:
+  en: "Research"
+  description: "Heading of the research opt-in (#46, #50). Binding legal text."
+  fi: "Tutkimus"
+  consent_version: "2026-09-draft-1"
+
+legal.research.summary:
+  en: "DRAFT: If you say yes, anonymised events about how you use Kuutti (for example that a round was shown or a like was sent; never message text, never who you are) are kept under a separate research identifier for up to 90 days and used by the association's research partner to study how the matching works. You can withdraw at any time; withdrawing removes the link between you and the events."
+  description: "The research opt-in the person accepts by version and can withdraw (#46, #50). DRAFT wording."
+  fi: "LUONNOS: Jos sanot kyllä, anonymisoituja tapahtumia Kuutin käytöstäsi (esimerkiksi että kierros näytettiin tai tykkäys lähetettiin; ei koskaan viestien tekstiä eikä sitä, kuka olet) säilytetään erillisellä tutkimustunnisteella enintään 90 päivää, ja yhdistyksen tutkimuskumppani käyttää niitä yhdistämisen toiminnan tutkimiseen. Voit perua milloin tahansa; peruminen poistaa yhteyden sinun ja tapahtumien välillä."
+  consent_version: "2026-09-draft-1"
+
 settings.open:
   en: Settings
   description: Screen-reader label of the icon button that opens the settings sheet (non-production builds).
@@ -383,6 +1223,48 @@ errors.photo_budget_exceeded:
   sv: Du har tittat på många foton i dag. Fotona är tillgängliga igen efter midnatt.
   machine: { fi: true, sv: true }
 
+errors.card_budget_exceeded:
+  en: You have seen many profiles today. New ones come after midnight.
+  description: Card route (429 with Retry-After), the account has been shown the day's budget of cards from matching_config exposure_cards_per_day (TD-6, #47); the day rolls at midnight in Finland.
+  fi: Olet nähnyt tänään paljon profiileja. Uusia tulee keskiyön jälkeen.
+  sv: Du har sett många profiler i dag. Nya kommer efter midnatt.
+  machine: { fi: true, sv: true }
+
+errors.text_contact_details:
+  en: Your profile text cannot contain an e-mail address, a link, a phone number or a social media handle.
+  description: Profile save (400), a text field carried a way to reach the person outside Kuutti (#47, the plain-text rule). The API says which field in the envelope's detail, never in the message.
+  fi: Profiilitekstissä ei voi olla sähköpostiosoitetta, linkkiä, puhelinnumeroa tai somekäyttäjänimeä.
+  sv: Profiltexten kan inte innehålla en e-postadress, en länk, ett telefonnummer eller ett användarnamn på sociala medier.
+  machine: { fi: true, sv: true }
+
+errors.special_category_locked:
+  en: This field needs your explicit consent first.
+  description: Profile save (403), a special-category field was set without the consent version (#47, ADR-009).
+  fi: Tämä kenttä vaatii ensin nimenomaisen suostumuksesi.
+  sv: Det här fältet kräver först ditt uttryckliga samtycke.
+  machine: { fi: true, sv: true }
+
+errors.agreement_outdated:
+  en: "This text has changed since you read it. Please read and accept the new version."
+  description: "Consent route (409), the version the app sent is not the current consent_version of that wording (#46)."
+  fi: "Tämä teksti on muuttunut sen jälkeen, kun luit sen. Lue ja hyväksy uusi versio."
+  sv: "Den här texten har ändrats sedan du läste den. Läs och godkänn den nya versionen."
+  machine: { fi: true, sv: true }
+
+errors.too_many_changes:
+  en: "You have changed this many times today. Try again tomorrow."
+  description: "Consent route (429), the research opt-in was given and withdrawn more than the day allows (#46); the rows are proof of consent and are kept, so churn is capped."
+  fi: "Olet muuttanut tätä tänään monta kertaa. Yritä uudelleen huomenna."
+  sv: "Du har ändrat det här många gånger i dag. Försök igen i morgon."
+  machine: { fi: true, sv: true }
+
+errors.pond_unknown:
+  en: "That area is not on the list."
+  description: "Pond choice (400), the pond id names no pond (#46)."
+  fi: "Tuota aluetta ei ole listalla."
+  sv: "Det området finns inte på listan."
+  machine: { fi: true, sv: true }
+
 errors.admin_not_allowed:
   en: This bank login has no moderator role.
   description: Staff sign-in (403), the identified person has no row in moderator_roles or their identity is not in good standing; nothing was created.
@@ -608,6 +1490,253 @@ admin.source.offer:
 admin.source.unavailable:
   en: Source code (AGPL-3.0). The API cannot be reached, so the address of this deployment's source is not known right now.
   description: Moderation panel footer when the health request failed.
+
+# --- Onboarding (#46) ---
+
+onboarding.title:
+  en: "Welcome to Kuutti"
+  description: "Heading of the onboarding flow (#46)."
+  fi: "Tervetuloa Kuuttiin"
+  sv: "Välkommen till Kuutti"
+  machine: { fi: true, sv: true }
+
+onboarding.progress:
+  en: "Step {step, number} of {total, number}"
+  description: "Progress line above each onboarding step."
+  fi: "Vaihe {step, number} / {total, number}"
+  sv: "Steg {step, number} av {total, number}"
+  machine: { fi: true, sv: true }
+
+onboarding.loading:
+  en: "One moment…"
+  description: "Shown while the onboarding status loads."
+  fi: "Hetki…"
+  sv: "Ett ögonblick…"
+  machine: { fi: true, sv: true }
+
+onboarding.failed:
+  en: "Something did not load. Try again."
+  description: "Onboarding status or a step failed."
+  fi: "Jotain ei latautunut. Yritä uudelleen."
+  sv: "Något kunde inte läsas in. Försök igen."
+  machine: { fi: true, sv: true }
+
+onboarding.retry:
+  en: "Try again"
+  description: "Retry button."
+  fi: "Yritä uudelleen"
+  sv: "Försök igen"
+  machine: { fi: true, sv: true }
+
+onboarding.continue:
+  en: "Continue"
+  description: "The button that saves a step and moves on."
+  fi: "Jatka"
+  sv: "Fortsätt"
+  machine: { fi: true, sv: true }
+
+onboarding.gender.title:
+  en: "How do you describe yourself?"
+  description: "Gender step heading; self-declared (rule 3)."
+  fi: "Miten kuvailet itseäsi?"
+  sv: "Hur beskriver du dig själv?"
+  machine: { fi: true, sv: true }
+
+onboarding.gender.explain:
+  en: "Your own words, not the bank's. This is shown on your card."
+  description: "Gender step lead text."
+  fi: "Omin sanoin, ei pankin. Tämä näkyy kortillasi."
+  sv: "Dina egna ord, inte bankens. Det här visas på ditt kort."
+  machine: { fi: true, sv: true }
+
+onboarding.gender.woman:
+  en: "Woman"
+  description: "Gender option."
+  fi: "Nainen"
+  sv: "Kvinna"
+  machine: { fi: true, sv: true }
+
+onboarding.gender.man:
+  en: "Man"
+  description: "Gender option."
+  fi: "Mies"
+  sv: "Man"
+  machine: { fi: true, sv: true }
+
+onboarding.gender.non_binary:
+  en: "Non-binary"
+  description: "Gender option."
+  fi: "Muunsukupuolinen"
+  sv: "Icke-binär"
+  machine: { fi: true, sv: true }
+
+onboarding.seeks.title:
+  en: "Whom are you looking for?"
+  description: "Seeks step heading."
+  fi: "Ketä etsit?"
+  sv: "Vem söker du?"
+  machine: { fi: true, sv: true }
+
+onboarding.seeks.explain:
+  en: "Pick everyone you want to see. Nobody outside your choice is ever shown to you, and you are never shown to anyone who did not pick you."
+  description: "Seeks step lead text: the hard filter in both directions (rule 7)."
+  fi: "Valitse kaikki, joita haluat nähdä. Ketään valintasi ulkopuolelta ei koskaan näytetä sinulle, eikä sinua näytetä kenellekään, joka ei valinnut sinua."
+  sv: "Välj alla du vill se. Ingen utanför ditt val visas någonsin för dig, och du visas aldrig för någon som inte valde dig."
+  machine: { fi: true, sv: true }
+
+onboarding.seeks.woman:
+  en: "Women"
+  description: "Seeks option."
+  fi: "Naisia"
+  sv: "Kvinnor"
+  machine: { fi: true, sv: true }
+
+onboarding.seeks.man:
+  en: "Men"
+  description: "Seeks option."
+  fi: "Miehiä"
+  sv: "Män"
+  machine: { fi: true, sv: true }
+
+onboarding.seeks.non_binary:
+  en: "Non-binary people"
+  description: "Seeks option."
+  fi: "Muunsukupuolisia"
+  sv: "Icke-binära personer"
+  machine: { fi: true, sv: true }
+
+onboarding.seeks.anyone:
+  en: "Anyone"
+  description: "Seeks shortcut: every option at once."
+  fi: "Kenet tahansa"
+  sv: "Vem som helst"
+  machine: { fi: true, sv: true }
+
+onboarding.age.title:
+  en: "What ages?"
+  description: "Age window step heading."
+  fi: "Minkä ikäisiä?"
+  sv: "Vilka åldrar?"
+  machine: { fi: true, sv: true }
+
+onboarding.age.explain:
+  en: "The youngest and the oldest you want to see, between {min, number} and {max, number}."
+  description: "Age window lead text; {min} and {max} are the bounds."
+  fi: "Nuorin ja vanhin, jotka haluat nähdä, välillä {min, number} ja {max, number}."
+  sv: "Den yngsta och den äldsta du vill se, mellan {min, number} och {max, number}."
+  machine: { fi: true, sv: true }
+
+onboarding.age.youngest:
+  en: "Youngest"
+  description: "Label of the lower bound field."
+  fi: "Nuorin"
+  sv: "Yngsta"
+  machine: { fi: true, sv: true }
+
+onboarding.age.oldest:
+  en: "Oldest"
+  description: "Label of the upper bound field."
+  fi: "Vanhin"
+  sv: "Äldsta"
+  machine: { fi: true, sv: true }
+
+onboarding.age.invalid:
+  en: "Both between {min, number} and {max, number}, the youngest at most the oldest."
+  description: "Shown when the age window does not validate."
+  fi: "Molemmat välillä {min, number} ja {max, number}, nuorin enintään vanhin."
+  sv: "Båda mellan {min, number} och {max, number}, den yngsta högst den äldsta."
+  machine: { fi: true, sv: true }
+
+onboarding.pond.title:
+  en: "Where do you want to meet people?"
+  description: "Pond step heading."
+  fi: "Missä haluat tavata ihmisiä?"
+  sv: "Var vill du träffa människor?"
+  machine: { fi: true, sv: true }
+
+onboarding.pond.explain:
+  en: "Matching happens inside the area you choose."
+  description: "Pond step lead text (TD-10)."
+  fi: "Yhdistäminen tapahtuu valitsemasi alueen sisällä."
+  sv: "Matchningen sker inom det område du väljer."
+  machine: { fi: true, sv: true }
+
+onboarding.consents.title:
+  en: "Two things to agree to"
+  description: "Consents step heading."
+  fi: "Kaksi asiaa hyväksyttäväksi"
+  sv: "Två saker att godkänna"
+  machine: { fi: true, sv: true }
+
+onboarding.consents.explain:
+  en: "Read both. You accept exactly this version of the text; if it changes, we ask you again."
+  description: "Consents step lead text (versioned consent)."
+  fi: "Lue molemmat. Hyväksyt juuri tämän tekstiversion; jos se muuttuu, kysymme uudelleen."
+  sv: "Läs båda. Du godkänner exakt den här versionen av texten; om den ändras frågar vi igen."
+  machine: { fi: true, sv: true }
+
+onboarding.consents.binding:
+  en: "The Finnish text is the one that counts; this is a translation."
+  description: "Shown above the legal texts in every language but Finnish (TD-17)."
+  fi: "Suomenkielinen teksti on sitova; tämä on käännös."
+  sv: "Den finska texten är den som gäller; det här är en översättning."
+  machine: { fi: true, sv: true }
+
+onboarding.consents.version:
+  en: "Version {version}"
+  description: "The consent version under each legal text; {version} is the consent_version string."
+  fi: "Versio {version}"
+  sv: "Version {version}"
+  machine: { fi: true, sv: true }
+
+onboarding.consents.accept:
+  en: "I accept the terms and the privacy notice"
+  description: "The one button that gives both required consents."
+  fi: "Hyväksyn käyttöehdot ja tietosuojaselosteen"
+  sv: "Jag godkänner villkoren och integritetsmeddelandet"
+  machine: { fi: true, sv: true }
+
+onboarding.consents.outdatedApp:
+  en: "This text has a newer version than the one built into this app. Update the app to continue."
+  description: "Shown on the consents step when the API's current consent_version differs from the version of the text bundled in the app (#46, ADR-010 §4): the person may only accept the exact wording they read."
+  fi: "Tästä tekstistä on uudempi versio kuin sovellukseen sisältyvä. Päivitä sovellus jatkaaksesi."
+  sv: "Den här texten har en nyare version än den som är inbyggd i appen. Uppdatera appen för att fortsätta."
+  machine: { fi: true, sv: true }
+
+onboarding.research.title:
+  en: "Help us learn how matching works"
+  description: "Research opt-in heading."
+  fi: "Auta meitä oppimaan, miten yhdistäminen toimii"
+  sv: "Hjälp oss lära hur matchningen fungerar"
+  machine: { fi: true, sv: true }
+
+onboarding.research.yes:
+  en: "Yes, I take part"
+  description: "Gives the research consent."
+  fi: "Kyllä, osallistun"
+  sv: "Ja, jag deltar"
+  machine: { fi: true, sv: true }
+
+onboarding.research.no:
+  en: "Not now"
+  description: "Skips the research opt-in."
+  fi: "Ei nyt"
+  sv: "Inte nu"
+  machine: { fi: true, sv: true }
+
+onboarding.research.later:
+  en: "You can change this later, at any time."
+  description: "Under the research choice."
+  fi: "Voit muuttaa tätä myöhemmin, milloin tahansa."
+  sv: "Du kan ändra det här senare, när som helst."
+  machine: { fi: true, sv: true }
+
+onboarding.done:
+  en: "All set. Add a few photos and fill in your profile next."
+  description: "Last line before the flow closes."
+  fi: "Valmista. Lisää seuraavaksi muutama kuva ja täytä profiilisi."
+  sv: "Klart. Lägg till några foton och fyll i din profil härnäst."
+  machine: { fi: true, sv: true }
 
 photos.title:
   en: Your photos
@@ -1178,4 +2307,48 @@ account.delete.failed:
   description: Account card, the deletion request failed.
   fi: Poisto ei onnistunut. Yritä uudelleen.
   sv: Borttagningen gick inte igenom. Försök igen.
+  machine: { fi: true, sv: true }
+
+# --- Research opt-in on the account card, and the home screen's onboarding gate (#46) ---
+
+account.research.label:
+  en: "Take part in research"
+  description: "Label of the research opt-in switch on the account card (#46): on when the active research consent names the current wording."
+  fi: "Osallistu tutkimukseen"
+  sv: "Delta i forskningen"
+  machine: { fi: true, sv: true }
+
+account.research.explain:
+  en: "Anonymised events about how you use Kuutti, under a separate research identifier. You can change this at any time."
+  description: "Line under the research switch."
+  fi: "Anonymisoituja tapahtumia Kuutin käytöstäsi erillisellä tutkimustunnisteella. Voit muuttaa tätä milloin tahansa."
+  sv: "Anonymiserade händelser om hur du använder Kuutti, under ett separat forskningsid. Du kan ändra det här när som helst."
+  machine: { fi: true, sv: true }
+
+account.research.failed:
+  en: "The research choice could not be saved. Try again."
+  description: "Notice when giving or withdrawing the research consent failed."
+  fi: "Tutkimusvalintaa ei voitu tallentaa. Yritä uudelleen."
+  sv: "Forskningsvalet kunde inte sparas. Försök igen."
+  machine: { fi: true, sv: true }
+
+smoke.gate.checking:
+  en: "Checking your account setup…"
+  description: "Home screen while GET /onboarding is in flight (#46): nothing that needs a finished account shows until it says complete."
+  fi: "Tarkistetaan tilisi asetuksia…"
+  sv: "Kontrollerar din kontoinställning…"
+  machine: { fi: true, sv: true }
+
+smoke.gate.failed:
+  en: "Your account setup could not be checked."
+  description: "Home screen when GET /onboarding failed: the gate stays closed and offers a retry."
+  fi: "Tilisi asetuksia ei voitu tarkistaa."
+  sv: "Din kontoinställning kunde inte kontrolleras."
+  machine: { fi: true, sv: true }
+
+smoke.gate.retry:
+  en: "Check again"
+  description: "Retry button of the home screen's onboarding gate."
+  fi: "Tarkista uudelleen"
+  sv: "Kontrollera igen"
   machine: { fi: true, sv: true }

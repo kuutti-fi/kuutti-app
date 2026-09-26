@@ -24,6 +24,15 @@ export function dayWindow(at: Date, timeZone: string = DAY_TIME_ZONE): DayWindow
   };
 }
 
+/** The year and month it is in Finland at `at`: the age on the card counts from them (rule 3, #47). */
+export function localYearMonth(
+  at: Date,
+  timeZone: string = DAY_TIME_ZONE,
+): { year: number; month: number } {
+  const { year, month } = localParts(at, timeZone);
+  return { year, month };
+}
+
 /** Whole seconds until the window ends, at least one: the Retry-After of a refusal. */
 export function secondsUntil(end: Date, now: Date): number {
   return Math.max(1, Math.ceil((end.getTime() - now.getTime()) / 1000));
