@@ -12,8 +12,8 @@ import { type MediaStore, objectKey } from "./store.ts";
 export type PhotoErasure = {
   photos: number;
   accessRows: number;
-  /** Content keys no remaining photo row references: their objects are to be deleted after commit. */
-  orphanedKeys: string[];
+  /** Content keys of the deleted rows; which of their objects still have an owner is decided after the commit. */
+  keys: string[];
 };
 
 export async function erasePhotosOfAccount(
@@ -22,29 +22,37 @@ export async function erasePhotosOfAccount(
 ): Promise<PhotoErasure> {
   const keys = await repo.deletePhotosOfAccount(tx, accountId);
   const accessRows = await repo.deletePhotoAccessOfAccount(tx, accountId);
-  return { photos: keys.length, accessRows, orphanedKeys: await repo.orphanedKeys(tx, keys) };
+  return { photos: keys.length, accessRows, keys };
 }
 
 /**
- * Best effort after the commit: a failure is logged with the content keys
- * (SHA-256 of the WebP bytes, nothing personal) and the account, so the
- * orphan sweep of M4 has something to go on; the rows are already gone.
+ * After the commit: the objects of the content keys no row references any
+ * more. The ownership check runs here, against committed rows, not inside the
+ * transaction, so an upload of the same content that committed meanwhile
+ * keeps its objects. What remains is the window between this check and the
+ * delete, the same one the upload's failure path and deletePhoto have had
+ * since #57: closing it takes a per-content-key ownership protocol in the
+ * media slice, noted for the M4 orphan sweep. Best effort: a failure is
+ * logged with the content keys (SHA-256 of the WebP bytes, nothing personal)
+ * and the account; the rows are already gone.
  */
-export async function deleteObjectsForKeys(
-  store: MediaStore,
-  logger: Logger,
+export async function deleteOrphanedObjects(
+  deps: { db: Queryable; store: MediaStore; logger: Logger },
   keys: string[],
   context: { accountId: string },
 ): Promise<number> {
   if (keys.length === 0) return 0;
-  const objectKeys = keys.flatMap((key) =>
-    PHOTO_VARIANTS.map((variant) => objectKey(key, variant)),
-  );
+  let objectKeys: string[] = [];
   try {
-    await store.delete(objectKeys);
+    const orphaned = await repo.orphanedKeys(deps.db, keys);
+    objectKeys = orphaned.flatMap((key) =>
+      PHOTO_VARIANTS.map((variant) => objectKey(key, variant)),
+    );
+    if (objectKeys.length === 0) return 0;
+    await deps.store.delete(objectKeys);
     return objectKeys.length;
   } catch (error) {
-    logger.error(
+    deps.logger.error(
       { err: error, accountId: context.accountId, keys, objects: objectKeys.length },
       "erasure: deleting photo objects failed",
     );

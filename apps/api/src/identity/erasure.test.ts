@@ -1,5 +1,6 @@
-import { AccountExport, Photo } from "@kuutti/schema";
-import { describe, expect } from "vitest";
+import { accountState } from "@kuutti/db";
+import { AccountExport, AccountState, Photo } from "@kuutti/schema";
+import { describe, expect, it } from "vitest";
 import { createApp } from "../app.ts";
 import { signedInAccount, staffSession, withMatchingConfig } from "../test/account.ts";
 import { captureLogger, type TestContext, test, testConfig } from "../test/harness.ts";
@@ -229,6 +230,27 @@ describe("account erasure", () => {
         at: new Date(),
       }),
     ).toBeNull();
+    // A bank login that resolved this account just before the erasure
+    // publishes no code for it.
+    const { rows: requests } = await ctx.client.query<{ id: string }>(
+      `INSERT INTO auth_request (state, nonce, platform, locale, expires_at)
+       VALUES ('st-late', 'nonce-late', 'ios', NULL, now() + interval '5 minutes') RETURNING id`,
+    );
+    const requestId = requests[0]?.id ?? "";
+    expect(
+      await repo.attachCode(ctx.client, {
+        id: requestId,
+        codeHash: "late-code",
+        codeExpiresAt: new Date(Date.now() + 60_000),
+        accountId: a.accountId,
+        outcome: "resumed",
+      }),
+    ).toBe(false);
+    expect(
+      await count(ctx, "SELECT count(*) AS n FROM auth_request WHERE account_id = $1", [
+        a.accountId,
+      ]),
+    ).toBe(0);
     for (const table of ["photo", "photo_access", "session"]) {
       expect(
         await count(ctx, `SELECT count(*) AS n FROM ${table} WHERE account_id = $1`, [a.accountId]),
@@ -236,6 +258,10 @@ describe("account erasure", () => {
       ).toBe(0);
     }
     expect(store.objects.size).toBe(0);
+  });
+
+  it("AccountState mirrors the database enum", () => {
+    expect([...AccountState.options]).toEqual([...accountState.enumValues]);
   });
 
   test("The audit log survives the erasure", async ({ ctx }) => {

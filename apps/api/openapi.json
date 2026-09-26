@@ -341,7 +341,15 @@
               },
               "state": {
                 "type": "string",
-                "minLength": 1
+                "enum": [
+                  "registered",
+                  "active",
+                  "paused",
+                  "shadow_banned",
+                  "suspended",
+                  "banned",
+                  "deleted"
+                ]
               },
               "registeredAt": {
                 "type": "string",
@@ -1455,6 +1463,16 @@
           },
           "401": {
             "description": "unauthenticated, session_expired or session_revoked.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No live account: a second deletion that passed the session guard before the first committed (not_found).",
             "content": {
               "application/json": {
                 "schema": {

@@ -92,15 +92,22 @@ export async function findAuthRequestByCodeHash(
   return rows[0] ? authRequestFrom(rows[0]) : null;
 }
 
+/**
+ * Publishes the one-time code for the account the callback resolved. False
+ * when the account was erased between the resolution and this statement
+ * (#51): no code is attached to a tombstone, and the caller resolves again,
+ * which now reads the cooldown.
+ */
 export async function attachCode(
   db: Queryable,
   input: { id: string; codeHash: string; codeExpiresAt: Date; accountId: string; outcome: string },
-): Promise<void> {
-  await db.query(
+): Promise<boolean> {
+  const result = await db.query(
     `UPDATE auth_request SET code_hash = $2, code_expires_at = $3, account_id = $4, outcome = $5
-     WHERE id = $1`,
+     WHERE id = $1 AND EXISTS (SELECT 1 FROM account WHERE id = $4 AND state <> 'deleted')`,
     [input.id, input.codeHash, input.codeExpiresAt, input.accountId, input.outcome],
   );
+  return result.rowCount === 1;
 }
 
 /** Ends a login attempt without a code: the person cancelled at the bank. */

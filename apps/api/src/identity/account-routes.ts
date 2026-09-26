@@ -25,6 +25,9 @@ const deleteRoute = createRoute({
     204: { description: "Erased. Every token of this account has stopped working." },
     400: errorContent("Validation failed (confirm missing)."),
     401: errorContent("unauthenticated, session_expired or session_revoked."),
+    404: errorContent(
+      "No live account: a second deletion that passed the session guard before the first committed (not_found).",
+    ),
   },
 });
 

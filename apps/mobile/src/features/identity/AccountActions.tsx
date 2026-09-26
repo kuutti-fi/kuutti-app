@@ -40,7 +40,9 @@ export async function shareExport(
     a.href = url;
     a.download = "kuutti-export.json";
     a.click();
-    URL.revokeObjectURL(url);
+    // The browser queues the download asynchronously; revoking at once can
+    // leave it with nothing to save.
+    setTimeout(() => URL.revokeObjectURL(url), 60_000);
     return;
   }
   await share({ title, message: json });

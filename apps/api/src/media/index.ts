@@ -5,7 +5,7 @@
 
 export { photoAdminRoutes } from "./admin-routes.ts";
 export {
-  deleteObjectsForKeys,
+  deleteOrphanedObjects,
   erasePhotosOfAccount,
   exportPhotos,
   type PhotoErasure,

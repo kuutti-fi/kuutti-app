@@ -3,7 +3,7 @@ import type { AccountExport } from "@kuutti/schema";
 import { AppError } from "../lib/errors.ts";
 import type { Logger } from "../lib/logger.ts";
 import {
-  deleteObjectsForKeys,
+  deleteOrphanedObjects,
   erasePhotosOfAccount,
   exportPhotos,
   type MediaDeps,
@@ -63,9 +63,11 @@ export async function eraseAccount(deps: ErasureDeps, accountId: string): Promis
     return { sessions, authRequests, photos, reregisterAfter: deletion.reregisterAfter };
   });
   const objects = deps.media
-    ? await deleteObjectsForKeys(deps.media.store, deps.logger, result.photos.orphanedKeys, {
-        accountId,
-      })
+    ? await deleteOrphanedObjects(
+        { db: deps.db, store: deps.media.store, logger: deps.logger },
+        result.photos.keys,
+        { accountId },
+      )
     : 0;
   const summary: ErasureSummary = {
     sessions: result.sessions,

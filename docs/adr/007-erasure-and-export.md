@@ -22,6 +22,7 @@ The erasure table of TD-7 says what deletion removes (profile, photos, preferenc
 - The export can be large in URLs but small in bytes; a client caches nothing from it (`Cache-Control: no-store`).
 - Migration 0008 relaxes two NOT NULL constraints; every live account still has both values, written by the callback.
 - Deleting the objects after the commit means a crash between the two leaves unreferenced objects in the bucket. M4's report and sanction work brings the orphan sweep that covers this and the upload-crash case of ADR-005.
+- Which objects are orphans is decided after the commit, against committed rows, so an upload of the same content that committed during the erasure keeps its objects. A window remains between that check and the delete; the upload's failure path and `deletePhoto` have had the same one since #57. Closing it takes a per-content-key ownership protocol (an advisory lock around put + insert and around check + delete, or the row before the objects) in the media slice as a whole, to be settled with the M4 orphan sweep.
 
 ## Alternatives considered
 

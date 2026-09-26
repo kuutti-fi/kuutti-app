@@ -50,12 +50,24 @@ export type ExportedPhoto = z.infer<typeof ExportedPhoto>;
  * month, no personal identity code (only its keyed hash, which is omitted
  * because it identifies nothing without the key).
  */
+/** The account row's state; mirrors the database enum `account_state` (a test in apps/api keeps the two equal). */
+export const AccountState = z.enum([
+  "registered",
+  "active",
+  "paused",
+  "shadow_banned",
+  "suspended",
+  "banned",
+  "deleted",
+]);
+export type AccountState = z.infer<typeof AccountState>;
+
 export const AccountExport = z
   .object({
     exportedAt: z.iso.datetime(),
     account: z.object({
       id: z.uuid(),
-      state: z.string().min(1),
+      state: AccountState,
       registeredAt: z.iso.datetime(),
       birthYear: z.int().nullable(),
       birthMonth: z.int().nullable(),

@@ -675,6 +675,15 @@ export interface paths {
                         "application/json": components["schemas"]["ErrorResponse"];
                     };
                 };
+                /** @description No live account: a second deletion that passed the session guard before the first committed (not_found). */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
             };
         };
         delete?: never;
@@ -1448,7 +1457,8 @@ export interface components {
             account: {
                 /** Format: uuid */
                 id: string;
-                state: string;
+                /** @enum {string} */
+                state: "registered" | "active" | "paused" | "shadow_banned" | "suspended" | "banned" | "deleted";
                 /** Format: date-time */
                 registeredAt: string;
                 birthYear: number | null;
