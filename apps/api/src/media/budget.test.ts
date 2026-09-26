@@ -7,7 +7,7 @@ import { signedInAccount, withMatchingConfig } from "../test/account.ts";
 import { captureLogger, type TestContext, test, testConfig } from "../test/harness.ts";
 import { fixturePng, testMediaDeps } from "../test/media.ts";
 import { dayWindow, secondsUntil } from "./budget.ts";
-import { insertPhoto, insertPhotoAccess, recordCardShown } from "./repo.ts";
+import { insertPhoto, insertPhotoAccess, recordCardServed, recordCardShown } from "./repo.ts";
 
 // The exposure budget and the shown-record rule (#52, TD-6, ADR-008),
 // features/safety/exposure.feature. Photos are uploaded through the API so
@@ -176,6 +176,43 @@ describe("exposure", () => {
     const mine = await upload(app, a.headers, await fixturePng(64, 64));
     expect(mine.state).toBe("pending");
     expect((await fetchUrl(app, a.headers, mine.id, "full")).status).toBe(200);
+  });
+});
+
+describe("the card budget across days", () => {
+  test("A card seen on an earlier day counts against today once", async ({ ctx }) => {
+    const { app } = await appWith(ctx);
+    const viewer = await signedInAccount(ctx.client);
+    const b = await signedInAccount(ctx.client);
+    const c = await signedInAccount(ctx.client);
+    const theirs = await upload(app, b.headers, await fixturePng(64, 64));
+    const others = await upload(app, c.headers, await fixturePng(72, 72));
+    const day = dayWindow(new Date());
+    const serve = (subject: string, photoId: string) =>
+      recordCardServed(ctx.client, {
+        viewerAccountId: viewer.accountId,
+        subjectAccountId: subject,
+        photoIds: [photoId],
+        at: new Date(),
+        since: day.start,
+        limit: 1,
+      });
+    // Seen two days ago: the row exists with an old date.
+    await ctx.client.query(
+      "INSERT INTO card_shown (account_id, photo_id, at) VALUES ($1, $2, now() - interval '2 days')",
+      [viewer.accountId, theirs.id],
+    );
+    const again = await serve(b.accountId, theirs.id);
+    expect(again).toEqual({ used: 0, recorded: true });
+    const { rows } = await ctx.client.query<{ at: Date }>(
+      "SELECT at FROM card_shown WHERE account_id = $1 AND photo_id = $2",
+      [viewer.accountId, theirs.id],
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.at.getTime()).toBeGreaterThanOrEqual(day.start.getTime());
+    // It used today's one card: the next subject is over the budget, the same one is free.
+    expect((await serve(c.accountId, others.id)).recorded).toBe(false);
+    expect(await serve(b.accountId, theirs.id)).toEqual({ used: 1, recorded: true });
   });
 });
 

@@ -2,7 +2,7 @@ import { PROFILE_FIELD_KEYS, PROFILE_FIELDS, type ProfileCard } from "@kuutti/sc
 import { View } from "react-native";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Text } from "@/components/ui/text";
-import { PhotoImage } from "@/features/media";
+import { type OnRefused, PhotoImage } from "@/features/media";
 import { useT } from "@/lib/locale";
 import { fieldLabelKey, optionKey, presetKey, promptKey } from "./keys";
 
@@ -12,7 +12,14 @@ import { fieldLabelKey, optionKey, presetKey, promptKey } from "./keys";
  * the bio or its placeholder, the prompts. The rounds of M4 render the same
  * component; the reason label of rules/mobile.md joins there.
  */
-export function ProfileCardView({ card }: { card: ProfileCard }) {
+export function ProfileCardView({
+  card,
+  onRefused,
+}: {
+  card: ProfileCard;
+  /** A photo URL the API refused (#52 budget or another code): the screen says so instead of a silent placeholder. */
+  onRefused?: OnRefused;
+}) {
   const { t } = useT();
   const [main, ...rest] = card.photos;
   const total = card.photos.length;
@@ -25,6 +32,7 @@ export function ProfileCardView({ card }: { card: ProfileCard }) {
           blurhash={main.blurhash}
           accessibilityLabel={t("profile.card.photoLabel", { position: 1, total })}
           style={{ width: "100%", aspectRatio: 3 / 4 }}
+          onRefused={onRefused}
         />
       )}
       <CardHeader>
@@ -43,6 +51,7 @@ export function ProfileCardView({ card }: { card: ProfileCard }) {
                 blurhash={photo.blurhash}
                 accessibilityLabel={t("profile.card.photoLabel", { position: index + 2, total })}
                 style={{ width: 96, height: 96, borderRadius: 8 }}
+                onRefused={onRefused}
               />
             ))}
           </View>
