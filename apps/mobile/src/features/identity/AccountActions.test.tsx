@@ -160,7 +160,13 @@ describe("AccountActions", () => {
 
   it("shows the research opt-in as a switch and withdraws it", async () => {
     const version = "2026-09-draft-1";
-    const given = {
+    const given: {
+      kind: string;
+      version: string;
+      locale: string;
+      givenAt: string;
+      withdrawnAt: string | null;
+    } = {
       kind: "research",
       version,
       locale: "en",
