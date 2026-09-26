@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { and, eq, ne } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import type { Pool } from "./pool.ts";
-import { account, identity, matchingConfig, ponds } from "./schema/index.ts";
+import { account, identity, matchingConfig, ponds, preferences, profile } from "./schema/index.ts";
 
 /** Otaniemi first, then the city, then the region (project context §1). */
 export const SEED_PONDS = [
@@ -63,6 +63,14 @@ export const SEED_IDENTITIES = [
     account: { birthYear: 1990, birthMonth: 1 },
   },
 ] as const;
+
+/** The seeded live account's profile (#47), so the card preview has something to show against the mock IdP. */
+export const SEED_PROFILE = {
+  displayName: "Seed",
+  bio: "A seeded profile for local development: long enough to count as a bio, short enough to read.",
+  fields: { languages: ["fi", "en"], intent: "long_term", campus: "Otaniemi" },
+  prompts: [{ key: "sunday", answer: "Sauna, then a long breakfast." }],
+} as const;
 
 export const seedHetuHmac = (label: string): string =>
   createHash("sha256").update(`kuutti seed identity: ${label}`).digest("hex");
@@ -133,6 +141,52 @@ export async function seed(pool: Pool, createdBy = "seed"): Promise<SeedResult> 
           birthYear: person.account.birthYear,
           birthMonth: person.account.birthMonth,
         });
+      }
+      const [current] = await db
+        .select({ id: account.id })
+        .from(account)
+        .where(and(eq(account.identityId, row.id), ne(account.state, "deleted")));
+      if (current) {
+        // Onboarding (#46): gender, pond and the two hard rows; the consents
+        // are left for the flow to ask, so the screens can be tried locally.
+        const [otaniemi] = await db
+          .select({ id: ponds.id })
+          .from(ponds)
+          .where(eq(ponds.slug, "otaniemi"));
+        await db
+          .update(account)
+          .set({ gender: "woman", pondId: otaniemi?.id ?? null })
+          .where(eq(account.id, current.id));
+        for (const [field, value] of [
+          ["seeks", ["man", "non_binary"]],
+          ["age_window", { min: 25, max: 40 }],
+        ] as const) {
+          await db
+            .insert(preferences)
+            .values({ accountId: current.id, field, value, mode: "hard" })
+            .onConflictDoUpdate({
+              target: [preferences.accountId, preferences.field],
+              set: { value },
+            });
+        }
+        await db
+          .insert(profile)
+          .values({
+            accountId: current.id,
+            displayName: SEED_PROFILE.displayName,
+            bio: SEED_PROFILE.bio,
+            fields: SEED_PROFILE.fields,
+            prompts: SEED_PROFILE.prompts,
+          })
+          .onConflictDoUpdate({
+            target: profile.accountId,
+            set: {
+              displayName: SEED_PROFILE.displayName,
+              bio: SEED_PROFILE.bio,
+              fields: SEED_PROFILE.fields,
+              prompts: SEED_PROFILE.prompts,
+            },
+          });
       }
     }
   }

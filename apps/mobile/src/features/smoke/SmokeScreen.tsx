@@ -13,7 +13,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Icon } from "@/components/ui/icon";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Text } from "@/components/ui/text";
-import { AccountActions, useSession } from "@/features/identity";
+import { AccountActions, useOnboardingGate, useSession } from "@/features/identity";
 import { apiBaseUrl, fetchHealth } from "@/lib/api";
 import { useT } from "@/lib/locale";
 import { cn } from "@/lib/utils";
@@ -54,6 +54,9 @@ export function SmokeScreen() {
   const { t } = useT();
   const session = useSession();
   const router = useRouter();
+  // An account that has not finished onboarding (#46) is sent there first; until
+  // the status is known and complete, nothing that needs a finished account shows.
+  const gate = useOnboardingGate();
 
   // The app's own git commit, as opposed to the API's: app.config.ts stamped
   // it into the config when this JavaScript was exported or built.
@@ -171,9 +174,32 @@ export function SmokeScreen() {
                 </Button>
               </CardContent>
             )}
-            {session.status === "signed-in" && (
+            {session.status === "signed-in" && gate.status === "checking" && (
               <CardContent>
-                {/* The photos screen (#48) until the profile (#47) gives it a home. */}
+                <Text accessibilityLiveRegion="polite">{t("smoke.gate.checking")}</Text>
+              </CardContent>
+            )}
+            {session.status === "signed-in" && gate.status === "unknown" && (
+              <CardContent className="gap-3">
+                <Text accessibilityLiveRegion="assertive">{t("smoke.gate.failed")}</Text>
+                <Button variant="outline" onPress={gate.retry}>
+                  {t("smoke.gate.retry")}
+                </Button>
+              </CardContent>
+            )}
+            {session.status === "signed-in" && gate.status === "complete" && (
+              <CardContent className="gap-3">
+                {/* The profile (#47) and the photos (#48): home for them until M4 draws the screens. */}
+                <Button
+                  variant="outline"
+                  accessibilityLabel={t("profile.home.open")}
+                  onPress={() => {
+                    tap();
+                    router.push("/profile");
+                  }}
+                >
+                  <Text>{t("profile.home.open")}</Text>
+                </Button>
                 <Button
                   variant="outline"
                   accessibilityLabel={t("smoke.photos.open")}

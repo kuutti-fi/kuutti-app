@@ -1,11 +1,13 @@
+import { resolve } from "node:path";
+import { createPool, migrate, withTemporaryDatabase } from "@kuutti/db";
 import { Photo, type PhotoFetchBudget, type PhotoVariant } from "@kuutti/schema";
 import { describe, expect, it } from "vitest";
 import { createApp } from "../app.ts";
 import { signedInAccount, withMatchingConfig } from "../test/account.ts";
-import { captureLogger, type TestContext, test, testConfig, testPool } from "../test/harness.ts";
+import { captureLogger, type TestContext, test, testConfig } from "../test/harness.ts";
 import { fixturePng, testMediaDeps } from "../test/media.ts";
 import { dayWindow, secondsUntil } from "./budget.ts";
-import { insertPhoto, insertPhotoAccess, recordCardShown } from "./repo.ts";
+import { insertPhoto, insertPhotoAccess, recordCardServed, recordCardShown } from "./repo.ts";
 
 // The exposure budget and the shown-record rule (#52, TD-6, ADR-008),
 // features/safety/exposure.feature. Photos are uploaded through the API so
@@ -177,55 +179,95 @@ describe("exposure", () => {
   });
 });
 
-describe("the budget under load", () => {
-  // Outside the rolled-back transaction on purpose: the race is between
-  // connections, and one connection cannot race itself. Rows are committed
-  // and removed again.
-  it("holds against a parallel burst: exactly the limit is written", async () => {
-    const pool = testPool();
-    const a = await signedInAccount(pool, `budget-burst-${Date.now()}`);
-    try {
-      const photo = await insertPhoto(pool, {
-        accountId: a.accountId,
-        key: `burst-${a.accountId}`,
-        blurhash: "LEHV6nWB2yk8pyo0adR*.7kCMdnj",
-        width: 64,
-        height: 64,
-        maxPhotos: 3,
+describe("the card budget across days", () => {
+  test("A card seen on an earlier day counts against today once", async ({ ctx }) => {
+    const { app } = await appWith(ctx);
+    const viewer = await signedInAccount(ctx.client);
+    const b = await signedInAccount(ctx.client);
+    const c = await signedInAccount(ctx.client);
+    const theirs = await upload(app, b.headers, await fixturePng(64, 64));
+    const others = await upload(app, c.headers, await fixturePng(72, 72));
+    const day = dayWindow(new Date());
+    const serve = (subject: string, photoId: string) =>
+      recordCardServed(ctx.client, {
+        viewerAccountId: viewer.accountId,
+        subjectAccountId: subject,
+        photoIds: [photoId],
+        at: new Date(),
+        since: day.start,
+        limit: 1,
       });
-      if (!photo) throw new Error("photo not written");
-      const since = new Date(Date.now() - 3_600_000);
-      const results = await Promise.all(
-        Array.from({ length: 24 }, () =>
-          insertPhotoAccess(pool, {
-            accountId: a.accountId,
-            photoId: photo.id,
-            variant: "thumb",
-            at: new Date(),
-            since,
-            limit: 5,
-          }),
-        ),
-      );
-      expect(results.filter((r) => r.recorded)).toHaveLength(5);
-      expect(results.every((r) => r.live)).toBe(true);
-      const { rows } = await pool.query<{ n: string }>(
-        "SELECT count(*) AS n FROM photo_access WHERE account_id = $1",
-        [a.accountId],
-      );
-      expect(Number(rows[0]?.n)).toBe(5);
-    } finally {
-      const identity = await pool.query<{ identity_id: string }>(
-        "SELECT identity_id FROM account WHERE id = $1",
-        [a.accountId],
-      );
-      await pool.query("DELETE FROM photo_access WHERE account_id = $1", [a.accountId]);
-      await pool.query("DELETE FROM photo WHERE account_id = $1", [a.accountId]);
-      await pool.query("DELETE FROM session WHERE account_id = $1", [a.accountId]);
-      await pool.query("DELETE FROM account WHERE id = $1", [a.accountId]);
-      await pool.query("DELETE FROM identity WHERE id = $1", [identity.rows[0]?.identity_id]);
-    }
+    // Seen two days ago: the row exists with an old date.
+    await ctx.client.query(
+      "INSERT INTO card_shown (account_id, photo_id, at) VALUES ($1, $2, now() - interval '2 days')",
+      [viewer.accountId, theirs.id],
+    );
+    const again = await serve(b.accountId, theirs.id);
+    expect(again).toEqual({ used: 0, recorded: true });
+    const { rows } = await ctx.client.query<{ at: Date }>(
+      "SELECT at FROM card_shown WHERE account_id = $1 AND photo_id = $2",
+      [viewer.accountId, theirs.id],
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.at.getTime()).toBeGreaterThanOrEqual(day.start.getTime());
+    // It used today's one card: the next subject is over the budget, the same one is free.
+    expect((await serve(c.accountId, others.id)).recorded).toBe(false);
+    expect(await serve(b.accountId, theirs.id)).toEqual({ used: 1, recorded: true });
   });
+});
+
+describe("the budget under load", () => {
+  // The race is between connections, and one connection cannot race itself,
+  // so the rows must be committed. They are committed into a database of
+  // their own, migrated for the test and dropped afterwards, so no other
+  // test file, however it counts its tables, ever sees them.
+  it("holds against a parallel burst: exactly the limit is written", async () => {
+    await withTemporaryDatabase(async (url) => {
+      const pool = createPool({ connectionString: url, max: 6, applicationName: "kuutti-burst" });
+      try {
+        await migrate(pool, resolve(import.meta.dirname, "../../../../packages/db/drizzle"));
+        const identity = await pool.query<{ id: string }>(
+          "INSERT INTO identity (hetu_hmac) VALUES ('burst') RETURNING id",
+        );
+        const created = await pool.query<{ id: string }>(
+          "INSERT INTO account (identity_id, state, birth_year, birth_month) VALUES ($1, 'active', 1990, 6) RETURNING id",
+          [identity.rows[0]?.id],
+        );
+        const accountId = created.rows[0]?.id ?? "";
+        const photo = await insertPhoto(pool, {
+          accountId,
+          key: "burst",
+          blurhash: "LEHV6nWB2yk8pyo0adR*.7kCMdnj",
+          width: 64,
+          height: 64,
+          maxPhotos: 3,
+        });
+        if (!photo) throw new Error("photo not written");
+        const since = new Date(Date.now() - 3_600_000);
+        const results = await Promise.all(
+          Array.from({ length: 24 }, () =>
+            insertPhotoAccess(pool, {
+              accountId,
+              photoId: photo.id,
+              variant: "thumb",
+              at: new Date(),
+              since,
+              limit: 5,
+            }),
+          ),
+        );
+        expect(results.filter((r) => r.recorded)).toHaveLength(5);
+        expect(results.every((r) => r.live)).toBe(true);
+        const { rows } = await pool.query<{ n: string }>(
+          "SELECT count(*) AS n FROM photo_access WHERE account_id = $1",
+          [accountId],
+        );
+        expect(Number(rows[0]?.n)).toBe(5);
+      } finally {
+        await pool.end();
+      }
+    });
+  }, 30_000);
 });
 
 describe("the Finnish day", () => {

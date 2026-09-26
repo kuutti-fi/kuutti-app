@@ -116,7 +116,11 @@ describe("sessions", () => {
     expect(me.status).toBe(200);
     expect(me.body.sessionId).toBe(tokens.sessionId);
     expect(me.body.platform).toBe("android");
-    const rows = await ctx.client.query("SELECT account_id, platform, user_agent FROM session");
+    // Scoped to this account: another test file may hold committed rows of its own meanwhile.
+    const rows = await ctx.client.query(
+      "SELECT account_id, platform, user_agent FROM session WHERE account_id = $1",
+      [me.body.accountId],
+    );
     expect(rows.rows).toEqual([
       { account_id: me.body.accountId, platform: "android", user_agent: "Kuutti/1 (Android)" },
     ]);

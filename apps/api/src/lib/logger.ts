@@ -19,6 +19,9 @@ export const REDACTED_PATHS = [
   "password",
   "authorization",
   "cookie",
+  // Whom a person seeks and how they describe themselves stay out of every line (rule 5, #46).
+  "seeks",
+  "gender",
   "*.hetu",
   "*.personal_identity_code",
   "*.email",
@@ -27,6 +30,8 @@ export const REDACTED_PATHS = [
   "*.password",
   "*.authorization",
   "*.cookie",
+  "*.seeks",
+  "*.gender",
 ];
 
 export type LogDestination = { write(line: string): void };
