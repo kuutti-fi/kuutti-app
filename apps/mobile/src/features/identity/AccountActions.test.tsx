@@ -39,6 +39,7 @@ const exported = {
   consents: [],
   photos: [],
   photoAccessLog: [],
+  research: { enrolled: false, since: null, consentVersion: null, events: [] },
 };
 
 const json = (body: unknown, status = 200) =>

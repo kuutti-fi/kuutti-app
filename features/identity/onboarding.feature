@@ -43,3 +43,14 @@ Feature: Onboarding and consents
     Given an onboarded account with a withdrawn research consent
     When it downloads its export
     Then the export carries the gender, the pond with both case forms, the two hard preferences and every consent row
+
+  Scenario: The research opt-in creates the research_id mapping and withdrawal removes it
+    Given the account gave the research consent
+    Then one mapping row exists for the account
+    When it withdraws the consent
+    Then no mapping row exists and the events written meanwhile remain
+
+  Scenario: A new research opt-in is a new research_id
+    Given the account gave and withdrew the research consent
+    When it gives the consent again
+    Then the mapping row carries a research_id different from the first one

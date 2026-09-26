@@ -1,4 +1,4 @@
-import type { Queryable } from "@kuutti/db";
+import { type Queryable, transaction } from "@kuutti/db";
 import { CONSENT_TEXT_LOCALES, CONSENT_VERSIONS } from "@kuutti/i18n";
 import {
   CONSENT_KINDS,
@@ -17,6 +17,7 @@ import { AppError } from "../lib/errors.ts";
 import type { Logger } from "../lib/logger.ts";
 import { readPreferences } from "../matching/index.ts";
 import { findPondOfAccount } from "../pond/index.ts";
+import { enrolResearchSubject, removeResearchSubject, track } from "../research/index.ts";
 import * as repo from "./repo.ts";
 
 // Onboarding and consents (#46, ADR-010). The binding texts live under
@@ -157,12 +158,31 @@ export async function giveConsent(
     });
   }
   const locale = shownLocale(request.kind, request.locale);
-  const outcome = await repo.recordConsent(
-    deps.db,
-    accountId,
-    { kind: request.kind, version: request.version, locale },
-    deps.now(),
-  );
+  const at = deps.now();
+  const outcome = await transaction(deps.db, async (tx) => {
+    const recorded = await repo.recordConsent(
+      tx,
+      accountId,
+      { kind: request.kind, version: request.version, locale },
+      at,
+    );
+    if (recorded === "recorded" && request.kind === "research") {
+      // The research_id mapping lives exactly as long as the consent (#50,
+      // ADR-011): same transaction, and the opt-in is the first event.
+      await enrolResearchSubject(tx, accountId, request.version, at);
+      const account = await repo.findAccountById(tx, accountId);
+      if (account) {
+        await track({ db: tx, logger: deps.logger, now: () => at }, accountId, "research_opt_in", {
+          sinceRegistrationD: Math.max(
+            0,
+            Math.floor((at.getTime() - account.registeredAt.getTime()) / 86_400_000),
+          ),
+          accountActive: account.state === "active",
+        });
+      }
+    }
+    return recorded;
+  });
   if (outcome === "no_account") throw new AppError(404, "not_found", "No live account");
   if (outcome === "too_many") {
     throw new AppError(429, "too_many_changes", "The research opt-in changed too often today", {
@@ -183,7 +203,12 @@ export async function withdrawResearchConsent(
   deps: OnboardingDeps,
   accountId: string,
 ): Promise<ConsentsResponse> {
-  const outcome = await repo.withdrawConsent(deps.db, accountId, "research", deps.now());
+  const outcome = await transaction(deps.db, async (tx) => {
+    const withdrawn = await repo.withdrawConsent(tx, accountId, "research", deps.now());
+    // The mapping row goes with the consent; the events stay, unlinkable (ADR-011).
+    if (withdrawn.live) await removeResearchSubject(tx, accountId);
+    return withdrawn;
+  });
   if (!outcome.live) throw new AppError(404, "not_found", "No live account");
   if (outcome.withdrawn > 0) deps.logger.info({ accountId, kind: "research" }, "consent withdrawn");
   return consentsOf(deps, accountId);

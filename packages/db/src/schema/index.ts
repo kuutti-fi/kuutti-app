@@ -49,5 +49,6 @@ export {
   preferences,
 } from "./preferences.ts";
 export { type NewProfile, type Profile, profile } from "./profile.ts";
+export { type NewResearchSubject, type ResearchSubject, researchSubject } from "./research.ts";
 export { type AuditLog, auditLog, type NewAuditLog } from "./safety.ts";
 export { type NewSession, type Session, session } from "./sessions.ts";

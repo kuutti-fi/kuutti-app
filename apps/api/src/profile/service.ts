@@ -9,6 +9,7 @@ import {
 } from "@kuutti/schema";
 import { AppError } from "../lib/errors.ts";
 import { listApprovedPhotos } from "../media/index.ts";
+import { track } from "../research/index.ts";
 import { type CardDeps, completenessOf } from "./card.ts";
 import * as repo from "./repo.ts";
 import { contactDetailsIn } from "./text.ts";
@@ -111,10 +112,13 @@ export async function saveProfile(
   if (!row) throw new AppError(404, "not_found", "No live account");
   const photos = await listApprovedPhotos(deps.db, accountId);
   deps.logger.info({ accountId, prompts: update.prompts.length }, "profile saved");
-  return {
-    profile: toDocument(row),
-    completeness: await completenessOf(deps, accountId, row, photos.length),
-  };
+  const completenessNow = await completenessOf(deps, accountId, row, photos.length);
+  // Research (#50): whether profiles get finished; nothing of the text, and nothing without the consent.
+  await track(deps, accountId, "profile_saved", {
+    complete: completenessNow.complete,
+    approvedPhotos: photos.length,
+  });
+  return { profile: toDocument(row), completeness: completenessNow };
 }
 
 /** Erasure (#51): the profile row, inside the caller's transaction. */

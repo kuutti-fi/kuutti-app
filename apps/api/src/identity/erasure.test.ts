@@ -338,7 +338,7 @@ describe("account erasure", () => {
     expect(body.photoAccessLog.every((e) => e.photoId === photo.id)).toBe(true);
     const text = JSON.stringify(body);
     expect(text).not.toContain(b.accountId);
-    expect(text).not.toMatch(/hetu|hmac|research/i);
+    expect(text).not.toMatch(/hetu|hmac|research_id|researchId/i);
     expect(text).not.toContain(staff.identityId);
   });
 

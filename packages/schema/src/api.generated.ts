@@ -2169,6 +2169,7 @@ export interface components {
                 /** Format: date-time */
                 at: string;
             }[];
+            research: components["schemas"]["ResearchExport"];
         };
         /** @enum {string|null} */
         Gender: "woman" | "man" | "non_binary" | null;
@@ -2291,6 +2292,46 @@ export interface components {
          * @enum {string}
          */
         PhotoVariant: "thumb" | "card" | "full";
+        ResearchExport: {
+            enrolled: boolean;
+            /** Format: date-time */
+            since: string | null;
+            consentVersion: string | null;
+            events: components["schemas"]["ResearchEventRecord"][];
+        };
+        ResearchEventRecord: {
+            name: string;
+            /** Format: date-time */
+            at: string;
+            consentVersion: string;
+            pond: string | null;
+            ageBand: string;
+            snapshot: components["schemas"]["ResearchSnapshot"];
+            props: {
+                [key: string]: unknown;
+            };
+        };
+        ResearchSnapshot: {
+            gender: components["schemas"]["Gender"];
+            fields: components["schemas"]["ResearchFields"];
+        };
+        ResearchFields: {
+            languages?: ("fi" | "sv" | "en" | "ru" | "et" | "uk" | "ar" | "so" | "de" | "fr" | "es" | "other")[];
+            /** @enum {string} */
+            intent?: "long_term" | "short_term" | "figuring_out" | "friends";
+            /** @enum {string} */
+            relationship?: "monogamous" | "open" | "polyamorous" | "lat" | "undecided";
+            /** @enum {string} */
+            kids?: "have_want_more" | "have_done" | "want_someday" | "dont_want" | "not_sure";
+            /** @enum {string} */
+            smoking?: "no" | "sometimes" | "yes" | "snus";
+            /** @enum {string} */
+            alcohol?: "never" | "sometimes" | "often";
+            /** @enum {string} */
+            education?: "secondary" | "vocational" | "bachelor" | "master" | "doctorate" | "other";
+            /** @enum {string} */
+            field?: "tech" | "engineering" | "business" | "arts" | "science" | "health" | "education" | "law" | "social" | "trades" | "service" | "other";
+        };
         PhotoList: {
             photos: components["schemas"]["Photo"][];
             /** @description matching_config max_photos. */

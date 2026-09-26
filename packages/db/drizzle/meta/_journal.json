@@ -99,6 +99,20 @@
       "when": 1790429826701,
       "tag": "0013_onboarding",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1790451468250,
+      "tag": "0014_research_subject",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1790451620018,
+      "tag": "0015_research_events",
+      "breakpoints": true
     }
   ]
 }

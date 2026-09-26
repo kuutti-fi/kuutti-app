@@ -57,3 +57,13 @@ Feature: Account deletion per the erasure table
   Scenario: Deletion and export refuse without a session
     When nobody or a staff token calls the account routes
     Then the answer is 401
+
+  Scenario: Erasure removes the research_id mapping and keeps the events
+    Given "A" gave the research consent and an event was tracked
+    When "A" deletes the account
+    Then the mapping row is gone and the event row remains, joinable to nobody
+
+  Scenario: The export shows the research enrolment and the events but never the research_id
+    Given "A" gave the research consent and an event was tracked
+    When "A" exports the account
+    Then the export says enrolled, lists the event with its coarse snapshot, and contains no research_id

@@ -20,6 +20,7 @@ import { ensurePreviewDatabase } from "./lib/preview-database.ts";
 import { flushSentry, initSentry, sentryReporter } from "./lib/sentry.ts";
 import { buildInfo } from "./lib/version.ts";
 import { createMediaDeps, sweepPendingPhotos } from "./media/index.ts";
+import { ensureEventPartitions, researchEventsJob } from "./research/index.ts";
 import { auditBoundary } from "./safety/index.ts";
 
 async function main(): Promise<void> {
@@ -132,6 +133,8 @@ async function main(): Promise<void> {
   // Migrations run before the server listens, under the advisory lock (rule 10).
   const migration = await migrate(pool, resolve(config.MIGRATIONS_DIR));
   logger.info(migration, "migrations");
+  // The events table's partitions for this month and the next (#50, ADR-011), before anything can track.
+  logger.info(await ensureEventPartitions(pool, new Date()), "research event partitions");
   // The audit table's role boundary (#49, ADR-006) is set by the maintainer,
   // not by a migration: a deployed box says so at every boot until it is.
   const audit = await auditBoundary(pool);
@@ -174,6 +177,8 @@ async function main(): Promise<void> {
   const jobs: NightlyJob[] = [
     { name: "sweep-sessions", run: () => sweepSessions({ db: pool, now }) },
     { name: "sweep-admin-sessions", run: () => sweepAdminSessions({ db: pool, now }) },
+    // Next month's events partition ready, months past retention dropped (#50).
+    researchEventsJob({ db: pool, now }),
   ];
   // Photos the automatic check missed get one more look (#49); none without a moderator.
   const mediaDeps = media.deps;
