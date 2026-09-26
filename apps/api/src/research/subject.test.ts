@@ -2,6 +2,7 @@ import { AccountExport } from "@kuutti/schema";
 import { CURRENT_CONSENT_VERSIONS } from "../identity/index.ts";
 import { signedInAccount } from "../test/account.ts";
 import { captureLogger, describe, expect, type TestContext, test } from "../test/harness.ts";
+import { ensureEventPartitions } from "./partitions.ts";
 import * as repo from "./repo.ts";
 import { track } from "./track.ts";
 
@@ -40,9 +41,12 @@ async function eventsKeyedBy(ctx: TestContext, researchId: string): Promise<numb
   return Number(rows[0]?.n);
 }
 
+/** A fixed instant (the account of the harness is born 1990-06: 36, band 35-39) with its month ensured. */
+const FIXED = new Date("2026-09-26T12:00:00Z");
 async function deps(ctx: TestContext) {
   const { logger } = await captureLogger();
-  return { db: ctx.client, logger, now: () => new Date() };
+  await ensureEventPartitions(ctx.client, FIXED);
+  return { db: ctx.client, logger, now: () => FIXED };
 }
 
 describe("the research_id mapping", () => {

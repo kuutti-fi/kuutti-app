@@ -5,10 +5,11 @@ import type { NightlyJob } from "../jobs/nightly.ts";
  * The monthly partitions of `events` (#50, ADR-011; rules/db.md: monthly
  * partitions, 90-day retention). Created ahead, never on demand: the current
  * and the next month exist after boot and after every nightly run, and a
- * partition whose range ended more than the retention ago is dropped whole,
- * so a row lives at least 90 days and at most 90 days plus its month. No row
- * is ever deleted (the table's triggers refuse it); retention is the drop.
- * Month bounds are UTC: research reads months, not Finnish days.
+ * partition whose range *began* the retention ago or earlier is dropped whole:
+ * the binding research text promises "at most 90 days" (legal.research.summary),
+ * so a row lives between about 60 and 90 days, never longer. No row is ever
+ * deleted (the table's triggers refuse it); retention is the drop. Month
+ * bounds are UTC: research reads months, not Finnish days.
  */
 export const EVENTS_RETENTION_DAYS = 90;
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -35,11 +36,11 @@ export function partitionsAhead(now: Date): MonthPartition[] {
 
 const PARTITION_NAME = /^events_(\d{4})_(\d{2})$/;
 
-/** The range end of a partition by its name, or null for a name that is not ours. */
-export function partitionEnd(name: string): Date | null {
+/** The range start of a partition by its name, or null for a name that is not ours. */
+export function partitionStart(name: string): Date | null {
   const m = PARTITION_NAME.exec(name);
   if (!m) return null;
-  return monthPartition(Number(m[1]), Number(m[2])).to;
+  return monthPartition(Number(m[1]), Number(m[2])).from;
 }
 
 async function existing(db: Queryable): Promise<string[]> {
@@ -89,9 +90,10 @@ export async function pruneEventPartitions(
     await tx.query("SELECT pg_advisory_xact_lock($1)", [PARTITIONS_LOCK_KEY]);
     let dropped = 0;
     for (const name of await existing(tx)) {
-      const end = partitionEnd(name);
-      if (!end || end.getTime() > cutoff.getTime()) continue;
-      // A whole month older than the retention: the one deletion the table allows.
+      const start = partitionStart(name);
+      if (!start || start.getTime() > cutoff.getTime()) continue;
+      // Its oldest row has reached the retention: the whole month goes, the
+      // one deletion the table allows, and nothing in it is older than promised.
       await tx.query(`DROP TABLE "${name}"`);
       dropped += 1;
     }
@@ -104,8 +106,10 @@ export function researchEventsJob(deps: { db: Queryable; now: () => Date }): Nig
   return {
     name: "research-events-partitions",
     run: async () => {
-      const ensured = await ensureEventPartitions(deps.db, deps.now());
-      const pruned = await pruneEventPartitions(deps.db, deps.now());
+      // One clock read: a month rolling over between the two steps would leave a month uncreated.
+      const now = deps.now();
+      const ensured = await ensureEventPartitions(deps.db, now);
+      const pruned = await pruneEventPartitions(deps.db, now);
       return {
         created: ensured.created,
         dropped: pruned.dropped,

@@ -73,10 +73,13 @@ export type SnapshotRows = {
 
 /**
  * Everything a snapshot needs, in one read, and nothing when there is no
- * mapping row: no consent, no event. `ponds` and `profile` are shared
- * vocabulary from packages/db; they are read here, read-only, so that the
- * profile slice can emit events without the research slice importing it back
- * (rules/layout.md: a boundary crossed in both directions is the wrong one).
+ * mapping row: no consent, no event. The mapping row is share-locked for the
+ * rest of the caller's transaction, so a withdrawal or an erasure that races
+ * the event waits for it and then deletes the row, and no event lands after
+ * the consent ended (the events table has no foreign key to catch that).
+ * `ponds` and `profile` are shared vocabulary from packages/db; they are read
+ * here, read-only, so that the profile slice can emit events without the
+ * research slice importing it back (rules/layout.md).
  */
 export async function snapshotRows(db: Queryable, accountId: string): Promise<SnapshotRows | null> {
   const { rows } = await db.query<{
@@ -94,7 +97,8 @@ export async function snapshotRows(db: Queryable, accountId: string): Promise<Sn
      JOIN account a ON a.id = s.account_id
      LEFT JOIN ponds p ON p.id = a.pond_id
      LEFT JOIN profile pr ON pr.account_id = a.id
-     WHERE s.account_id = $1 AND a.state <> 'deleted'`,
+     WHERE s.account_id = $1 AND a.state <> 'deleted'
+     FOR SHARE OF s`,
     [accountId],
   );
   const row = rows[0];

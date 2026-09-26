@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { z } from "zod";
 import { PROFILE_FIELD_KEYS, PROFILE_FIELDS, SPECIAL_CATEGORY_FIELDS } from "./profile-fields.ts";
 import {
   AGE_BANDS,
@@ -24,15 +25,51 @@ describe("the event registry", () => {
     }
   });
 
-  it("carries no free text in any props schema", () => {
+  it("carries no free text in any props schema, however deep", () => {
     for (const name of RESEARCH_EVENT_NAMES) {
-      const shape = RESEARCH_EVENTS[name].props.shape as Record<string, { def: { type: string } }>;
-      for (const [key, field] of Object.entries(shape)) {
-        expect(field.def.type, `${name}.${key}`).not.toBe("string");
-      }
+      expect(hasStringNode(RESEARCH_EVENTS[name].props), name).toBe(false);
     }
+    // The check itself sees through wrappers, arrays and nested objects.
+    expect(hasStringNode(z.object({ n: z.int(), ok: z.boolean().optional() }))).toBe(false);
+    expect(hasStringNode(z.object({ note: z.array(z.string()) }))).toBe(true);
+    expect(hasStringNode(z.object({ inner: z.object({ text: z.string().nullable() }) }))).toBe(
+      true,
+    );
+    expect(hasStringNode(z.object({ e: z.enum(["a", "b"]) }))).toBe(false);
   });
 });
+
+type Def = {
+  type: string;
+  shape?: Record<string, z.ZodType>;
+  element?: z.ZodType;
+  innerType?: z.ZodType;
+  options?: z.ZodType[];
+  valueType?: z.ZodType;
+};
+
+/** True when a zod schema contains a string node anywhere: the registry may carry none (rules/schema.md). */
+function hasStringNode(schema: z.ZodType): boolean {
+  const def = schema.def as Def;
+  switch (def.type) {
+    case "string":
+      return true;
+    case "object":
+      return Object.values(def.shape ?? {}).some(hasStringNode);
+    case "array":
+      return def.element ? hasStringNode(def.element) : false;
+    case "optional":
+    case "nullable":
+    case "default":
+      return def.innerType ? hasStringNode(def.innerType) : false;
+    case "union":
+      return (def.options ?? []).some(hasStringNode);
+    case "record":
+      return def.valueType ? hasStringNode(def.valueType) : false;
+    default:
+      return false;
+  }
+}
 
 function valid(name: (typeof RESEARCH_EVENT_NAMES)[number]): Record<string, unknown> {
   switch (name) {

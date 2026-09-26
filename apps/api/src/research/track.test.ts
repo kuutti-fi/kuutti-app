@@ -1,6 +1,7 @@
 import { CURRENT_CONSENT_VERSIONS } from "../identity/index.ts";
 import { signedInAccount } from "../test/account.ts";
 import { captureLogger, describe, expect, type TestContext, test } from "../test/harness.ts";
+import { ensureEventPartitions } from "./partitions.ts";
 import * as repo from "./repo.ts";
 import { track } from "./track.ts";
 
@@ -101,6 +102,7 @@ describe("track", () => {
     await onboarded(ctx, a.accountId);
     await researchConsent(ctx, a.headers);
     const at = new Date("2026-09-26T12:00:00Z"); // 36 by the Finnish calendar
+    await ensureEventPartitions(ctx.client, at); // the fixed instant's month, whatever today is
     const { deps } = await trackDeps(ctx, at);
     const result = await track(deps, a.accountId, "profile_saved", {
       complete: true,

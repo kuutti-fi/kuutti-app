@@ -4,7 +4,7 @@ import {
   EVENTS_RETENTION_DAYS,
   ensureEventPartitions,
   monthPartition,
-  partitionEnd,
+  partitionStart,
   partitionsAhead,
   pruneEventPartitions,
   researchEventsJob,
@@ -22,9 +22,9 @@ describe("month partitions", () => {
       from: new Date("2031-12-01T00:00:00.000Z"),
       to: new Date("2032-01-01T00:00:00.000Z"),
     });
-    expect(partitionEnd("events_2031_12")).toEqual(new Date("2032-01-01T00:00:00.000Z"));
-    expect(partitionEnd("events_default")).toBeNull();
-    expect(partitionEnd("photo")).toBeNull();
+    expect(partitionStart("events_2031_12")).toEqual(new Date("2031-12-01T00:00:00.000Z"));
+    expect(partitionStart("events_default")).toBeNull();
+    expect(partitionStart("photo")).toBeNull();
   });
 
   it("looks one month ahead, across a year end", () => {
@@ -61,14 +61,15 @@ describe("ensure and prune", () => {
     expect(Number(rows[0]?.n)).toBe(1);
   });
 
-  test("drops a month whose range ended more than the retention ago and keeps the rest", async ({
+  test("drops a month once its oldest row reaches the retention and keeps the rest", async ({
     ctx,
   }) => {
     // Months in the past, so the partitions the test setup created for today stay in range.
     await ensureEventPartitions(ctx.client, new Date("2020-01-10T00:00:00Z")); // 2020_01, 2020_02
     await ensureEventPartitions(ctx.client, new Date("2020-03-10T00:00:00Z")); // 2020_03, 2020_04
-    // 2020-06-01 minus 90 days is 2020-03-03: January and February ended before it, March did not.
-    const pruned = await pruneEventPartitions(ctx.client, new Date("2020-06-01T00:00:00Z"));
+    // 2020-05-15 minus 90 days is 2020-02-15: January and February began before it, March did not.
+    // Nothing in a dropped month is older than 90 days; nothing kept is older either.
+    const pruned = await pruneEventPartitions(ctx.client, new Date("2020-05-15T00:00:00Z"));
     expect(pruned.dropped).toBe(2);
     expect(pruned.partitions).not.toContain("events_2020_01");
     expect(pruned.partitions).not.toContain("events_2020_02");
