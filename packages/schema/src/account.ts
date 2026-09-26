@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { AuthPlatform } from "./identity.ts";
 import { Photo, PhotoRejectionReason, PhotoVariant } from "./media.ts";
+import { ProfileDocument } from "./profile.ts";
 
 /**
  * The account's own lifecycle (#51, TD-7): deletion per the erasure table and
@@ -88,6 +89,8 @@ export const AccountExport = z
         expiresAt: z.iso.datetime(),
       }),
     ),
+    /** The profile as written (#47); null when never saved. */
+    profile: ProfileDocument.nullable(),
     photos: z.array(ExportedPhoto).max(50),
     /** The person's own fetches of their photos (the exposure log of TD-6), newest first, at most 1000. */
     photoAccessLog: z

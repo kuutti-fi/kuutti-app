@@ -41,6 +41,15 @@ export async function listPhotos(db: Queryable, accountId: string): Promise<Phot
   return rows.map(photoFrom);
 }
 
+/** The photos a card may carry (#47): approved only, in the owner's order. */
+export async function listApprovedPhotos(db: Queryable, accountId: string): Promise<PhotoRow[]> {
+  const { rows } = await db.query<Row>(
+    `SELECT ${COLUMNS} FROM photo WHERE account_id = $1 AND state = 'approved' ORDER BY position, created_at`,
+    [accountId],
+  );
+  return rows.map(photoFrom);
+}
+
 export async function countPhotos(db: Queryable, accountId: string): Promise<number> {
   const { rows } = await db.query<{ n: string }>(
     "SELECT count(*) AS n FROM photo WHERE account_id = $1",
@@ -138,6 +147,64 @@ export async function recordCardShown(
     [accountId, photoIds, at],
   );
   return result.rowCount ?? 0;
+}
+
+export type CardServed = {
+  /** Distinct accounts whose cards the viewer was shown since the day started, before this one. */
+  used: number;
+  /** True when the card was within the budget (or already shown today) and its shown records were written. */
+  recorded: boolean;
+};
+
+/**
+ * A card served to a viewer (#47 calls it, #52 wrote the rule): the shown
+ * record for every photo on the card and the card budget in one statement,
+ * under the viewer's advisory lock. The budget counts distinct subjects the
+ * viewer was shown since the day started (matching_config
+ * exposure_cards_per_day); a subject already shown today costs nothing more.
+ * The viewer's account id is in every branch (rule 6); the photo ids are the
+ * card the server built, never a request body.
+ */
+export async function recordCardServed(
+  db: Queryable,
+  input: {
+    viewerAccountId: string;
+    subjectAccountId: string;
+    photoIds: string[];
+    at: Date;
+    since: Date;
+    limit: number;
+  },
+): Promise<CardServed> {
+  return transaction(db, async (tx) => {
+    await tx.query("SELECT pg_advisory_xact_lock(hashtext($1))", [
+      `card_shown:${input.viewerAccountId}`,
+    ]);
+    const { rows } = await tx.query<{ used: number; allowed: boolean }>(
+      `WITH today AS (SELECT DISTINCT p.account_id AS subject
+                      FROM card_shown s JOIN photo p ON p.id = s.photo_id
+                      WHERE s.account_id = $1 AND s.at >= $5),
+            used AS (SELECT count(*)::int AS n FROM today),
+            allowed AS (SELECT (SELECT n FROM used) < $6
+                            OR EXISTS (SELECT 1 FROM today WHERE subject = $2) AS ok),
+            ins AS (INSERT INTO card_shown (account_id, photo_id, at)
+                    SELECT $1, unnest($3::uuid[]), $4 FROM allowed WHERE allowed.ok
+                    ON CONFLICT (account_id, photo_id) DO NOTHING
+                    RETURNING 1 AS one)
+       SELECT (SELECT n FROM used) AS used, (SELECT ok FROM allowed) AS allowed`,
+      [
+        input.viewerAccountId,
+        input.subjectAccountId,
+        input.photoIds,
+        input.at,
+        input.since,
+        input.limit,
+      ],
+    );
+    const row = rows[0];
+    if (!row) throw new Error("card_shown insert returned no row");
+    return { used: row.used, recorded: row.allowed };
+  });
 }
 
 /** Erasure (#51): the trail of cards shown to the person. Rows about their own photos go with the photos. */

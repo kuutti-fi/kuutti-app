@@ -9,6 +9,7 @@ import {
   type MediaDeps,
   type PhotoErasure,
 } from "../media/index.ts";
+import { eraseProfileOfAccount, exportProfile } from "../profile/index.ts";
 import { recordDeletion } from "./registration.ts";
 import * as repo from "./repo.ts";
 
@@ -30,6 +31,8 @@ export type ErasureDeps = {
 export type ErasureSummary = {
   sessions: number;
   authRequests: number;
+  /** 0 or 1: the profile row (#47). */
+  profileRows: number;
   photos: number;
   accessRows: number;
   shownRows: number;
@@ -54,6 +57,7 @@ export async function eraseAccount(deps: ErasureDeps, accountId: string): Promis
     const sessions = await repo.deleteAccountSessions(tx, accountId);
     const authRequests = await repo.deleteAuthRequestsOfAccount(tx, accountId);
     const photos: PhotoErasure = await erasePhotosOfAccount(tx, accountId);
+    const profileRows = await eraseProfileOfAccount(tx, accountId);
     // A second deletion racing the first sees the live row above and the
     // tombstone here (READ COMMITTED re-evaluates after the other commit).
     if (!(await repo.tombstoneAccount(tx, accountId, at))) {
@@ -61,7 +65,13 @@ export async function eraseAccount(deps: ErasureDeps, accountId: string): Promis
     }
     const deletion = recordDeletion({ deletionCount: identity.deletionCount }, at);
     await repo.recordIdentityDeletion(tx, identity.identityId, deletion);
-    return { sessions, authRequests, photos, reregisterAfter: deletion.reregisterAfter };
+    return {
+      sessions,
+      authRequests,
+      photos,
+      profileRows,
+      reregisterAfter: deletion.reregisterAfter,
+    };
   });
   const objects = deps.media
     ? await deleteOrphanedObjects(
@@ -73,6 +83,7 @@ export async function eraseAccount(deps: ErasureDeps, accountId: string): Promis
   const summary: ErasureSummary = {
     sessions: result.sessions,
     authRequests: result.authRequests,
+    profileRows: result.profileRows,
     photos: result.photos.photos,
     accessRows: result.photos.accessRows,
     shownRows: result.photos.shownRows,
@@ -94,6 +105,7 @@ export async function exportAccount(deps: ErasureDeps, accountId: string): Promi
     ? { ...deps.media, db: deps.db, logger: deps.logger, now: deps.now }
     : { db: deps.db, logger: deps.logger, now: deps.now };
   const photos = await exportPhotos(media, accountId);
+  const profile = await exportProfile(deps.db, accountId);
   return {
     exportedAt: deps.now().toISOString(),
     account: {
@@ -116,6 +128,7 @@ export async function exportAccount(deps: ErasureDeps, accountId: string): Promi
       lastUsedAt: s.lastUsedAt.toISOString(),
       expiresAt: s.expiresAt.toISOString(),
     })),
+    profile,
     photos: photos.photos,
     photoAccessLog: photos.accessLog,
   };

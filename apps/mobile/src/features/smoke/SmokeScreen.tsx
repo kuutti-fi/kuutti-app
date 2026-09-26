@@ -172,8 +172,18 @@ export function SmokeScreen() {
               </CardContent>
             )}
             {session.status === "signed-in" && (
-              <CardContent>
-                {/* The photos screen (#48) until the profile (#47) gives it a home. */}
+              <CardContent className="gap-3">
+                {/* The profile (#47) and the photos (#48) until onboarding (#46) orders the screens. */}
+                <Button
+                  variant="outline"
+                  accessibilityLabel={t("profile.home.open")}
+                  onPress={() => {
+                    tap();
+                    router.push("/profile");
+                  }}
+                >
+                  <Text>{t("profile.home.open")}</Text>
+                </Button>
                 <Button
                   variant="outline"
                   accessibilityLabel={t("smoke.photos.open")}

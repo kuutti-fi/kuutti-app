@@ -1,0 +1,139 @@
+import type { Queryable } from "@kuutti/db";
+import {
+  type BioPreset,
+  type ProfileDocument,
+  ProfileFields,
+  type ProfileUpdate,
+  PromptAnswer,
+} from "@kuutti/schema";
+import { z } from "zod";
+
+// Raw parameterised SQL as in the other slices: Deps.db is the Queryable seam
+// the test harness hands a rolled-back transaction through. Every statement
+// about the caller's own profile carries the caller's account id in its WHERE
+// clause (rule 6). The one read by another account's id, findCardSubject, is
+// the card: what the round builder of M4 serves after the matching rules
+// chose the subject, and what the owner previews for themselves; no route
+// serves another person's card in M3 (ADR-009).
+
+type Row = Record<string, unknown>;
+
+export type ProfileRow = ProfileDocument & { accountId: string };
+
+const profileFrom = (r: Row): ProfileRow => ({
+  accountId: r.account_id as string,
+  displayName: r.display_name as string,
+  bio: (r.bio as string | null) ?? null,
+  bioPreset: (r.bio_preset as BioPreset | null) ?? null,
+  // Written by this API against the registry; a row that no longer parses
+  // (an option removed from the registry) reads as unanswered, not as a 500.
+  fields: ProfileFields.safeParse(r.fields).data ?? {},
+  prompts: z.array(PromptAnswer).safeParse(r.prompts).data ?? [],
+  specialCategoryConsent:
+    typeof r.special_category_consent_version === "string" &&
+    r.special_category_consented_at instanceof Date
+      ? {
+          version: r.special_category_consent_version,
+          at: r.special_category_consented_at.toISOString(),
+        }
+      : null,
+  updatedAt: (r.updated_at as Date).toISOString(),
+});
+
+const COLUMNS =
+  "account_id, display_name, bio, bio_preset, fields, prompts, special_category_consent_version, special_category_consented_at, updated_at";
+
+export async function findProfile(db: Queryable, accountId: string): Promise<ProfileRow | null> {
+  const { rows } = await db.query<Row>(`SELECT ${COLUMNS} FROM profile WHERE account_id = $1`, [
+    accountId,
+  ]);
+  return rows[0] ? profileFrom(rows[0]) : null;
+}
+
+/**
+ * The whole document, inserted or replaced; a tombstone writes nothing (#51).
+ * The consent's time is kept when the version is unchanged and set anew when
+ * it changes; null withdraws it.
+ */
+export async function upsertProfile(
+  db: Queryable,
+  accountId: string,
+  update: ProfileUpdate,
+  at: Date,
+): Promise<ProfileRow | null> {
+  const { rows } = await db.query<Row>(
+    `INSERT INTO profile (account_id, display_name, bio, bio_preset, fields, prompts,
+                          special_category_consent_version, special_category_consented_at,
+                          created_at, updated_at)
+     SELECT $1, $2, $3, $4, $5::jsonb, $6::jsonb, $7, CASE WHEN $7::text IS NULL THEN NULL ELSE $8::timestamptz END, $8, $8
+     WHERE EXISTS (SELECT 1 FROM account WHERE id = $1 AND state <> 'deleted')
+     ON CONFLICT (account_id) DO UPDATE SET
+       display_name = EXCLUDED.display_name,
+       bio = EXCLUDED.bio,
+       bio_preset = EXCLUDED.bio_preset,
+       fields = EXCLUDED.fields,
+       prompts = EXCLUDED.prompts,
+       special_category_consent_version = EXCLUDED.special_category_consent_version,
+       special_category_consented_at = CASE
+         WHEN EXCLUDED.special_category_consent_version IS NULL THEN NULL
+         WHEN profile.special_category_consent_version = EXCLUDED.special_category_consent_version
+           THEN profile.special_category_consented_at
+         ELSE EXCLUDED.special_category_consented_at END,
+       updated_at = EXCLUDED.updated_at
+     RETURNING ${COLUMNS}`,
+    [
+      accountId,
+      update.displayName,
+      update.bio,
+      update.bioPreset,
+      JSON.stringify(update.fields),
+      JSON.stringify(update.prompts),
+      update.specialCategoryConsent?.version ?? null,
+      at,
+    ],
+  );
+  return rows[0] ? profileFrom(rows[0]) : null;
+}
+
+/** Erasure (#51, ADR-007): the profile goes with the account. */
+export async function deleteProfileOfAccount(db: Queryable, accountId: string): Promise<number> {
+  const result = await db.query("DELETE FROM profile WHERE account_id = $1", [accountId]);
+  return result.rowCount ?? 0;
+}
+
+export type CardSubject = {
+  accountId: string;
+  state: string;
+  birthYear: number | null;
+  birthMonth: number | null;
+  profile: ProfileRow | null;
+};
+
+/**
+ * The account and profile behind a card. Read by the subject's id: the
+ * viewer's right to see it is decided by the caller (the owner previewing
+ * themselves, or M4's round after the matching rules), and recorded by
+ * recordCardServed in the media slice for anyone but the owner.
+ */
+export async function findCardSubject(
+  db: Queryable,
+  subjectAccountId: string,
+): Promise<CardSubject | null> {
+  const { rows } = await db.query<Row>(
+    `SELECT a.id, a.state, a.birth_year, a.birth_month,
+            p.account_id, p.display_name, p.bio, p.bio_preset, p.fields, p.prompts,
+            p.special_category_consent_version, p.special_category_consented_at, p.updated_at
+     FROM account a LEFT JOIN profile p ON p.account_id = a.id
+     WHERE a.id = $1`,
+    [subjectAccountId],
+  );
+  const r = rows[0];
+  if (!r) return null;
+  return {
+    accountId: r.id as string,
+    state: r.state as string,
+    birthYear: (r.birth_year as number | null) ?? null,
+    birthMonth: (r.birth_month as number | null) ?? null,
+    profile: r.account_id ? profileFrom(r) : null,
+  };
+}

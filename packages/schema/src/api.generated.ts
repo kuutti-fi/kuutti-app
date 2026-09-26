@@ -1334,6 +1334,165 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/profile": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The caller's profile and what it still needs
+         * @description The profile as saved (null before the first save) and the completeness rule's verdict: what is missing before the profile can enter a round.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The profile. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ProfileResponse"];
+                    };
+                };
+                /** @description unauthenticated, session_expired or session_revoked. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
+        /**
+         * Save the caller's profile
+         * @description The whole document every time: display name, a bio or a placeholder, the fields from the registry, up to three prompts, and the special-category consent version when a field needs it. Free text passes the plain-text rule: no e-mail, URL, phone number or social handle.
+         */
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["ProfileUpdate"];
+                };
+            };
+            responses: {
+                /** @description Saved; the profile as stored, with its completeness. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ProfileResponse"];
+                    };
+                };
+                /** @description Validation failed, or text_contact_details (a field carries an e-mail, URL, phone number or handle). */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description unauthenticated, session_expired or session_revoked. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description consent_required: a special-category field without the consent version. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description No live account (erased meanwhile). */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/profile/card": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The caller's own card, as others will see it
+         * @description The card built the way a round builds it for someone else, with the age from the bank-verified year and month, the approved photos in order (bytes through GET /photos/{id}/{variant}) and what is still missing. Nothing is recorded: this is the owner looking at themselves.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The card, or null before the first save. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["CardPreviewResponse"];
+                    };
+                };
+                /** @description unauthenticated, session_expired or session_revoked. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1492,6 +1651,7 @@ export interface components {
                 /** Format: date-time */
                 expiresAt: string;
             }[];
+            profile: components["schemas"]["ProfileDocument"];
             photos: components["schemas"]["ExportedPhoto"][];
             photoAccessLog: {
                 /** Format: uuid */
@@ -1501,6 +1661,46 @@ export interface components {
                 at: string;
             }[];
         };
+        ProfileDocument: {
+            displayName: string;
+            bio: string | null;
+            bioPreset: components["schemas"]["BioPreset"];
+            fields: components["schemas"]["ProfileFields"];
+            prompts: components["schemas"]["PromptAnswer"][];
+            specialCategoryConsent: {
+                version: string;
+                /** Format: date-time */
+                at: string;
+            } | null;
+            /** Format: date-time */
+            updatedAt: string;
+        } | null;
+        /** @enum {string|null} */
+        BioPreset: "lazy_nice_fellow" | "ask_me_instead" | "photos_speak" | null;
+        ProfileFields: {
+            languages?: ("fi" | "sv" | "en" | "ru" | "et" | "uk" | "ar" | "so" | "de" | "fr" | "es" | "other")[];
+            /** @enum {string} */
+            intent?: "long_term" | "short_term" | "figuring_out" | "friends";
+            /** @enum {string} */
+            relationship?: "monogamous" | "open" | "polyamorous" | "lat" | "undecided";
+            /** @enum {string} */
+            kids?: "have_want_more" | "have_done" | "want_someday" | "dont_want" | "not_sure";
+            /** @enum {string} */
+            smoking?: "no" | "sometimes" | "yes" | "snus";
+            /** @enum {string} */
+            alcohol?: "never" | "sometimes" | "often";
+            /** @enum {string} */
+            education?: "secondary" | "vocational" | "bachelor" | "master" | "doctorate" | "other";
+            /** @enum {string} */
+            field?: "tech" | "engineering" | "business" | "arts" | "science" | "health" | "education" | "law" | "social" | "trades" | "service" | "other";
+            campus?: string;
+        };
+        PromptAnswer: {
+            key: components["schemas"]["PromptKey"];
+            answer: string;
+        };
+        /** @enum {string} */
+        PromptKey: "sunday" | "proud_of" | "argue_about" | "unpopular_opinion" | "teach_me" | "first_date" | "never_again" | "overrated" | "hidden_talent" | "last_laugh" | "three_things" | "ask_me";
         ExportedPhoto: {
             id: components["schemas"]["PhotoId"];
             /** @description Placeholder the app paints before the thumb arrives (computed from the thumb). */
@@ -1629,6 +1829,51 @@ export interface components {
             /** @enum {string} */
             decision: "reject";
             reason: components["schemas"]["PhotoRejectionReason"];
+        };
+        ProfileResponse: {
+            profile: components["schemas"]["ProfileDocument"];
+            completeness: components["schemas"]["Completeness"];
+        };
+        Completeness: {
+            complete: boolean;
+            missing: components["schemas"]["CompletenessItem"][];
+        };
+        /** @enum {string} */
+        CompletenessItem: "display_name" | "photos" | "bio_or_prompts" | "seeks" | "age_window";
+        ProfileUpdate: {
+            displayName: string;
+            bio: string | null;
+            bioPreset: components["schemas"]["BioPreset"];
+            fields: components["schemas"]["ProfileFields"];
+            prompts: components["schemas"]["PromptAnswer"][];
+            specialCategoryConsent: {
+                version: string;
+            } | null;
+        };
+        CardPreviewResponse: {
+            card: components["schemas"]["ProfileCard"];
+            completeness: components["schemas"]["Completeness"];
+        };
+        ProfileCard: {
+            /** Format: uuid */
+            accountId: string;
+            displayName: string;
+            age: {
+                years: number;
+                /** @enum {boolean} */
+                verifiedByBank: true;
+            };
+            photos: components["schemas"]["CardPhoto"][];
+            fields: components["schemas"]["ProfileFields"];
+            bio: string | null;
+            bioPreset: components["schemas"]["BioPreset"];
+            prompts: components["schemas"]["PromptAnswer"][];
+        } | null;
+        CardPhoto: {
+            id: components["schemas"]["PhotoId"];
+            blurhash: string;
+            width: number;
+            height: number;
         };
     };
     responses: never;

@@ -32,6 +32,7 @@ const exported = {
     deletionCount: 0,
   },
   sessions: [],
+  profile: null,
   photos: [],
   photoAccessLog: [],
 };

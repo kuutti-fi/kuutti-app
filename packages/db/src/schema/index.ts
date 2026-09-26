@@ -40,5 +40,6 @@ export {
   photoVariant,
 } from "./media.ts";
 export { type NewPond, type Pond, ponds } from "./ponds.ts";
+export { type NewProfile, type Profile, profile } from "./profile.ts";
 export { type AuditLog, auditLog, type NewAuditLog } from "./safety.ts";
 export { type NewSession, type Session, session } from "./sessions.ts";

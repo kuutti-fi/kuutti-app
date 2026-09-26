@@ -90,6 +90,7 @@ describe("migrate", () => {
           "photo_access",
           "photo_review",
           "ponds",
+          "profile",
           "session",
         ]);
       } finally {

@@ -4,6 +4,7 @@
 // memory store.
 
 export { photoAdminRoutes } from "./admin-routes.ts";
+export { dayWindow, secondsUntil } from "./budget.ts";
 export {
   deleteOrphanedObjects,
   erasePhotosOfAccount,
@@ -18,6 +19,7 @@ export {
   sweepPendingPhotos,
 } from "./moderation.ts";
 export { type MediaDeps, type PhotoServiceDeps, RETRY_AFTER_SECONDS } from "./photos.ts";
+export { type CardServed, listApprovedPhotos, recordCardServed } from "./repo.ts";
 export { photoRoutes, UPLOAD_ROUTE } from "./routes.ts";
 export { type MediaStore, memoryMediaStore, objectKey, s3MediaStore } from "./store.ts";
 export { cloudFrontSigner, presignedS3Signer, URL_TTL_MS, type UrlSigner } from "./urls.ts";

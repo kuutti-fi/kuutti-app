@@ -1,0 +1,77 @@
+import { PROFILE_FIELD_KEYS, PROFILE_FIELDS, type ProfileCard } from "@kuutti/schema";
+import { View } from "react-native";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Text } from "@/components/ui/text";
+import { PhotoImage } from "@/features/media";
+import { useT } from "@/lib/locale";
+import { fieldLabelKey, optionKey, presetKey, promptKey } from "./keys";
+
+/**
+ * A card as others see it (#47): the main photo in the card variant, the
+ * name and the bank-verified age, the other photos as thumbs, the choices,
+ * the bio or its placeholder, the prompts. The rounds of M4 render the same
+ * component; the reason label of rules/mobile.md joins there.
+ */
+export function ProfileCardView({ card }: { card: ProfileCard }) {
+  const { t } = useT();
+  const [main, ...rest] = card.photos;
+  const total = card.photos.length;
+  return (
+    <Card>
+      {main && (
+        <PhotoImage
+          id={main.id}
+          variant="card"
+          blurhash={main.blurhash}
+          accessibilityLabel={t("profile.card.photoLabel", { position: 1, total })}
+          style={{ width: "100%", aspectRatio: 3 / 4 }}
+        />
+      )}
+      <CardHeader>
+        <CardTitle>{card.displayName}</CardTitle>
+        <Text variant="muted">{t("profile.card.verifiedAge", { years: card.age.years })}</Text>
+      </CardHeader>
+      <CardContent className="gap-4">
+        {rest.length > 0 && (
+          <View className="flex-row flex-wrap gap-2">
+            {rest.map((photo, index) => (
+              <PhotoImage
+                key={photo.id}
+                id={photo.id}
+                variant="thumb"
+                blurhash={photo.blurhash}
+                accessibilityLabel={t("profile.card.photoLabel", { position: index + 2, total })}
+                style={{ width: 96, height: 96, borderRadius: 8 }}
+              />
+            ))}
+          </View>
+        )}
+        {card.bio && <Text>{card.bio}</Text>}
+        {!card.bio && card.bioPreset && <Text>{t(presetKey(card.bioPreset))}</Text>}
+        {PROFILE_FIELD_KEYS.map((key) => {
+          const value = (card.fields as Record<string, unknown>)[key];
+          if (value === undefined) return null;
+          const spec = PROFILE_FIELDS[key];
+          const shown =
+            spec.kind === "text"
+              ? String(value)
+              : (Array.isArray(value) ? value : [value])
+                  .map((option) => t(optionKey(key, String(option))))
+                  .join(", ");
+          return (
+            <View key={key} className="gap-0.5">
+              <Text variant="small">{t(fieldLabelKey(key))}</Text>
+              <Text>{shown}</Text>
+            </View>
+          );
+        })}
+        {card.prompts.map((prompt) => (
+          <View key={prompt.key} className="gap-0.5">
+            <Text variant="small">{t(promptKey(prompt.key))}</Text>
+            <Text>{prompt.answer}</Text>
+          </View>
+        ))}
+      </CardContent>
+    </Card>
+  );
+}
