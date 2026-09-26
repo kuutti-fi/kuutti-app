@@ -82,10 +82,10 @@ smoke.app.embedded:
   machine: { fi: true, sv: true }
 
 smoke.app.updated:
-  en: "update applied {date}"
-  description: "App card: when the running over-the-air update was published; {date} is already formatted."
-  fi: "päivitys asennettu {date}"
-  sv: "uppdatering tillämpad {date}"
+  en: "update published {date}"
+  description: "App card: when the running over-the-air update was published (expo-updates createdAt; the module does not record when this phone applied it); {date} is already formatted."
+  fi: "päivitys julkaistu {date}"
+  sv: "uppdatering publicerad {date}"
   machine: { fi: true, sv: true }
 
 smoke.app.noCommit:

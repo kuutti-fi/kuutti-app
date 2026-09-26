@@ -64,6 +64,6 @@ describe("the App card: the app's own commit, apart from the API's", () => {
   it("names the native build's runtime and the update it runs, so a stalled commit is explained", async () => {
     await renderAndSettle();
     expect(screen.getByText("native build 88a4337")).toBeTruthy();
-    expect(screen.getByText(/^update applied /)).toBeTruthy();
+    expect(screen.getByText(/^update published /)).toBeTruthy();
   });
 });

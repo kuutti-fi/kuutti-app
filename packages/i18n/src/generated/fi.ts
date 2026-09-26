@@ -297,7 +297,7 @@ export const fi: Readonly<Record<string, string>> = {
   "smoke.app.noRuntime": "natiiviversiota ei kirjattu",
   "smoke.app.runtime": "natiiviversio {runtime}",
   "smoke.app.title": "Sovellus",
-  "smoke.app.updated": "päivitys asennettu {date}",
+  "smoke.app.updated": "päivitys julkaistu {date}",
   "smoke.gate.checking": "Tarkistetaan tilisi asetuksia…",
   "smoke.gate.failed": "Tilisi asetuksia ei voitu tarkistaa.",
   "smoke.gate.retry": "Tarkista uudelleen",

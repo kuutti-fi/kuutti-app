@@ -291,7 +291,7 @@ export const sv: Readonly<Record<string, string>> = {
   "smoke.app.noRuntime": "nativ version inte registrerad",
   "smoke.app.runtime": "nativ version {runtime}",
   "smoke.app.title": "Appen",
-  "smoke.app.updated": "uppdatering tillämpad {date}",
+  "smoke.app.updated": "uppdatering publicerad {date}",
   "smoke.gate.checking": "Kontrollerar din kontoinställning…",
   "smoke.gate.failed": "Din kontoinställning kunde inte kontrolleras.",
   "smoke.gate.retry": "Kontrollera igen",

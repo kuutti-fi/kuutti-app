@@ -67,7 +67,8 @@ export function SmokeScreen() {
       ? t("smoke.status.commit", { commit: appCommit })
       : t("smoke.app.noCommit");
   // The native build's runtime (the fingerprint, ADR-004) and the update it
-  // runs: an update only reaches a build with the same runtime, so a commit
+  // runs, by its publish time (the module records no apply time): an update
+  // only reaches a build with the same runtime, so a commit
   // that stops moving here while the API's moves on means this build is
   // behind the fingerprint and needs reinstalling, not that updates stopped.
   const runtime: unknown = Updates.runtimeVersion;

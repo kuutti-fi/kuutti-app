@@ -339,7 +339,7 @@ export const enXA: Readonly<Record<string, string>> = {
   "smoke.app.noRuntime": "［ñáátíívéé búúííld ñóót rééçóórdééd］",
   "smoke.app.runtime": "［ñáátíívéé búúííld {runtime}］",
   "smoke.app.title": "［ÁÁpp］",
-  "smoke.app.updated": "［úúpdáátéé áápplííééd {date}］",
+  "smoke.app.updated": "［úúpdáátéé púúblííšhééd {date}］",
   "smoke.gate.checking": "［Çhééçkííñg ýýóóúúr ááççóóúúñt šéétúúp…］",
   "smoke.gate.failed": "［ÝÝóóúúr ááççóóúúñt šéétúúp çóóúúld ñóót béé çhééçkééd.］",
   "smoke.gate.retry": "［Çhééçk áágááííñ］",

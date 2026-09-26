@@ -339,7 +339,7 @@ export const en: Readonly<Record<string, string>> = {
   "smoke.app.noRuntime": "native build not recorded",
   "smoke.app.runtime": "native build {runtime}",
   "smoke.app.title": "App",
-  "smoke.app.updated": "update applied {date}",
+  "smoke.app.updated": "update published {date}",
   "smoke.gate.checking": "Checking your account setup…",
   "smoke.gate.failed": "Your account setup could not be checked.",
   "smoke.gate.retry": "Check again",
