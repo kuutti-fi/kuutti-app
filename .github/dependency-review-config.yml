@@ -42,3 +42,5 @@ allow-dependencies-licenses:
   - pkg:npm/%40img/sharp-libvips-linux-arm
   - pkg:npm/%40img/sharp-libvips-linuxmusl-arm64
   - pkg:npm/%40img/sharp-libvips-linuxmusl-x64
+  # GitHub Actions of the workflows (`actions` in scripts/license-policy.json): run in CI, never shipped.
+  - pkg:githubactions/trufflesecurity/trufflehog

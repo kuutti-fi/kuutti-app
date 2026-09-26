@@ -21,6 +21,8 @@ import { join } from "node:path";
 type Policy = {
   allow: string[];
   exceptions: Array<{ name: string; license: string; reason: string }>;
+  /** GitHub Actions the workflows use under a licence outside `allow`: CI tools, never shipped. */
+  actions?: Array<{ name: string; license: string; reason: string }>;
 };
 
 const ROOT = process.cwd();
@@ -175,7 +177,12 @@ if (!same(reviewList("allow-licenses"), policy.allow)) {
     "allow-licenses in .github/dependency-review-config.yml differs from `allow` in scripts/license-policy.json",
   );
 }
-const exceptionUrls = policy.exceptions.map((e) => `pkg:npm/${e.name.replace("@", "%40")}`);
+const exceptionUrls = [
+  ...policy.exceptions.map((e) => `pkg:npm/${e.name.replace("@", "%40")}`),
+  // An action is a dependency of the workflows, not of the packages: the pull
+  // request check sees it as pkg:githubactions, and nothing here installs it.
+  ...(policy.actions ?? []).map((a) => `pkg:githubactions/${a.name}`),
+];
 if (!same(reviewList("allow-dependencies-licenses"), exceptionUrls)) {
   problems.push(
     "allow-dependencies-licenses in .github/dependency-review-config.yml differs from the exceptions in scripts/license-policy.json",
