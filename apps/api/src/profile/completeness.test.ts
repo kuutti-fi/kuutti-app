@@ -52,5 +52,8 @@ describe("the age on the card", () => {
     expect(ageInYears(1990, 6, new Date("2026-05-15T00:00:00Z"))).toBe(35);
     expect(ageInYears(1990, 6, new Date("2026-06-01T00:00:00Z"))).toBe(36);
     expect(ageInYears(1990, 6, new Date("2026-12-31T23:59:59Z"))).toBe(36);
+    // By the Finnish calendar: 21:30 UTC on 31 May is already 1 June in Helsinki.
+    expect(ageInYears(1990, 6, new Date("2026-05-31T21:30:00Z"))).toBe(36);
+    expect(ageInYears(1990, 6, new Date("2026-05-31T20:30:00Z"))).toBe(35);
   });
 });

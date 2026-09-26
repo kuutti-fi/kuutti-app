@@ -135,7 +135,7 @@ describe("profile routes", () => {
   });
 
   test("PUT /profile refuses text that carries contact details", async ({ ctx }) => {
-    const { app } = await appWith(ctx);
+    const { app, logs } = await appWith(ctx);
     const a = await signedInAccount(ctx.client);
     for (const body of [
       { ...update, displayName: "@aino" },
@@ -147,6 +147,23 @@ describe("profile routes", () => {
       expect(response.status).toBe(400);
       expect(await errorCode(response)).toBe("text_contact_details");
     }
+    const { rows } = await ctx.client.query("SELECT 1 FROM profile WHERE account_id = $1", [
+      a.accountId,
+    ]);
+    expect(rows).toHaveLength(0);
+    // The refusal names the field and the kind; the text itself reaches no log line.
+    expect(JSON.stringify(logs())).not.toContain("aino@example.com");
+    expect(JSON.stringify(logs())).not.toContain("040 1234567");
+  });
+
+  test("PUT /profile refuses a consent version while no field takes one", async ({ ctx }) => {
+    const { app } = await appWith(ctx);
+    const a = await signedInAccount(ctx.client);
+    const response = await put(app, a.headers, {
+      ...update,
+      specialCategoryConsent: { version: "x" },
+    });
+    expect(response.status).toBe(400);
     const { rows } = await ctx.client.query("SELECT 1 FROM profile WHERE account_id = $1", [
       a.accountId,
     ]);
@@ -255,6 +272,19 @@ describe("profile routes", () => {
     await expect(
       buildCard(deps, { viewerAccountId: viewer.accountId, subjectAccountId: d.accountId }),
     ).rejects.toMatchObject({ status: 404 });
+    // A sanction holds at this gate too, and writes nothing.
+    await ctx.client.query("UPDATE account SET state = 'shadow_banned' WHERE id = $1", [
+      c.accountId,
+    ]);
+    await withMatchingConfig(ctx.client, { exposure_cards_per_day: 10 });
+    await expect(
+      buildCard(deps, { viewerAccountId: viewer.accountId, subjectAccountId: c.accountId }),
+    ).rejects.toMatchObject({ status: 404 });
+    const sanctioned = await ctx.client.query<{ n: string }>(
+      "SELECT count(*) AS n FROM card_shown WHERE account_id = $1",
+      [viewer.accountId],
+    );
+    expect(Number(sanctioned.rows[0]?.n)).toBe(3);
     await ctx.client.query("UPDATE account SET state = 'deleted' WHERE id = $1", [b.accountId]);
     await expect(
       buildCard(deps, { viewerAccountId: viewer.accountId, subjectAccountId: b.accountId }),

@@ -13,6 +13,16 @@ describe("the plain-text rule", () => {
     ["find me @nick_name", "handle"],
     ["I am on Instagram a lot", "handle"],
     ["telegram works best", "handle"],
+    ["Löydät mut instagramissa", "handle"],
+    ["oon instassa aino_v", "handle"],
+    ["IG: aino_v", "handle"],
+    ["aino@exam\u200Bple\u200B.com", "email"],
+    ["aino dot v at gmail dot com", "email"],
+    ["aino (at) gmail (dot) com", "email"],
+    ["\uFF10\uFF14\uFF10\uFF11\uFF12\uFF13\uFF14\uFF15\uFF16\uFF17", "phone"],
+    ["\u0660\u0664\u0660\u0661\u0662\u0663\u0664\u0665\u0666\u0667", "phone"],
+    ["040/123/4567", "phone"],
+    ["0 4 0 · 1 2 3 · 4 5 6 7", "phone"],
   ] as const)("%s is refused as %s", (text, kind) => {
     expect(contactDetailsIn(text)).toBe(kind);
   });

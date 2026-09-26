@@ -1,12 +1,13 @@
 import type { Queryable } from "@kuutti/db";
 import {
   type BioPreset,
+  PROFILE_FIELD_KEYS,
+  PROFILE_FIELDS,
   type ProfileDocument,
-  ProfileFields,
+  type ProfileFields,
   type ProfileUpdate,
   PromptAnswer,
 } from "@kuutti/schema";
-import { z } from "zod";
 
 // Raw parameterised SQL as in the other slices: Deps.db is the Queryable seam
 // the test harness hands a rolled-back transaction through. Every statement
@@ -18,27 +19,68 @@ import { z } from "zod";
 
 type Row = Record<string, unknown>;
 
-export type ProfileRow = ProfileDocument & { accountId: string };
+export type ProfileRow = ProfileDocument & {
+  accountId: string;
+  /** Stored values the registry no longer knows (an option removed): read as unanswered; the caller logs the keys. */
+  dropped: string[];
+};
 
-const profileFrom = (r: Row): ProfileRow => ({
-  accountId: r.account_id as string,
-  displayName: r.display_name as string,
-  bio: (r.bio as string | null) ?? null,
-  bioPreset: (r.bio_preset as BioPreset | null) ?? null,
-  // Written by this API against the registry; a row that no longer parses
-  // (an option removed from the registry) reads as unanswered, not as a 500.
-  fields: ProfileFields.safeParse(r.fields).data ?? {},
-  prompts: z.array(PromptAnswer).safeParse(r.prompts).data ?? [],
-  specialCategoryConsent:
-    typeof r.special_category_consent_version === "string" &&
-    r.special_category_consented_at instanceof Date
-      ? {
-          version: r.special_category_consent_version,
-          at: r.special_category_consented_at.toISOString(),
-        }
-      : null,
-  updatedAt: (r.updated_at as Date).toISOString(),
-});
+/**
+ * The row was written by this API against the registry, so a value that no
+ * longer parses is a removed option or prompt. Each field and each prompt is
+ * read on its own, so one stale value costs that value alone, never the
+ * whole document (ADR-009 §1: removing an option is a data change).
+ */
+function storedFields(raw: unknown): { fields: ProfileFields; dropped: string[] } {
+  const source = (raw ?? {}) as Record<string, unknown>;
+  const fields: Record<string, unknown> = {};
+  const dropped: string[] = [];
+  for (const key of PROFILE_FIELD_KEYS) {
+    if (source[key] === undefined) continue;
+    const parsed = PROFILE_FIELDS[key].schema.safeParse(source[key]);
+    if (parsed.success) fields[key] = parsed.data;
+    else dropped.push(`fields.${key}`);
+  }
+  for (const key of Object.keys(source)) {
+    if (!(PROFILE_FIELD_KEYS as readonly string[]).includes(key)) dropped.push(`fields.${key}`);
+  }
+  return { fields: fields as ProfileFields, dropped };
+}
+
+function storedPrompts(raw: unknown): { prompts: ProfileDocument["prompts"]; dropped: string[] } {
+  const source = Array.isArray(raw) ? raw : [];
+  const prompts: ProfileDocument["prompts"] = [];
+  const dropped: string[] = [];
+  source.forEach((entry, index) => {
+    const parsed = PromptAnswer.safeParse(entry);
+    if (parsed.success) prompts.push(parsed.data);
+    else dropped.push(`prompts.${index}`);
+  });
+  return { prompts, dropped };
+}
+
+const profileFrom = (r: Row): ProfileRow => {
+  const fields = storedFields(r.fields);
+  const prompts = storedPrompts(r.prompts);
+  return {
+    accountId: r.account_id as string,
+    displayName: r.display_name as string,
+    bio: (r.bio as string | null) ?? null,
+    bioPreset: (r.bio_preset as BioPreset | null) ?? null,
+    fields: fields.fields,
+    prompts: prompts.prompts,
+    dropped: [...fields.dropped, ...prompts.dropped],
+    specialCategoryConsent:
+      typeof r.special_category_consent_version === "string" &&
+      r.special_category_consented_at instanceof Date
+        ? {
+            version: r.special_category_consent_version,
+            at: r.special_category_consented_at.toISOString(),
+          }
+        : null,
+    updatedAt: (r.updated_at as Date).toISOString(),
+  };
+};
 
 const COLUMNS =
   "account_id, display_name, bio, bio_preset, fields, prompts, special_category_consent_version, special_category_consented_at, updated_at";

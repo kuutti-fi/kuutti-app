@@ -3,7 +3,13 @@ import type { CardPhoto, Completeness, ProfileCard, ProfileUpdate } from "@kuutt
 import { AppError } from "../lib/errors.ts";
 import type { Logger } from "../lib/logger.ts";
 import { matchingConfigNumber } from "../lib/matching-config.ts";
-import { dayWindow, listApprovedPhotos, recordCardServed, secondsUntil } from "../media/index.ts";
+import {
+  dayWindow,
+  listApprovedPhotos,
+  localYearMonth,
+  recordCardServed,
+  secondsUntil,
+} from "../media/index.ts";
 import { completeness } from "./completeness.ts";
 import * as repo from "./repo.ts";
 
@@ -24,10 +30,11 @@ export type CardDeps = {
   readPreferences?: PreferenceReader;
 };
 
-/** Whole years from the bank-verified year and month (rule 3: never a day). */
+/** Whole years from the bank-verified year and month, by the Finnish calendar (rule 3: never a day). */
 export function ageInYears(birthYear: number, birthMonth: number, at: Date): number {
-  const years = at.getUTCFullYear() - birthYear;
-  return at.getUTCMonth() + 1 >= birthMonth ? years : years - 1;
+  const now = localYearMonth(at);
+  const years = now.year - birthYear;
+  return now.month >= birthMonth ? years : years - 1;
 }
 
 /** The subject's completeness from the rows: the owner's screen, the preview and the round read the same answer. */
@@ -55,7 +62,10 @@ export async function completenessOf(
  * shown record is written for every photo on the card and the card counts
  * against matching_config exposure_cards_per_day, both in one statement in
  * the media slice (#52); above the budget a 429 with Retry-After until the
- * Finnish day rolls, said in words and logged.
+ * Finnish day rolls, said in words and logged. Note for the route M4 adds:
+ * completeness (404) is decided before the budget (429), so a viewer over
+ * budget could tell a complete subject from the rest by the status; that
+ * route answers 429 before the lookup, or 404 in both cases.
  */
 export async function buildCard(
   deps: CardDeps,
@@ -64,6 +74,11 @@ export async function buildCard(
   const own = input.viewerAccountId === input.subjectAccountId;
   const subject = await repo.findCardSubject(deps.db, input.subjectAccountId);
   if (!subject || subject.state === "deleted") {
+    throw new AppError(404, "not_found", "No such card");
+  }
+  // For anyone but the owner only a live account is a card: a suspension or
+  // a shadow ban holds at this gate too, whatever the caller filtered.
+  if (!own && subject.state !== "active") {
     throw new AppError(404, "not_found", "No such card");
   }
   const photos = await listApprovedPhotos(deps.db, subject.accountId);

@@ -1,5 +1,7 @@
 import type { Queryable } from "@kuutti/db";
 import {
+  PROFILE_FIELD_KEYS,
+  PROFILE_FIELDS,
   type ProfileDocument,
   type ProfileResponse,
   type ProfileUpdate,
@@ -31,10 +33,17 @@ export function consentMissingFor(
 export function contactDetailsInUpdate(
   update: ProfileUpdate,
 ): { field: string; kind: string } | null {
+  const fields = update.fields as Record<string, unknown>;
   const texts: [string, string | null | undefined][] = [
     ["displayName", update.displayName],
     ["bio", update.bio],
-    ["fields.campus", update.fields.campus],
+    // Every text field of the registry, so a new one is under the rule by construction.
+    ...PROFILE_FIELD_KEYS.filter((key) => PROFILE_FIELDS[key].kind === "text").map(
+      (key): [string, string | undefined] => [
+        `fields.${key}`,
+        typeof fields[key] === "string" ? (fields[key] as string) : undefined,
+      ],
+    ),
     ...update.prompts.map((p, i): [string, string] => [`prompts.${i}.answer`, p.answer]),
   ];
   for (const [field, text] of texts) {
@@ -45,14 +54,25 @@ export function contactDetailsInUpdate(
   return null;
 }
 
-const toDocument = ({ accountId: _accountId, ...document }: repo.ProfileRow): ProfileDocument =>
-  document;
+const toDocument = ({
+  accountId: _accountId,
+  dropped: _dropped,
+  ...document
+}: repo.ProfileRow): ProfileDocument => document;
+
+/** A stored value the registry no longer knows: the key goes to the log (never the value) so a backfill can follow. */
+function noteDropped(deps: CardDeps, row: repo.ProfileRow | null): void {
+  if (row && row.dropped.length > 0) {
+    deps.logger.warn({ accountId: row.accountId, dropped: row.dropped }, "profile values dropped");
+  }
+}
 
 export async function readProfile(deps: CardDeps, accountId: string): Promise<ProfileResponse> {
   const [row, photos] = await Promise.all([
     repo.findProfile(deps.db, accountId),
     listApprovedPhotos(deps.db, accountId),
   ]);
+  noteDropped(deps, row);
   return {
     profile: row ? toDocument(row) : null,
     completeness: await completenessOf(deps, accountId, row, photos.length),
@@ -78,6 +98,13 @@ export async function saveProfile(
     throw new AppError(403, "consent_required", "These fields need the explicit consent first", {
       fields: missing,
     });
+  }
+  // Nothing is flagged today (ADR-009 §2), so a consent version has nothing
+  // to bind to and is not stored: a row that looks like consent given for a
+  // text nobody can point at would be worse than none. The issue that flags
+  // a field (#46 for seeks) binds the version and lifts this.
+  if (update.specialCategoryConsent && SPECIAL_CATEGORY_FIELDS.length === 0) {
+    throw new AppError(400, "validation_failed", "No field takes a special-category consent yet");
   }
   const row = await repo.upsertProfile(deps.db, accountId, update, deps.now());
   // No row, no profile: the account was erased between the guard and here (#51).
