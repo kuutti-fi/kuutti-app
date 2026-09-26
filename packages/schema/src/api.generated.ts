@@ -1334,6 +1334,670 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/profile": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The caller's profile and what it still needs
+         * @description The profile as saved (null before the first save) and the completeness rule's verdict: what is missing before the profile can enter a round.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The profile. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ProfileResponse"];
+                    };
+                };
+                /** @description unauthenticated, session_expired or session_revoked. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
+        /**
+         * Save the caller's profile
+         * @description The whole document every time: display name, a bio or a placeholder, the fields from the registry, up to three prompts, and the special-category consent version when a field needs it. Free text passes the plain-text rule: no e-mail, URL, phone number or social handle.
+         */
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["ProfileUpdate"];
+                };
+            };
+            responses: {
+                /** @description Saved; the profile as stored, with its completeness. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ProfileResponse"];
+                    };
+                };
+                /** @description Validation failed, or text_contact_details (a field carries an e-mail, URL, phone number or handle). */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description unauthenticated, session_expired or session_revoked. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description consent_required: a special-category field without the consent version. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description No live account (erased meanwhile). */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/profile/card": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The caller's own card, as others will see it
+         * @description The card built the way a round builds it for someone else, with the age from the bank-verified year and month, the approved photos in order (bytes through GET /photos/{id}/{variant}) and what is still missing. Nothing is recorded: this is the owner looking at themselves.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The card, or null before the first save. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["CardPreviewResponse"];
+                    };
+                };
+                /** @description unauthenticated, session_expired or session_revoked. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/onboarding": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * What the caller has answered and what activation still waits for
+         * @description Gender, pond, the two hard preferences, the consents given for the current wordings and the current versions. When nothing required is missing and the account is still registered, it becomes active here.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The status. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["OnboardingStatus"];
+                    };
+                };
+                /** @description unauthenticated, session_expired or session_revoked. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/account/gender": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Declare the caller's gender
+         * @description Self-declared, one of a closed list (rule 3); nothing from the bank informs it.
+         */
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["GenderUpdate"];
+                };
+            };
+            responses: {
+                /** @description Declared. */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Validation failed. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description unauthenticated, session_expired or session_revoked. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description No live account (erased meanwhile). */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/consents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Every consent the caller has given, and the current versions */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The consents. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ConsentsResponse"];
+                    };
+                };
+                /** @description unauthenticated, session_expired or session_revoked. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        /**
+         * Record a consent for the current wording
+         * @description The kind, the consent_version the person read and the language it was shown in. An old version is refused with agreement_outdated; the same consent twice is recorded once.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["ConsentRequest"];
+                };
+            };
+            responses: {
+                /** @description Recorded; the consents as stored. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ConsentsResponse"];
+                    };
+                };
+                /** @description Validation failed. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description unauthenticated, session_expired or session_revoked. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description No live account (erased meanwhile). */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description agreement_outdated: the wording has a newer version. */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description too_many_changes: the research opt-in was given and withdrawn more than the day allows. */
+                429: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/consents/research": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Withdraw the research opt-in
+         * @description The one consent a person withdraws; terms and privacy end with the account. The rows stay as the record of what was agreed and when.
+         */
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Withdrawn; the consents as stored. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ConsentsResponse"];
+                    };
+                };
+                /** @description unauthenticated, session_expired or session_revoked. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description No live account (erased meanwhile). */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/ponds": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The ponds a person can choose
+         * @description Every pond with both Finnish case forms (TD-17), parents first. Where matching happens (TD-10); the choice is one per account.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The ponds. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["PondList"];
+                    };
+                };
+                /** @description unauthenticated, session_expired or session_revoked. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/account/pond": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Choose the caller's pond */
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["PondChoice"];
+                };
+            };
+            responses: {
+                /** @description Chosen. */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Validation failed, or pond_unknown. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description unauthenticated, session_expired or session_revoked. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description No live account (erased meanwhile). */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/preferences": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Whom the caller seeks and the age window
+         * @description The two hard filters of rule 7 as the person set them; null until onboarding sets them.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The preferences. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["PreferencesResponse"];
+                    };
+                };
+                /** @description unauthenticated, session_expired or session_revoked. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
+        /**
+         * Set whom the caller seeks and the age window
+         * @description Both at once: a non-empty set of genders and an age window within 18 and 99 with min at most max. Hard rows: the round builder never crosses them, in either direction.
+         */
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["PreferencesUpdate"];
+                };
+            };
+            responses: {
+                /** @description Saved; the preferences as stored. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["PreferencesResponse"];
+                    };
+                };
+                /** @description Validation failed. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description unauthenticated, session_expired or session_revoked. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description No live account (erased meanwhile). */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1472,7 +2136,11 @@ export interface components {
                 registeredAt: string;
                 birthYear: number | null;
                 birthMonth: number | null;
+                gender: components["schemas"]["Gender"];
+                pond: components["schemas"]["PondSummary"];
             };
+            preferences: components["schemas"]["PreferencesResponse"];
+            consents: components["schemas"]["ConsentRecord"][];
             identity: {
                 /** Format: date-time */
                 firstSeenAt: string;
@@ -1492,6 +2160,7 @@ export interface components {
                 /** Format: date-time */
                 expiresAt: string;
             }[];
+            profile: components["schemas"]["ProfileDocument"];
             photos: components["schemas"]["ExportedPhoto"][];
             photoAccessLog: {
                 /** Format: uuid */
@@ -1501,6 +2170,77 @@ export interface components {
                 at: string;
             }[];
         };
+        /** @enum {string|null} */
+        Gender: "woman" | "man" | "non_binary" | null;
+        PondSummary: {
+            /** Format: uuid */
+            id: string;
+            slug: string;
+            name: string;
+            nameInessive: string;
+            /** Format: uuid */
+            parentId: string | null;
+        } | null;
+        PreferencesResponse: {
+            seeks: components["schemas"]["Gender"][] | null;
+            ageWindow: components["schemas"]["AgeWindow"];
+        };
+        AgeWindow: {
+            min: number;
+            max: number;
+        } | null;
+        ConsentRecord: {
+            kind: components["schemas"]["ConsentKind"];
+            version: string;
+            /** @enum {string} */
+            locale: "fi" | "sv" | "en";
+            /** Format: date-time */
+            givenAt: string;
+            /** Format: date-time */
+            withdrawnAt: string | null;
+        };
+        /** @enum {string} */
+        ConsentKind: "terms" | "privacy" | "research";
+        ProfileDocument: {
+            displayName: string;
+            bio: string | null;
+            bioPreset: components["schemas"]["BioPreset"];
+            fields: components["schemas"]["ProfileFields"];
+            prompts: components["schemas"]["PromptAnswer"][];
+            specialCategoryConsent: {
+                version: string;
+                /** Format: date-time */
+                at: string;
+            } | null;
+            /** Format: date-time */
+            updatedAt: string;
+        } | null;
+        /** @enum {string|null} */
+        BioPreset: "lazy_nice_fellow" | "ask_me_instead" | "photos_speak" | null;
+        ProfileFields: {
+            languages?: ("fi" | "sv" | "en" | "ru" | "et" | "uk" | "ar" | "so" | "de" | "fr" | "es" | "other")[];
+            /** @enum {string} */
+            intent?: "long_term" | "short_term" | "figuring_out" | "friends";
+            /** @enum {string} */
+            relationship?: "monogamous" | "open" | "polyamorous" | "lat" | "undecided";
+            /** @enum {string} */
+            kids?: "have_want_more" | "have_done" | "want_someday" | "dont_want" | "not_sure";
+            /** @enum {string} */
+            smoking?: "no" | "sometimes" | "yes" | "snus";
+            /** @enum {string} */
+            alcohol?: "never" | "sometimes" | "often";
+            /** @enum {string} */
+            education?: "secondary" | "vocational" | "bachelor" | "master" | "doctorate" | "other";
+            /** @enum {string} */
+            field?: "tech" | "engineering" | "business" | "arts" | "science" | "health" | "education" | "law" | "social" | "trades" | "service" | "other";
+            campus?: string;
+        };
+        PromptAnswer: {
+            key: components["schemas"]["PromptKey"];
+            answer: string;
+        };
+        /** @enum {string} */
+        PromptKey: "sunday" | "proud_of" | "argue_about" | "unpopular_opinion" | "teach_me" | "first_date" | "never_again" | "overrated" | "hidden_talent" | "last_laugh" | "three_things" | "ask_me";
         ExportedPhoto: {
             id: components["schemas"]["PhotoId"];
             /** @description Placeholder the app paints before the thumb arrives (computed from the thumb). */
@@ -1629,6 +2369,103 @@ export interface components {
             /** @enum {string} */
             decision: "reject";
             reason: components["schemas"]["PhotoRejectionReason"];
+        };
+        ProfileResponse: {
+            profile: components["schemas"]["ProfileDocument"];
+            completeness: components["schemas"]["Completeness"];
+        };
+        Completeness: {
+            complete: boolean;
+            missing: components["schemas"]["CompletenessItem"][];
+        };
+        /** @enum {string} */
+        CompletenessItem: "display_name" | "photos" | "bio_or_prompts" | "seeks" | "age_window";
+        ProfileUpdate: {
+            displayName: string;
+            bio: string | null;
+            bioPreset: components["schemas"]["BioPreset"];
+            fields: components["schemas"]["ProfileFields"];
+            prompts: components["schemas"]["PromptAnswer"][];
+            specialCategoryConsent: {
+                version: string;
+            } | null;
+        };
+        CardPreviewResponse: {
+            card: components["schemas"]["ProfileCard"];
+            completeness: components["schemas"]["Completeness"];
+        };
+        ProfileCard: {
+            /** Format: uuid */
+            accountId: string;
+            displayName: string;
+            age: {
+                years: number;
+                /** @enum {boolean} */
+                verifiedByBank: true;
+            };
+            pond: components["schemas"]["PondSummary"];
+            photos: components["schemas"]["CardPhoto"][];
+            fields: components["schemas"]["ProfileFields"];
+            bio: string | null;
+            bioPreset: components["schemas"]["BioPreset"];
+            prompts: components["schemas"]["PromptAnswer"][];
+        } | null;
+        CardPhoto: {
+            id: components["schemas"]["PhotoId"];
+            blurhash: string;
+            width: number;
+            height: number;
+        };
+        OnboardingStatus: {
+            /** @enum {string} */
+            state: "registered" | "active" | "paused" | "shadow_banned" | "suspended" | "banned" | "deleted";
+            gender: components["schemas"]["Gender"];
+            pond: components["schemas"]["PondSummary"];
+            preferences: components["schemas"]["PreferencesResponse"];
+            consents: {
+                terms: string | null;
+                privacy: string | null;
+                research: {
+                    version: string;
+                    /** Format: date-time */
+                    givenAt: string;
+                } | null;
+            };
+            currentVersions: components["schemas"]["ConsentVersions"];
+            missing: components["schemas"]["OnboardingStep"][];
+            complete: boolean;
+        };
+        /** @description The consent_version of the current wording per kind. */
+        ConsentVersions: {
+            terms: string;
+            privacy: string;
+            research: string;
+        };
+        /** @enum {string} */
+        OnboardingStep: "gender" | "seeks" | "age_window" | "pond" | "terms" | "privacy";
+        GenderUpdate: {
+            gender: components["schemas"]["Gender"];
+        };
+        ConsentsResponse: {
+            consents: components["schemas"]["ConsentRecord"][];
+            currentVersions: components["schemas"]["ConsentVersions"];
+        };
+        ConsentRequest: {
+            kind: components["schemas"]["ConsentKind"];
+            version: string;
+            /** @enum {string} */
+            locale: "fi" | "sv" | "en";
+        };
+        PondList: {
+            ponds: components["schemas"]["PondSummary"][];
+        };
+        PondChoice: {
+            /** Format: uuid */
+            pondId: string;
+        };
+        PreferencesUpdate: {
+            seeks: components["schemas"]["Gender"][];
+            ageWindow: components["schemas"]["AgeWindow"];
         };
     };
     responses: never;

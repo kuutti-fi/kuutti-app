@@ -2,6 +2,7 @@ import { type Queryable, transaction } from "@kuutti/db";
 import type { AccountExport } from "@kuutti/schema";
 import { AppError } from "../lib/errors.ts";
 import type { Logger } from "../lib/logger.ts";
+import { deletePreferencesOfAccount, readPreferences } from "../matching/index.ts";
 import {
   deleteOrphanedObjects,
   erasePhotosOfAccount,
@@ -9,6 +10,9 @@ import {
   type MediaDeps,
   type PhotoErasure,
 } from "../media/index.ts";
+import { findPondOfAccount } from "../pond/index.ts";
+import { eraseProfileOfAccount, exportProfile } from "../profile/index.ts";
+import { exportConsents } from "./onboarding.ts";
 import { recordDeletion } from "./registration.ts";
 import * as repo from "./repo.ts";
 
@@ -30,6 +34,10 @@ export type ErasureDeps = {
 export type ErasureSummary = {
   sessions: number;
   authRequests: number;
+  /** 0 or 1: the profile row (#47). */
+  profileRows: number;
+  /** The hard preference rows (#46). */
+  preferences: number;
   photos: number;
   accessRows: number;
   shownRows: number;
@@ -45,8 +53,10 @@ export type ErasureSummary = {
 export async function eraseAccount(deps: ErasureDeps, accountId: string): Promise<ErasureSummary> {
   const at = deps.now();
   const result = await transaction(deps.db, async (tx) => {
-    const account = await repo.findAccountById(tx, accountId);
-    if (!account || account.state === "deleted") {
+    // The account row first, under lock: a profile or preference write that
+    // raced this transaction waits here and then sees the tombstone.
+    const locked = await repo.lockAccountForErasure(tx, accountId);
+    if (!locked || locked.state === "deleted") {
       throw new AppError(404, "not_found", "No live account to erase");
     }
     const identity = await repo.findIdentitySummaryForAccount(tx, accountId);
@@ -54,6 +64,10 @@ export async function eraseAccount(deps: ErasureDeps, accountId: string): Promis
     const sessions = await repo.deleteAccountSessions(tx, accountId);
     const authRequests = await repo.deleteAuthRequestsOfAccount(tx, accountId);
     const photos: PhotoErasure = await erasePhotosOfAccount(tx, accountId);
+    const profileRows = await eraseProfileOfAccount(tx, accountId);
+    // The two hard rows go (TD-7); the consent rows stay as proof (ADR-010),
+    // and the tombstone keeps neither gender nor pond.
+    const preferences = await deletePreferencesOfAccount(tx, accountId);
     // A second deletion racing the first sees the live row above and the
     // tombstone here (READ COMMITTED re-evaluates after the other commit).
     if (!(await repo.tombstoneAccount(tx, accountId, at))) {
@@ -61,7 +75,14 @@ export async function eraseAccount(deps: ErasureDeps, accountId: string): Promis
     }
     const deletion = recordDeletion({ deletionCount: identity.deletionCount }, at);
     await repo.recordIdentityDeletion(tx, identity.identityId, deletion);
-    return { sessions, authRequests, photos, reregisterAfter: deletion.reregisterAfter };
+    return {
+      sessions,
+      authRequests,
+      photos,
+      profileRows,
+      preferences,
+      reregisterAfter: deletion.reregisterAfter,
+    };
   });
   const objects = deps.media
     ? await deleteOrphanedObjects(
@@ -73,6 +94,8 @@ export async function eraseAccount(deps: ErasureDeps, accountId: string): Promis
   const summary: ErasureSummary = {
     sessions: result.sessions,
     authRequests: result.authRequests,
+    profileRows: result.profileRows,
+    preferences: result.preferences,
     photos: result.photos.photos,
     accessRows: result.photos.accessRows,
     shownRows: result.photos.shownRows,
@@ -94,6 +117,12 @@ export async function exportAccount(deps: ErasureDeps, accountId: string): Promi
     ? { ...deps.media, db: deps.db, logger: deps.logger, now: deps.now }
     : { db: deps.db, logger: deps.logger, now: deps.now };
   const photos = await exportPhotos(media, accountId);
+  const profile = await exportProfile(deps.db, accountId);
+  const [pond, preferences, consents] = await Promise.all([
+    findPondOfAccount(deps.db, accountId),
+    readPreferences(deps.db, accountId),
+    exportConsents(deps.db, accountId),
+  ]);
   return {
     exportedAt: deps.now().toISOString(),
     account: {
@@ -102,7 +131,11 @@ export async function exportAccount(deps: ErasureDeps, accountId: string): Promi
       registeredAt: account.registeredAt.toISOString(),
       birthYear: account.birthYear,
       birthMonth: account.birthMonth,
+      gender: account.gender,
+      pond,
     },
+    preferences,
+    consents,
     identity: {
       firstSeenAt: identity.createdAt.toISOString(),
       lastBankLoginAt: identity.authenticatedAt?.toISOString() ?? null,
@@ -116,6 +149,7 @@ export async function exportAccount(deps: ErasureDeps, accountId: string): Promi
       lastUsedAt: s.lastUsedAt.toISOString(),
       expiresAt: s.expiresAt.toISOString(),
     })),
+    profile,
     photos: photos.photos,
     photoAccessLog: photos.accessLog,
   };

@@ -8,6 +8,7 @@ import {
   adminSessionStore,
   authRoutes,
   type IdentityBroker,
+  onboardingRoutes,
   sessionStore,
   wellKnownRoutes,
 } from "./identity/index.ts";
@@ -28,7 +29,10 @@ import { type Logger, requestLogger } from "./lib/logger.ts";
 import { openApiDocument } from "./lib/openapi.ts";
 import { rateLimit } from "./lib/rate-limit.ts";
 import { serverRequestId } from "./lib/request-id.ts";
+import { preferencesRoutes } from "./matching/index.ts";
 import { type MediaDeps, photoAdminRoutes, photoRoutes, UPLOAD_ROUTE } from "./media/index.ts";
+import { pondRoutes } from "./pond/index.ts";
+import { profileRoutes } from "./profile/index.ts";
 
 export type { AppEnv };
 
@@ -123,6 +127,10 @@ export function createApp(deps: Deps) {
   app.route("/", wellKnownRoutes(deps));
   app.route("/", photoRoutes(deps, guard));
   app.route("/", photoAdminRoutes(deps, moderators));
+  app.route("/", profileRoutes(deps, guard));
+  app.route("/", onboardingRoutes(deps, guard));
+  app.route("/", pondRoutes(deps, guard));
+  app.route("/", preferencesRoutes(deps, guard));
 
   // The bearer scheme the session routes declare (#35); the tokens themselves
   // are opaque, so the scheme is all the contract says about them.
