@@ -1,5 +1,6 @@
 import type { MiddlewareHandler } from "hono";
 import pino, { type Logger } from "pino";
+import { cloudFrontRequestId } from "./request-id.ts";
 
 export type { Logger };
 
@@ -75,6 +76,7 @@ export function requestLogger(logger: Logger): MiddlewareHandler {
     logger.info(
       {
         requestId: c.get("requestId"),
+        cfRequestId: cloudFrontRequestId(c.req.header("x-amz-cf-id")),
         accountId: c.get("accountId"),
         method: c.req.method,
         route: c.req.routePath,

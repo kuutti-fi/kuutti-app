@@ -65,3 +65,14 @@ variable "cloudfront_only_ingress" {
   type        = bool
   default     = false
 }
+
+variable "trusted_proxy" {
+  description = "Whose word the API takes for the client address behind its rate limiter (#52, audit F19, ADR-008): /kuutti/staging/trusted-proxy. traefik while the box answers 443 directly (the last X-Forwarded-For hop, the one Traefik appends); cloudfront once cloudfront_only_ingress is on (CloudFront's viewer address), and never before, since until then anyone reaching the origin could send that header."
+  type        = string
+  default     = "traefik"
+
+  validation {
+    condition     = contains(["traefik", "cloudfront"], var.trusted_proxy)
+    error_message = "trusted_proxy is traefik or cloudfront."
+  }
+}

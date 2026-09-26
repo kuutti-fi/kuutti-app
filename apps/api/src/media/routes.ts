@@ -103,14 +103,19 @@ const urlRoute = createRoute({
   path: "/photos/{id}/{variant}",
   summary: "A signed URL for one variant",
   description:
-    "Valid for fifteen minutes. Every issuance is logged against the caller and counts towards the exposure budget. The app caches by photo id and variant, never by this URL, and asks for full only from the zoom screen.",
+    "Valid for fifteen minutes. Every issuance is logged against the caller and counted against the day's budget for the variant (matching_config.photo_fetches_per_day; the day rolls at midnight in Finland). The app caches by photo id and variant, never by this URL, and asks for full only from the zoom screen. Another account's photo is served only from a card the caller was shown.",
   ...bearer,
   request: { params: PhotoVariantParams },
   responses: {
     200: { description: "The URL and when it stops working.", ...json(PhotoUrlResponse) },
     400: errorContent("Validation failed."),
     401: unauthenticated,
-    404: errorContent("Not a photo of this account."),
+    404: errorContent(
+      "Not a photo this account may see: not its own, and not on a card it was shown.",
+    ),
+    429: errorContent(
+      "photo_budget_exceeded: the day's fetches of this variant are used up; Retry-After is the wait until the day rolls.",
+    ),
     503: errorContent("media_unavailable: no object storage is configured here."),
   },
 });
@@ -172,12 +177,21 @@ export function photoRoutes(deps: Deps, requireSession: MiddlewareHandler<AppEnv
 
   app.openapi(urlRoute, async (c) => {
     const { id, variant } = c.req.valid("param");
-    const url = await issuePhotoUrl(serviceDeps(), {
-      accountId: callerOf(c).accountId,
-      photoId: id,
-      variant,
-    });
-    return c.json(url, 200);
+    try {
+      const url = await issuePhotoUrl(serviceDeps(), {
+        accountId: callerOf(c).accountId,
+        photoId: id,
+        variant,
+      });
+      return c.json(url, 200);
+    } catch (error) {
+      if (error instanceof AppError && error.code === "photo_budget_exceeded") {
+        const wait = (error.detail as { retryAfterSeconds?: number } | undefined)
+          ?.retryAfterSeconds;
+        c.header("Retry-After", String(wait ?? 1));
+      }
+      throw error;
+    }
   });
 
   return app;

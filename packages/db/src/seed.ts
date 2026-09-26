@@ -38,6 +38,13 @@ export const MATCHING_CONFIG_V1 = {
   // and a photo needs one face found at or above this confidence to be approved without one.
   photo_moderation_label_threshold: 60,
   photo_moderation_face_threshold: 90,
+  // #52 (TD-6, ADR-008): the exposure budget. Cards an account may be served
+  // per day (the card route of #47 counts against it; a round of 12 and up to
+  // 10 pending likes fit several times over) and signed photo URLs per
+  // variant per day, counted from the fetch log in the statement that writes
+  // it. The day is the Finnish calendar day.
+  exposure_cards_per_day: 60,
+  photo_fetches_per_day: { thumb: 600, card: 300, full: 60 },
 } as const;
 
 /**

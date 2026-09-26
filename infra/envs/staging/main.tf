@@ -107,6 +107,9 @@ resource "aws_ssm_parameter" "config" {
     # deployed box sends the one-time code to localhost and refuses the panel's preflight.
     "admin-app-url"        = var.admin_app_url
     "cors-allowed-origins" = var.cors_allowed_origins
+    # The rate limiter's idea of the client address (#52, F19): flips to
+    # cloudfront together with cloudfront_only_ingress, never before.
+    "trusted-proxy" = var.trusted_proxy
     }, var.media_enabled ? {
     # Photos (#48): what the API needs besides the private key, which is
     # /kuutti/staging/cloudfront-signing-key and never a resource (ADR-001).

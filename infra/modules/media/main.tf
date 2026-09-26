@@ -191,13 +191,16 @@ resource "aws_cloudfront_cache_policy" "media" {
 
 # The API behaviour: nothing cached, every viewer header (Host included, so
 # Traefik routes by it and the API sees its public name), cookies and query
-# strings forwarded. AllViewer also carries the Sec-WebSocket-* headers.
+# strings forwarded, plus the headers CloudFront itself adds: the viewer
+# address the rate limiter keys on once the box admits CloudFront alone (#52,
+# audit F19) and the distribution's request id for the logs. The policy also
+# carries the Sec-WebSocket-* headers.
 data "aws_cloudfront_cache_policy" "caching_disabled" {
   name = "Managed-CachingDisabled"
 }
 
 data "aws_cloudfront_origin_request_policy" "all_viewer" {
-  name = "Managed-AllViewer"
+  name = "Managed-AllViewerAndCloudFrontHeaders-2022-06"
 }
 
 # ---------------------------------------------------------------------------

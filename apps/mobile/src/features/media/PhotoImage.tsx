@@ -2,6 +2,7 @@ import type { PhotoVariant } from "@kuutti/schema";
 import { Image, type ImageContentFit, type ImageStyle } from "expo-image";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { StyleProp } from "react-native";
+import { ApiError } from "@/lib/api";
 import { useMotionDuration } from "@/theme/useReducedMotion";
 import { fetchPhotoUrl } from "./client";
 
@@ -10,15 +11,19 @@ import { fetchPhotoUrl } from "./client";
  * the image fails to load (a URL past its fifteen minutes on a cache miss).
  * The blurhash paints meanwhile.
  */
-function useSignedUrl(id: string, variant: PhotoVariant) {
+function useSignedUrl(id: string, variant: PhotoVariant, onRefused?: OnRefused) {
   const [url, setUrl] = useState<string | null>(null);
   const retried = useRef(false);
+  // A ref, so a parent's inline handler does not restart the fetch on every render.
+  const refused = useRef(onRefused);
+  refused.current = onRefused;
   const load = useCallback(async () => {
     try {
       const { url: signed } = await fetchPhotoUrl(id, variant);
       setUrl(signed);
-    } catch {
-      setUrl(null); // the placeholder stays; the screen's notice reports API failures
+    } catch (error) {
+      setUrl(null); // the placeholder stays; the screen tells the person through onRefused
+      if (error instanceof ApiError) refused.current?.(error.code);
     }
   }, [id, variant]);
   useEffect(() => {
@@ -33,10 +38,14 @@ function useSignedUrl(id: string, variant: PhotoVariant) {
   return { url, retry };
 }
 
+/** The API's code when it refused the URL (#52: photo_budget_exceeded above the day's budget), or undefined for a failure without one. */
+export type OnRefused = (code: string | undefined) => void;
+
 type Props = {
   id: string;
   variant: PhotoVariant;
   blurhash: string;
+  onRefused?: OnRefused;
   /** What a screen reader says for the picture; from i18n. */
   accessibilityLabel: string;
   contentFit?: ImageContentFit;
@@ -56,8 +65,9 @@ export function PhotoImage({
   accessibilityLabel,
   contentFit = "cover",
   style,
+  onRefused,
 }: Props) {
-  const { url, retry } = useSignedUrl(id, variant);
+  const { url, retry } = useSignedUrl(id, variant, onRefused);
   const transition = useMotionDuration(200);
   return (
     <Image

@@ -21,6 +21,9 @@ export {
 } from "./identity.ts";
 export { type MatchingConfigRow, matchingConfig } from "./matching-config.ts";
 export {
+  type CardShown,
+  cardShown,
+  type NewCardShown,
   type NewPhoto,
   type NewPhotoAccess,
   type NewPhotoReview,

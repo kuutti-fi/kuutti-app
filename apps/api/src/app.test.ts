@@ -39,3 +39,87 @@ describe("route table", () => {
     for (const key of PUBLIC_ROUTES) expect(keys.has(key)).toBe(true);
   });
 });
+
+/** Every handler route as a request a crawler could make: params filled with plausible values. */
+function crawlable(app: ReturnType<typeof createApp>): { method: string; path: string }[] {
+  return app.routes
+    .filter(({ handler }) => handler.length !== 2)
+    .map(({ method, path }) => ({
+      method,
+      path: path
+        .replace(/:id\b/g, "00000000-0000-4000-8000-000000000001")
+        .replace(/:variant\b/g, "thumb")
+        .replace(/:[A-Za-z_]+/g, "x"),
+    }));
+}
+
+/**
+ * Rule 8 and the M3 half of TD-6 (#52): nothing a crawler reaches. A request
+ * without a session is refused on every route the public list does not name,
+ * a browser origin the configuration does not know gets no CORS answer on
+ * any route, the public list carries no id, every response says noindex, and
+ * the contract is not served in production.
+ */
+describe("no web surface", () => {
+  it("a request without a session gets 401 on every route outside the public list", async () => {
+    const { logger } = await captureLogger();
+    const app = createApp({ config: testConfig(), logger, db: testPool() });
+    const refused: string[] = [];
+    for (const { method, path } of crawlable(app)) {
+      if (PUBLIC_ROUTES.has(`${method} ${path}`)) continue;
+      const response = await app.request(path, { method });
+      if (response.status !== 401) refused.push(`${method} ${path} -> ${response.status}`);
+    }
+    expect(refused).toEqual([]);
+  });
+
+  it("no route answers a browser origin it does not know", async () => {
+    const { logger } = await captureLogger();
+    const app = createApp({ config: testConfig(), logger, db: testPool() });
+    const origin = "https://scraper.example";
+    const leaked: string[] = [];
+    for (const { method, path } of crawlable(app)) {
+      const direct = await app.request(path, { method, headers: { origin } });
+      const preflight = await app.request(path, {
+        method: "OPTIONS",
+        headers: { origin, "access-control-request-method": method },
+      });
+      for (const [kind, response] of [
+        ["direct", direct],
+        ["preflight", preflight],
+      ] as const) {
+        if (response.headers.get("access-control-allow-origin") !== null) {
+          leaked.push(`${kind} ${method} ${path}`);
+        }
+      }
+    }
+    expect(leaked).toEqual([]);
+  });
+
+  it("the public list names no route with an id in its path", () => {
+    for (const key of PUBLIC_ROUTES) expect(key).not.toMatch(/[:{]/);
+  });
+
+  it("every response says noindex", async () => {
+    const { logger } = await captureLogger();
+    const app = createApp({ config: testConfig(), logger, db: testPool() });
+    for (const path of ["/health", "/photos", "/nowhere"]) {
+      expect((await app.request(path)).headers.get("x-robots-tag")).toBe("noindex, nofollow");
+    }
+  });
+
+  it("the contract is not served in production", async () => {
+    const { logger } = await captureLogger();
+    const production = testConfig({
+      APP_ENV: "production",
+      ADMIN_APP_URL: "https://admin.kuutti.app",
+      CORS_ALLOWED_ORIGINS: "https://admin.kuutti.app",
+    });
+    const app = createApp({ config: production, logger, db: testPool() });
+    expect((await app.request("/openapi.json")).status).toBe(404);
+    expect(
+      (await createApp({ config: testConfig(), logger, db: testPool() }).request("/openapi.json"))
+        .status,
+    ).toBe(200);
+  });
+});

@@ -1,0 +1,26 @@
+# ADR-008: The exposure budget, the shown record, and whose word the API takes for a client
+
+- Status: accepted
+- Date: 2026-09-26
+- Follows: TD-6 (photos and profiles are the asset a scraper wants; exposure is counted and budgeted), CLAUDE.md rules 6 and 8 and Product constraints (every tunable in `matching_config`), `.claude/rules/api.md` Routes and Media, ADR-005 clause 7 (the ingress switch), ADR-001 (the alarm is code), audit F19 and F26; issue #52
+
+## Context
+
+With #48 every signed photo URL is a `photo_access` row. #52 turns that log into a limit, decides which photos of other people an account may be issued a URL for at all, says the refusal in plain words, and closes two findings of the audit that become live the day CloudFront fronts the API: the rate limiter keyed on a header hop the client writes (F19), and a request id the client could choose (F26). The card route itself is #47; the rounds and their velocity rules are M4.
+
+## Decision
+
+1. **The budget is counted in the statement that writes the fetch-log row.** `repo.insertPhotoAccess` counts the caller's `photo_access` rows of the variant since the start of the day and inserts only under the limit, in one statement, so two requests cannot both pass a count taken separately, and the caller's `account_id` is in every branch (rule 6). Over the budget: no row, a 429 `photo_budget_exceeded` with `Retry-After` until the day rolls, and a warn line `photo refused` with `reason: budget`, the count and the limit. The limits are `matching_config.photo_fetches_per_day` (one JSON value with the three variants) and `exposure_cards_per_day` (the card route of #47 counts against it); the defaults are in the seed and in migration 0010 (600, 300, 60 URLs and 60 cards a day: a round of 12 plus up to 10 pending likes fits several times over, a script hits the wall within the hour). A number changes as a new config version, never a code edit.
+2. **The day is the calendar day in Finland.** `media/budget.ts` computes the window in `Europe/Helsinki`, DST included, so a refusal says "after midnight" and means it, and the count does not slide with the person. A rolling 24 hours was rejected: it cannot be said in one sentence.
+3. **Another account's photo is served only from a card the caller was shown.** `card_shown(account_id, photo_id, at)` is written by the card route (#47) for the viewer's own account, one row per photo on the card; `repo.findVisiblePhoto` serves the caller's own photos in any state and another account's photo only when it is approved and such a row exists, for every variant. The row goes with the photo (cascade) and with the viewer's erasure (#51). A fetch of an existing photo the caller was not shown is a 404 like a missing one and a warn line with `reason: not_shown` for M4's safety review; it is never an event (rule 5: nothing about a person's behaviour leaves as research without consent).
+4. **Refusals are visible.** The app shows the budget refusal as a notice on the photos screen and under the zoom placeholder; the export lists a photo without URLs when its fetch would exceed the budget. A metric filter on the refusal line (`PhotoBudgetRefusals`, `Kuutti/<env>`) and an alarm on the day's sum (`budget_refusals_per_day`, 100) live in the observability module of both environments; nobody is limited in silence, and a script or a budget set too low is a mail.
+5. **The client address comes from the trusted proxy, never from a hop the client wrote.** `TRUSTED_PROXY` (SSM `trusted-proxy`) names it: `traefik` reads the last `X-Forwarded-For` entry, the one Traefik appends on the box, and is the deployed default; `cloudfront` reads `CloudFront-Viewer-Address` (the distribution's origin request policy forwards the CloudFront headers) and, without it, the hop before the last; `none` is the socket, for development and tests. `cloudfront` is set together with `cloudfront_only_ingress` and never before, since until then anyone reaching the origin could send that header. No address at all shares one bucket rather than bypassing the limit.
+6. **The request id is the server's.** A client-sent `X-Request-Id` is neither used nor echoed; CloudFront's `X-Amz-Cf-Id` is logged next to it, as a correlation field only, when it looks like one.
+
+## Consequences
+
+- One more table (`card_shown`, migration 0009), two config rows (migration 0010), one custom metric and one alarm (about 0.40 USD a month per environment).
+- The fetch-log count uses the index `(account_id, at)` from #48 and adds a variant filter; at 5,000 people it is a few rows a day per account.
+- The route-table test now also asks every route as a crawler would: without a session (401 outside the public list), with an unknown browser origin (no CORS answer), and checks that the public list carries no id, every response says noindex, and the contract is off in production.
+- The card route (#47) has two duties from here: write `card_shown` for the viewer, and count the card against `exposure_cards_per_day`.
+- Open, and the maintainer's: the velocity rules on rounds and device attestation (M4), the WAF (#41), and the day the ingress switch flips.

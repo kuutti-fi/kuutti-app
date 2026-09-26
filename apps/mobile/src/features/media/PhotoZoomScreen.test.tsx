@@ -53,4 +53,28 @@ describe("PhotoZoomScreen", () => {
     await fireEvent.press(screen.getByRole("button", { name: "Back to your photos" }));
     expect(router.back).toHaveBeenCalled();
   });
+
+  it("says so when the API refused the URL for the day's budget (#52)", async () => {
+    globalThis.fetch = jest.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            error: { code: "photo_budget_exceeded", message: "later", requestId: "r1" },
+          }),
+          { status: 429, headers: { "content-type": "application/json", "retry-after": "3600" } },
+        ),
+    ) as unknown as typeof fetch;
+
+    await act(async () => {
+      renderWithTheme(
+        <PhotoZoomScreen id={ID} blurhash="LEHV6nWB2yk8pyo0adR*.7kCMdnj" position={1} total={1} />,
+      );
+      await new Promise<void>((resolve) => setTimeout(resolve, 10));
+    });
+    await waitFor(() =>
+      expect(
+        screen.getByText("That is enough photos for today. They load again after midnight."),
+      ).toBeTruthy(),
+    );
+  });
 });

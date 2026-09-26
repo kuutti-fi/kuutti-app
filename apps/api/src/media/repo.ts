@@ -97,6 +97,61 @@ export async function findPhoto(
   return rows[0] ? photoFrom(rows[0]) : null;
 }
 
+/**
+ * The photo the caller may be issued a URL for (#52, TD-6): their own in any
+ * state, or another account's approved photo on a card they were shown (the
+ * card_shown row the card route of #47 writes). Both branches carry the
+ * caller's account id (rule 6); there is no third.
+ */
+export async function findVisiblePhoto(
+  db: Queryable,
+  accountId: string,
+  photoId: string,
+): Promise<PhotoRow | null> {
+  const { rows } = await db.query<Row>(
+    `SELECT ${COLUMNS} FROM photo
+     WHERE id = $2
+       AND (account_id = $1
+         OR (state = 'approved'
+           AND EXISTS (SELECT 1 FROM card_shown WHERE account_id = $1 AND photo_id = photo.id)))`,
+    [accountId, photoId],
+  );
+  return rows[0] ? photoFrom(rows[0]) : null;
+}
+
+/** Whether a photo exists at all: for the refusal's log line only, never for a response. */
+export async function photoExists(db: Queryable, photoId: string): Promise<boolean> {
+  const { rows } = await db.query<{ exists: boolean }>(
+    "SELECT EXISTS (SELECT 1 FROM photo WHERE id = $1) AS exists",
+    [photoId],
+  );
+  return rows[0]?.exists === true;
+}
+
+/**
+ * What the card route writes when it serves a card (#47): the viewer's own
+ * account id and the photos on the card. The shown-record rule of #52 reads it.
+ */
+export async function recordCardShown(
+  db: Queryable,
+  accountId: string,
+  photoIds: string[],
+  at: Date,
+): Promise<number> {
+  if (photoIds.length === 0) return 0;
+  const result = await db.query(
+    "INSERT INTO card_shown (account_id, photo_id, at) SELECT $1, unnest($2::uuid[]), $3",
+    [accountId, photoIds, at],
+  );
+  return result.rowCount ?? 0;
+}
+
+/** Erasure (#51): the trail of cards shown to the person. Rows about their own photos go with the photos. */
+export async function deleteCardShownOfAccount(db: Queryable, accountId: string): Promise<number> {
+  const result = await db.query("DELETE FROM card_shown WHERE account_id = $1", [accountId]);
+  return result.rowCount ?? 0;
+}
+
 /** The deleted row, or null when it was not the caller's. */
 export async function deletePhoto(
   db: Queryable,
@@ -145,16 +200,48 @@ export async function compactPositions(db: Queryable, accountId: string): Promis
 }
 
 /** False when the account is no longer live: a fetch that outlived the erasure writes nothing (#51). */
+export type PhotoAccessResult = {
+  /** False when the account is a tombstone (#51): nothing was written. */
+  live: boolean;
+  /** The account's fetches of this variant since the window started, before this one. */
+  used: number;
+  /** True when the row was written: the account is live and under its budget. */
+  recorded: boolean;
+};
+
+/**
+ * The fetch-log row and the exposure budget in one statement (#52, TD-6,
+ * rule 6): the day's fetches of the variant are counted for the caller's
+ * account and the row is written only under the limit, so two requests
+ * cannot both pass a count taken separately. A tombstone writes nothing (#51).
+ */
 export async function insertPhotoAccess(
   db: Queryable,
-  input: { accountId: string; photoId: string; variant: PhotoVariant; at: Date },
-): Promise<boolean> {
-  const result = await db.query(
-    `INSERT INTO photo_access (account_id, photo_id, variant, at)
-     SELECT $1, $2, $3, $4 WHERE EXISTS (SELECT 1 FROM account WHERE id = $1 AND state <> 'deleted')`,
-    [input.accountId, input.photoId, input.variant, input.at],
+  input: {
+    accountId: string;
+    photoId: string;
+    variant: PhotoVariant;
+    at: Date;
+    /** Start of the budget's day; rows from before it do not count. */
+    since: Date;
+    limit: number;
+  },
+): Promise<PhotoAccessResult> {
+  const { rows } = await db.query<{ live: boolean; used: number; inserted: number }>(
+    `WITH live AS (SELECT 1 FROM account WHERE id = $1 AND state <> 'deleted'),
+          used AS (SELECT count(*)::int AS n FROM photo_access
+                   WHERE account_id = $1 AND variant = $3 AND at >= $5),
+          ins AS (INSERT INTO photo_access (account_id, photo_id, variant, at)
+                  SELECT $1, $2, $3, $4 FROM live, used WHERE used.n < $6
+                  RETURNING 1 AS one)
+     SELECT EXISTS (SELECT 1 FROM live) AS live,
+            (SELECT n FROM used) AS used,
+            (SELECT count(*) FROM ins)::int AS inserted`,
+    [input.accountId, input.photoId, input.variant, input.at, input.since, input.limit],
   );
-  return result.rowCount === 1;
+  const row = rows[0];
+  if (!row) throw new Error("photo_access insert returned no row");
+  return { live: row.live, used: row.used, recorded: row.inserted === 1 };
 }
 
 // Moderation (#49). The automatic check and the staff routes read photos

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { TRUSTED_PROXIES, type TrustedProxy } from "./rate-limit.ts";
 import { loadSsmParameters } from "./ssm.ts";
 
 const AppEnv = z.enum(["development", "test", "preview", "staging", "production"]);
@@ -131,6 +132,11 @@ const Env = z.object({
   SOURCE_URL: z.url({ protocol: /^https$/ }).default("https://github.com/kuutti-fi/kuutti-app"),
   BODY_LIMIT_BYTES: z.coerce.number().int().min(1024).default(1_048_576),
   RATE_LIMIT_PER_MINUTE: z.coerce.number().int().min(1).optional(),
+  // Whose word the rate limiter takes for the client address (#52, F19,
+  // lib/rate-limit.ts). Unset: the socket in development and test, Traefik on
+  // a deployed box. /kuutti/<env>/trusted-proxy says cloudfront the day the
+  // box admits CloudFront alone (cloudfront_only_ingress), never before.
+  TRUSTED_PROXY: z.enum(TRUSTED_PROXIES).optional(),
   SSM_PARAMETER_PREFIX: z.string().min(1).optional(),
 
   // Pull-request preview (#9): the process creates and seeds kuutti_pr_<n>
@@ -155,8 +161,9 @@ export type PreviewConfig = {
   adminDatabaseUrl: string;
 };
 
-export type Config = Omit<z.infer<typeof Env>, "RATE_LIMIT_PER_MINUTE"> & {
+export type Config = Omit<z.infer<typeof Env>, "RATE_LIMIT_PER_MINUTE" | "TRUSTED_PROXY"> & {
   RATE_LIMIT_PER_MINUTE: number;
+  TRUSTED_PROXY: TrustedProxy;
   databaseUrl: string;
   corsAllowedOrigins: ReadonlySet<string>;
   preview?: PreviewConfig;
@@ -236,9 +243,13 @@ export function parseConfig(raw: Record<string, string | undefined>): Config {
     env.CLOUDFRONT_KEY_PAIR_ID = undefined;
     env.CLOUDFRONT_SIGNING_KEY = undefined;
   }
+  const trustedProxy: TrustedProxy =
+    env.TRUSTED_PROXY ??
+    (env.APP_ENV === "development" || env.APP_ENV === "test" ? "none" : "traefik");
   return {
     ...env,
     RATE_LIMIT_PER_MINUTE: rateLimit,
+    TRUSTED_PROXY: trustedProxy,
     databaseUrl: preview ? withDatabase(baseUrl, preview.database) : baseUrl,
     corsAllowedOrigins: allowedOrigins(env),
     ...(preview

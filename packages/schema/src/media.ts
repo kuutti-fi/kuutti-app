@@ -132,5 +132,12 @@ export const MEDIA_ERROR_CODES = [
   "photo_order_invalid",
   "media_busy",
   "media_unavailable",
+  "photo_budget_exceeded",
 ] as const;
 export type MediaErrorCode = (typeof MEDIA_ERROR_CODES)[number];
+
+/** The shape of matching_config.photo_fetches_per_day (#52, TD-6): signed URLs per variant per Finnish day. */
+export const PhotoFetchBudget = z
+  .object({ thumb: z.int().min(0), card: z.int().min(0), full: z.int().min(0) })
+  .strict();
+export type PhotoFetchBudget = z.infer<typeof PhotoFetchBudget>;

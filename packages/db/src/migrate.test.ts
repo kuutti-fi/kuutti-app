@@ -82,6 +82,7 @@ describe("migrate", () => {
           "admin_session",
           "audit_log",
           "auth_request",
+          "card_shown",
           "identity",
           "matching_config",
           "moderator_roles",

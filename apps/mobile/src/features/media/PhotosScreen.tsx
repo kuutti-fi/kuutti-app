@@ -64,6 +64,7 @@ const ERROR_TEXT: ReadonlyMap<string, PlainMessageKey> = new Map([
   ["media_busy", "photos.error.media_busy"],
   ["media_unavailable", "photos.error.media_unavailable"],
   ["photo_order_invalid", "photos.error.photo_order_invalid"],
+  ["photo_budget_exceeded", "photos.error.photo_budget_exceeded"],
 ]);
 
 function noticeText(notice: PhotosNotice, t: ReturnType<typeof useT>["t"]): string {
@@ -159,6 +160,9 @@ export function PhotosScreen() {
                   blurhash={photo.blurhash}
                   accessibilityLabel={t("photos.imageLabel", { position: index + 1, total })}
                   style={{ width: "100%", aspectRatio: 1 }}
+                  onRefused={(code) => {
+                    if (code === "photo_budget_exceeded") photos.reportRefusal(code);
+                  }}
                 />
               </Pressable>
               <View className="gap-0.5">

@@ -1,0 +1,204 @@
+import { Photo, type PhotoFetchBudget, type PhotoVariant } from "@kuutti/schema";
+import { describe, expect, it } from "vitest";
+import { createApp } from "../app.ts";
+import { signedInAccount, withMatchingConfig } from "../test/account.ts";
+import { captureLogger, type TestContext, test, testConfig } from "../test/harness.ts";
+import { fixturePng, testMediaDeps } from "../test/media.ts";
+import { dayWindow, secondsUntil } from "./budget.ts";
+import { recordCardShown } from "./repo.ts";
+
+// The exposure budget and the shown-record rule (#52, TD-6, ADR-008),
+// features/safety/exposure.feature. Photos are uploaded through the API so
+// the objects and rows exist; the budget is set per test.
+
+const BUDGET: PhotoFetchBudget = { thumb: 3, card: 2, full: 1 };
+
+async function appWith(ctx: TestContext, budget: PhotoFetchBudget = BUDGET) {
+  await withMatchingConfig(ctx.client, { max_photos: 3, photo_fetches_per_day: budget });
+  const { logger, lines } = await captureLogger();
+  const media = testMediaDeps({ concurrency: 2 });
+  const app = createApp({ config: testConfig(), logger, db: ctx.client, media: media.deps });
+  return { app, logs: lines };
+}
+
+type App = Awaited<ReturnType<typeof appWith>>["app"];
+
+async function upload(app: App, headers: Record<string, string>, bytes: Buffer): Promise<Photo> {
+  const form = new FormData();
+  form.append("photo", new Blob([new Uint8Array(bytes)], { type: "image/png" }), "p.png");
+  const response = await app.request("/photos", { method: "POST", headers, body: form });
+  expect(response.status).toBe(201);
+  return Photo.parse(await response.json());
+}
+
+const fetchUrl = (app: App, headers: Record<string, string>, id: string, variant: PhotoVariant) =>
+  app.request(`/photos/${id}/${variant}`, { headers });
+
+async function approve(ctx: TestContext, photoId: string): Promise<void> {
+  await ctx.client.query("UPDATE photo SET state = 'approved' WHERE id = $1", [photoId]);
+}
+
+async function accessRows(ctx: TestContext, accountId: string, variant?: PhotoVariant) {
+  const { rows } = await ctx.client.query<{ n: string }>(
+    `SELECT count(*) AS n FROM photo_access WHERE account_id = $1 AND ($2::photo_variant IS NULL OR variant = $2)`,
+    [accountId, variant ?? null],
+  );
+  return Number(rows[0]?.n ?? 0);
+}
+
+async function errorCode(response: Response): Promise<string> {
+  return ((await response.json()) as { error: { code: string } }).error.code;
+}
+
+describe("The photo fetch budget of a day", () => {
+  test.for([
+    ["thumb", 3],
+    ["card", 2],
+    ["full", 1],
+  ] as const)("%s: %i fetches, then 429", async ([variant, limit], { ctx }) => {
+    const { app } = await appWith(ctx);
+    const a = await signedInAccount(ctx.client);
+    const photo = await upload(app, a.headers, await fixturePng(64, 64));
+    for (let i = 0; i < limit; i += 1) {
+      expect((await fetchUrl(app, a.headers, photo.id, variant)).status).toBe(200);
+    }
+    const refused = await fetchUrl(app, a.headers, photo.id, variant);
+    expect(refused.status).toBe(429);
+    expect(await errorCode(refused)).toBe("photo_budget_exceeded");
+    expect(Number(refused.headers.get("retry-after"))).toBeGreaterThan(0);
+    expect(await accessRows(ctx, a.accountId, variant)).toBe(limit);
+  });
+});
+
+describe("exposure", () => {
+  test("A refused fetch writes no fetch-log row and is counted", async ({ ctx }) => {
+    const { app, logs } = await appWith(ctx, { thumb: 1, card: 1, full: 1 });
+    const a = await signedInAccount(ctx.client);
+    const photo = await upload(app, a.headers, await fixturePng(64, 64));
+    expect((await fetchUrl(app, a.headers, photo.id, "thumb")).status).toBe(200);
+    expect((await fetchUrl(app, a.headers, photo.id, "thumb")).status).toBe(429);
+    expect(await accessRows(ctx, a.accountId, "thumb")).toBe(1);
+    const line = logs().find((l) => l.msg === "photo refused");
+    expect(line).toMatchObject({
+      level: 40,
+      accountId: a.accountId,
+      variant: "thumb",
+      reason: "budget",
+      used: 1,
+      limit: 1,
+    });
+  });
+
+  test("Retry-After runs until midnight in Finland", async ({ ctx }) => {
+    const { app } = await appWith(ctx, { thumb: 0, card: 0, full: 0 });
+    const a = await signedInAccount(ctx.client);
+    const photo = await upload(app, a.headers, await fixturePng(64, 64));
+    const before = new Date();
+    const refused = await fetchUrl(app, a.headers, photo.id, "thumb");
+    expect(refused.status).toBe(429);
+    const expected = secondsUntil(dayWindow(before).end, before);
+    expect(Math.abs(Number(refused.headers.get("retry-after")) - expected)).toBeLessThanOrEqual(5);
+  });
+
+  test("The count resets at the day boundary", async ({ ctx }) => {
+    const { app } = await appWith(ctx, { thumb: 2, card: 2, full: 2 });
+    const a = await signedInAccount(ctx.client);
+    const photo = await upload(app, a.headers, await fixturePng(64, 64));
+    // Two days back is outside the current window whatever the clock and DST say.
+    await ctx.client.query(
+      `INSERT INTO photo_access (account_id, photo_id, variant, at)
+       SELECT $1, $2, 'thumb', now() - interval '2 days' FROM generate_series(1, 2)`,
+      [a.accountId, photo.id],
+    );
+    expect((await fetchUrl(app, a.headers, photo.id, "thumb")).status).toBe(200);
+    expect(await accessRows(ctx, a.accountId, "thumb")).toBe(3);
+  });
+
+  test("The full variant of a photo the account was not shown is refused", async ({ ctx }) => {
+    const { app, logs } = await appWith(ctx);
+    const a = await signedInAccount(ctx.client);
+    const b = await signedInAccount(ctx.client);
+    const theirs = await upload(app, b.headers, await fixturePng(64, 64));
+    await approve(ctx, theirs.id);
+    const refused = await fetchUrl(app, a.headers, theirs.id, "full");
+    expect(refused.status).toBe(404);
+    expect(await accessRows(ctx, a.accountId)).toBe(0);
+    expect(logs().find((l) => l.msg === "photo refused")).toMatchObject({
+      accountId: a.accountId,
+      photoId: theirs.id,
+      variant: "full",
+      reason: "not_shown",
+    });
+  });
+
+  test("A photo on a card the account was shown is served", async ({ ctx }) => {
+    const { app } = await appWith(ctx);
+    const a = await signedInAccount(ctx.client);
+    const b = await signedInAccount(ctx.client);
+    const theirs = await upload(app, b.headers, await fixturePng(64, 64));
+    await approve(ctx, theirs.id);
+    expect(await recordCardShown(ctx.client, a.accountId, [theirs.id], new Date())).toBe(1);
+    expect((await fetchUrl(app, a.headers, theirs.id, "card")).status).toBe(200);
+    expect((await fetchUrl(app, a.headers, theirs.id, "full")).status).toBe(200);
+    expect(await accessRows(ctx, a.accountId)).toBe(2);
+    expect(await accessRows(ctx, b.accountId)).toBe(0);
+  });
+
+  test("A photo not yet approved is not served from a shown card", async ({ ctx }) => {
+    const { app } = await appWith(ctx);
+    const a = await signedInAccount(ctx.client);
+    const b = await signedInAccount(ctx.client);
+    const theirs = await upload(app, b.headers, await fixturePng(64, 64));
+    await recordCardShown(ctx.client, a.accountId, [theirs.id], new Date());
+    expect((await fetchUrl(app, a.headers, theirs.id, "card")).status).toBe(404);
+    expect(await accessRows(ctx, a.accountId)).toBe(0);
+  });
+
+  test("Fetching the photos of the account itself ignores the shown record", async ({ ctx }) => {
+    const { app } = await appWith(ctx);
+    const a = await signedInAccount(ctx.client);
+    const mine = await upload(app, a.headers, await fixturePng(64, 64));
+    expect(mine.state).toBe("pending");
+    expect((await fetchUrl(app, a.headers, mine.id, "full")).status).toBe(200);
+  });
+});
+
+describe("the Finnish day", () => {
+  const iso = (d: Date) => d.toISOString();
+
+  it("runs from local midnight to local midnight, summer time", () => {
+    const w = dayWindow(new Date("2026-07-15T10:00:00Z"));
+    expect([iso(w.start), iso(w.end)]).toEqual([
+      "2026-07-14T21:00:00.000Z",
+      "2026-07-15T21:00:00.000Z",
+    ]);
+  });
+
+  it("runs from local midnight to local midnight, winter time", () => {
+    const w = dayWindow(new Date("2026-01-15T10:00:00Z"));
+    expect([iso(w.start), iso(w.end)]).toEqual([
+      "2026-01-14T22:00:00.000Z",
+      "2026-01-15T22:00:00.000Z",
+    ]);
+  });
+
+  it("is a second long a second before midnight", () => {
+    const at = new Date("2026-07-15T20:59:59Z");
+    const w = dayWindow(at);
+    expect(iso(w.end)).toBe("2026-07-15T21:00:00.000Z");
+    expect(secondsUntil(w.end, at)).toBe(1);
+  });
+
+  it("is 25 hours long on the autumn change and 23 on the spring change", () => {
+    const autumn = dayWindow(new Date("2026-10-25T10:00:00Z"));
+    expect((autumn.end.getTime() - autumn.start.getTime()) / 3_600_000).toBe(25);
+    const spring = dayWindow(new Date("2026-03-29T10:00:00Z"));
+    expect((spring.end.getTime() - spring.start.getTime()) / 3_600_000).toBe(23);
+  });
+
+  it("never announces a wait under one second", () => {
+    const at = new Date("2026-07-15T20:59:59.900Z");
+    expect(secondsUntil(dayWindow(at).end, at)).toBe(1);
+    expect(secondsUntil(at, new Date(at.getTime() + 5_000))).toBe(1);
+  });
+});

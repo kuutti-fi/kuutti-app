@@ -39,3 +39,9 @@ variable "api_fqdn" {
   description = "The API's public host name (api.staging.<domain> or api.<domain>): what the outside probe calls."
   type        = string
 }
+
+variable "budget_refusals_per_day" {
+  description = "Photo fetches refused for the exposure budget within one day that raise the alarm (#52): absurd for 5,000 people, ordinary for one script."
+  type        = number
+  default     = 100
+}
