@@ -1,4 +1,4 @@
-import type { PlainMessageKey } from "@kuutti/i18n";
+import { CONSENT_VERSIONS, type PlainMessageKey } from "@kuutti/i18n";
 import {
   AGE_MAX,
   AGE_MIN,
@@ -22,19 +22,34 @@ import { useHapticTap } from "@/theme/haptics";
 import { choosePond, declareGender, giveConsent, savePreferences } from "./client";
 import { useOnboarding } from "./useOnboarding";
 
-type Step = "gender" | "seeks" | "age" | "pond" | "consents" | "research" | "done";
-const STEPS: Step[] = ["gender", "seeks", "age", "pond", "consents", "research"];
+type Step = "consents" | "gender" | "seeks" | "age" | "pond" | "research" | "done";
+const STEPS: Step[] = ["consents", "gender", "seeks", "age", "pond", "research"];
 
-/** The next question, from what the API says is missing; research is offered once and never required. */
+/**
+ * The next question, from what the API says is missing. The two consents
+ * come first: nothing personal is asked before the person has read what
+ * happens to it (#46 review, ADR-010 §9). Research is offered once and
+ * never required.
+ */
 export function nextStep(status: OnboardingStatus, researchOffered: boolean): Step {
   const missing = new Set(status.missing);
+  if (missing.has("terms") || missing.has("privacy")) return "consents";
   if (missing.has("gender")) return "gender";
   if (missing.has("seeks")) return "seeks";
   if (missing.has("age_window")) return "age";
   if (missing.has("pond")) return "pond";
-  if (missing.has("terms") || missing.has("privacy")) return "consents";
   if (!status.consents.research && !researchOffered) return "research";
   return "done";
+}
+
+/**
+ * The version of a wording as built into this app: what the person actually
+ * read, and therefore what a consent names (ADR-010 §4). When the API has a
+ * newer wording, the app asks for an update instead of recording a consent
+ * for a text it never showed.
+ */
+export function bundledVersion(kind: ConsentKind): string {
+  return CONSENT_VERSIONS[kind] ?? "";
 }
 
 const GENDER_TEXT: Record<Gender, PlainMessageKey> = {
@@ -287,30 +302,30 @@ export function OnboardingScreen() {
                     {t(kind === "terms" ? "legal.terms.summary" : "legal.privacy.summary")}
                   </Text>
                   <Text variant="muted">
-                    {t("onboarding.consents.version", {
-                      version: onboarding.currentVersions[kind],
-                    })}
+                    {t("onboarding.consents.version", { version: bundledVersion(kind) })}
                   </Text>
                 </CardContent>
               </Card>
             ))}
-            <Button
-              disabled={busy}
-              onPress={() => {
-                tap();
-                void step(async () => {
-                  for (const kind of ["terms", "privacy"] as ConsentKind[]) {
-                    await giveConsent(
-                      kind,
-                      onboarding.currentVersions[kind],
-                      consentLocale(locale),
-                    );
-                  }
-                });
-              }}
-            >
-              {t("onboarding.consents.accept")}
-            </Button>
+            {(["terms", "privacy"] as const).some(
+              (kind) => bundledVersion(kind) !== onboarding.currentVersions[kind],
+            ) ? (
+              <Text accessibilityLiveRegion="polite">{t("onboarding.consents.outdatedApp")}</Text>
+            ) : (
+              <Button
+                disabled={busy}
+                onPress={() => {
+                  tap();
+                  void step(async () => {
+                    for (const kind of ["terms", "privacy"] as ConsentKind[]) {
+                      await giveConsent(kind, bundledVersion(kind), consentLocale(locale));
+                    }
+                  });
+                }}
+              >
+                {t("onboarding.consents.accept")}
+              </Button>
+            )}
           </View>
         )}
 
@@ -325,29 +340,27 @@ export function OnboardingScreen() {
               <CardContent className="gap-2">
                 <Text>{t("legal.research.summary")}</Text>
                 <Text variant="muted">
-                  {t("onboarding.consents.version", {
-                    version: onboarding.currentVersions.research,
-                  })}
+                  {t("onboarding.consents.version", { version: bundledVersion("research") })}
                 </Text>
               </CardContent>
             </Card>
             <Text variant="muted">{t("onboarding.research.later")}</Text>
-            <Button
-              disabled={busy}
-              onPress={() => {
-                tap();
-                setResearchOffered(true);
-                void step(() =>
-                  giveConsent(
-                    "research",
-                    onboarding.currentVersions.research,
-                    consentLocale(locale),
-                  ),
-                );
-              }}
-            >
-              {t("onboarding.research.yes")}
-            </Button>
+            {bundledVersion("research") !== onboarding.currentVersions.research ? (
+              <Text accessibilityLiveRegion="polite">{t("onboarding.consents.outdatedApp")}</Text>
+            ) : (
+              <Button
+                disabled={busy}
+                onPress={() => {
+                  tap();
+                  setResearchOffered(true);
+                  void step(() =>
+                    giveConsent("research", bundledVersion("research"), consentLocale(locale)),
+                  );
+                }}
+              >
+                {t("onboarding.research.yes")}
+              </Button>
+            )}
             <Button
               variant="outline"
               disabled={busy}

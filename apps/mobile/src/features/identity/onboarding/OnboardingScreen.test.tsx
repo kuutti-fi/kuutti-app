@@ -40,7 +40,8 @@ const POND = {
 };
 
 /** A tiny server: the status is computed from what the steps wrote, as the API does. */
-function fakeApi() {
+function fakeApi(options: { version?: string } = {}) {
+  const current = options.version ?? VERSION;
   const server: {
     gender: string | null;
     seeks: string[] | null;
@@ -71,7 +72,7 @@ function fakeApi() {
         privacy: has("privacy") ? VERSION : null,
         research: research ? { version: VERSION, givenAt: "2026-09-26T10:00:00.000Z" } : null,
       },
-      currentVersions: { terms: VERSION, privacy: VERSION, research: VERSION },
+      currentVersions: { terms: current, privacy: current, research: current },
       missing,
       complete: missing.length === 0,
     };
@@ -133,7 +134,21 @@ describe("OnboardingScreen", () => {
   it("walks a registered account through every step with buttons and leaves when nothing is missing", async () => {
     const { server, calls } = fakeApi();
     await show(<OnboardingScreen />);
+    // The consents come first: nothing personal before the person read what happens to it.
+    await waitFor(() => expect(screen.getByText("Two things to agree to")).toBeTruthy());
+    expect(
+      screen.getByText("The Finnish text is the one that counts; this is a translation."),
+    ).toBeTruthy();
+    expect(screen.getByText("Terms of use")).toBeTruthy();
+    expect(screen.getAllByText(`Version ${VERSION}`)).toHaveLength(2);
+    checkA11y();
+    await press(screen.getByRole("button", { name: "I accept the terms and the privacy notice" }));
+    await flush();
     await waitFor(() => expect(screen.getByText("How do you describe yourself?")).toBeTruthy());
+    expect(server.consents.map((c) => [c.kind, c.version, c.locale])).toEqual([
+      ["terms", VERSION, "en"],
+      ["privacy", VERSION, "en"],
+    ]);
     checkA11y();
     await press(screen.getByRole("button", { name: "Woman" }));
     await press(screen.getByRole("button", { name: "Continue" }));
@@ -152,31 +167,18 @@ describe("OnboardingScreen", () => {
     expect(server.seeks).toEqual(["man", "non_binary"]);
     expect(server.ageWindow).toEqual({ min: 25, max: 35 });
     await press(screen.getByRole("button", { name: "Otaniemi" }));
-    await waitFor(() => expect(screen.getByText("Two things to agree to")).toBeTruthy());
-    // English reader: the binding-text line and both drafts with their version.
-    expect(
-      screen.getByText("The Finnish text is the one that counts; this is a translation."),
-    ).toBeTruthy();
-    expect(screen.getByText("Terms of use")).toBeTruthy();
-    expect(screen.getAllByText(`Version ${VERSION}`)).toHaveLength(2);
-    checkA11y();
-    await press(screen.getByRole("button", { name: "I accept the terms and the privacy notice" }));
     await flush();
     await waitFor(() => expect(screen.getByText("Help us learn how matching works")).toBeTruthy());
-    expect(server.consents.map((c) => [c.kind, c.version, c.locale])).toEqual([
-      ["terms", VERSION, "en"],
-      ["privacy", VERSION, "en"],
-    ]);
     checkA11y();
     await press(screen.getByRole("button", { name: "Not now" }));
     await waitFor(() => expect(router.replace).toHaveBeenCalledWith("/"));
     expect(server.consents).toHaveLength(2);
     expect(calls.filter((c) => c.method !== "GET").map((c) => c.path)).toEqual([
+      "/consents",
+      "/consents",
       "/account/gender",
       "/preferences",
       "/account/pond",
-      "/consents",
-      "/consents",
     ]);
   });
 
@@ -201,6 +203,10 @@ describe("OnboardingScreen", () => {
   it("refuses to move on from an age window matching cannot use", async () => {
     const { server } = fakeApi();
     server.gender = "woman";
+    server.consents.push(
+      { kind: "terms", version: VERSION, locale: "en" },
+      { kind: "privacy", version: VERSION, locale: "en" },
+    );
     await show(<OnboardingScreen />);
     await waitFor(() => expect(screen.getByText("Whom are you looking for?")).toBeTruthy());
     await press(screen.getByRole("button", { name: "Anyone" }));
@@ -213,5 +219,17 @@ describe("OnboardingScreen", () => {
       screen.getByRole("button", { name: "Continue" }).props.accessibilityState?.disabled,
     ).toBe(true);
     expect(server.seeks).toBeNull();
+  });
+
+  it("asks for an app update instead of recording a consent for a wording it did not show", async () => {
+    const { server, calls } = fakeApi({ version: "2026-11-final-1" });
+    await show(<OnboardingScreen />);
+    await waitFor(() => expect(screen.getByText("Two things to agree to")).toBeTruthy());
+    expect(screen.getByText(/Update the app to continue/)).toBeTruthy();
+    expect(
+      screen.queryByRole("button", { name: "I accept the terms and the privacy notice" }),
+    ).toBeNull();
+    expect(calls.filter((c) => c.method === "POST")).toEqual([]);
+    expect(server.consents).toEqual([]);
   });
 });

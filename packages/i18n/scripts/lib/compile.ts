@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { type ArgumentType, argumentsOf, pseudoLocalise } from "./icu.ts";
 import { isAdminKey, type Messages } from "./schema.ts";
 
@@ -43,14 +44,22 @@ function keysModule(messages: Messages): string {
  */
 function consentModule(messages: Messages): string {
   const versions = new Map<string, Set<string>>();
+  const locales = new Map<string, Set<string>>();
+  const finnish = new Map<string, string[]>();
   for (const [key, message] of Object.entries(messages)) {
     const kind = key.split(".")[1];
     if (!key.startsWith("legal.") || !message.consent_version || !kind) continue;
     versions.set(kind, (versions.get(kind) ?? new Set()).add(message.consent_version));
+    const present = locales.get(kind) ?? new Set<string>();
+    for (const locale of ["fi", "sv", "en"] as const) if (message[locale]) present.add(locale);
+    locales.set(kind, present);
+    // The binding Finnish wording, key by key, so the hash names the text and not its order in the file.
+    finnish.set(kind, [...(finnish.get(kind) ?? []), `${key}=${message.fi ?? ""}`].sort());
   }
-  const entries = [...versions.entries()]
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([kind, set]) => {
+  const kinds = [...versions.keys()].sort((a, b) => a.localeCompare(b));
+  const versionLines = kinds
+    .map((kind) => {
+      const set = versions.get(kind) ?? new Set<string>();
       if (set.size > 1) {
         throw new Error(
           `legal.${kind}.* carries ${set.size} consent versions (${[...set].join(", ")}): one wording, one version`,
@@ -59,9 +68,30 @@ function consentModule(messages: Messages): string {
       return `  ${JSON.stringify(kind)}: ${JSON.stringify([...set][0])},`;
     })
     .join("\n");
+  const localeLines = kinds
+    .map(
+      (kind) =>
+        `  ${JSON.stringify(kind)}: ${JSON.stringify([...(locales.get(kind) ?? [])].sort())},`,
+    )
+    .join("\n");
+  const hashLines = kinds
+    .map(
+      (kind) =>
+        `  ${JSON.stringify(kind)}: ${JSON.stringify(
+          createHash("sha256")
+            .update((finnish.get(kind) ?? []).join("\n"))
+            .digest("hex")
+            .slice(0, 16),
+        )},`,
+    )
+    .join("\n");
   return (
     `${HEADER}/** The consent_version each legal.<kind>.* wording belongs to: what a consent row must name to count (#46). */\n` +
-    `export const CONSENT_VERSIONS: Readonly<Record<string, string>> = {\n${entries}\n};\n`
+    `export const CONSENT_VERSIONS: Readonly<Record<string, string>> = {\n${versionLines}\n};\n\n` +
+    `/** The languages each wording exists in; a consent names one of these as the language it was shown in. */\n` +
+    `export const CONSENT_TEXT_LOCALES: Readonly<Record<string, readonly string[]>> = {\n${localeLines}\n};\n\n` +
+    `/** A fingerprint of the binding Finnish wording per kind: a golden test ties it to the version. */\n` +
+    `export const CONSENT_TEXT_HASHES: Readonly<Record<string, string>> = {\n${hashLines}\n};\n`
   );
 }
 

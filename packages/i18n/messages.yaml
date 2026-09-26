@@ -1251,6 +1251,13 @@ errors.agreement_outdated:
   sv: "Den här texten har ändrats sedan du läste den. Läs och godkänn den nya versionen."
   machine: { fi: true, sv: true }
 
+errors.too_many_changes:
+  en: "You have changed this many times today. Try again tomorrow."
+  description: "Consent route (429), the research opt-in was given and withdrawn more than the day allows (#46); the rows are proof of consent and are kept, so churn is capped."
+  fi: "Olet muuttanut tätä tänään monta kertaa. Yritä uudelleen huomenna."
+  sv: "Du har ändrat det här många gånger i dag. Försök igen i morgon."
+  machine: { fi: true, sv: true }
+
 errors.pond_unknown:
   en: "That area is not on the list."
   description: "Pond choice (400), the pond id names no pond (#46)."
@@ -1687,6 +1694,13 @@ onboarding.consents.accept:
   description: "The one button that gives both required consents."
   fi: "Hyväksyn käyttöehdot ja tietosuojaselosteen"
   sv: "Jag godkänner villkoren och integritetsmeddelandet"
+  machine: { fi: true, sv: true }
+
+onboarding.consents.outdatedApp:
+  en: "This text has a newer version than the one built into this app. Update the app to continue."
+  description: "Shown on the consents step when the API's current consent_version differs from the version of the text bundled in the app (#46, ADR-010 §4): the person may only accept the exact wording they read."
+  fi: "Tästä tekstistä on uudempi versio kuin sovellukseen sisältyvä. Päivitä sovellus jatkaaksesi."
+  sv: "Den här texten har en nyare version än den som är inbyggd i appen. Uppdatera appen för att fortsätta."
   machine: { fi: true, sv: true }
 
 onboarding.research.title:

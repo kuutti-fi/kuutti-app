@@ -1,6 +1,8 @@
 import type { Queryable } from "@kuutti/db";
 import type { PondSummary } from "@kuutti/schema";
 
+// Raw parameterised SQL for the same reason as identity/repo.ts: Deps.db is
+// the Queryable seam the test harness hands a rolled-back transaction through.
 // Ponds are public structure, not user data: the list is the same for
 // everyone. The one statement about a person, setPondOfAccount, carries the
 // caller's account id (rule 6).

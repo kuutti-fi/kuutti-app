@@ -7,6 +7,8 @@ import {
 } from "@kuutti/schema";
 import { z } from "zod";
 
+// Raw parameterised SQL for the same reason as identity/repo.ts: Deps.db is
+// the Queryable seam the test harness hands a rolled-back transaction through.
 // preferences(account_id, field, value, mode, include_unknown), rules/db.md:
 // one row per field, deal-breakers are mode = hard. Onboarding (#46) writes
 // the two hard rows nothing can start without; the round builder of M4 joins

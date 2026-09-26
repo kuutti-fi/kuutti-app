@@ -90,6 +90,7 @@ export type MessageParams = {
   "errors.session_revoked": Record<never, never>;
   "errors.special_category_locked": Record<never, never>;
   "errors.text_contact_details": Record<never, never>;
+  "errors.too_many_changes": Record<never, never>;
   "errors.unauthenticated": Record<never, never>;
   "errors.unsupported_media_type": Record<never, never>;
   "errors.validation_failed": Record<never, never>;
@@ -107,6 +108,7 @@ export type MessageParams = {
   "onboarding.consents.accept": Record<never, never>;
   "onboarding.consents.binding": Record<never, never>;
   "onboarding.consents.explain": Record<never, never>;
+  "onboarding.consents.outdatedApp": Record<never, never>;
   "onboarding.consents.title": Record<never, never>;
   "onboarding.consents.version": { "version": string };
   "onboarding.continue": Record<never, never>;

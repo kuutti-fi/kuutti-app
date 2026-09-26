@@ -68,7 +68,7 @@ export const AccountExport = z
     }),
     /** The two hard rows onboarding writes (#46): whom the person seeks and the age window. */
     preferences: PreferencesResponse,
-    /** Every consent ever given, withdrawn ones included: the proof of consent (#46, ADR-010). */
+    /** The consents given, withdrawn ones included, the newest hundred: the proof of consent (#46, ADR-010). */
     consents: z.array(ConsentRecord).max(100),
     identity: z.object({
       firstSeenAt: z.iso.datetime(),

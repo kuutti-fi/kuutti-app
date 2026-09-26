@@ -1,5 +1,5 @@
 import type { Queryable } from "@kuutti/db";
-import { CONSENT_VERSIONS } from "@kuutti/i18n";
+import { CONSENT_TEXT_LOCALES, CONSENT_VERSIONS } from "@kuutti/i18n";
 import {
   CONSENT_KINDS,
   type ConsentKind,
@@ -99,6 +99,10 @@ export async function onboardingStatus(
     if (await repo.activateAccount(deps.db, accountId, deps.now())) {
       state = "active";
       deps.logger.info({ accountId }, "account activated");
+    } else {
+      // A parallel read won the update: answer with what is now stored.
+      const stored = await repo.findAccountById(deps.db, accountId);
+      if (stored && stored.state !== "deleted") state = stored.state;
     }
   }
   return {
@@ -127,6 +131,19 @@ export async function consentsOf(
   return { consents: rows.map(toRecord), currentVersions: CURRENT_CONSENT_VERSIONS };
 }
 
+/**
+ * The language the wording was actually shown in: a phone set to a language
+ * the text does not exist in read the English fallback, and the row must say
+ * so, never a language nobody wrote (#46 review).
+ */
+export function shownLocale(
+  kind: ConsentKind,
+  requested: ConsentRequest["locale"],
+): ConsentRequest["locale"] {
+  const available = CONSENT_TEXT_LOCALES[kind] ?? [];
+  return available.includes(requested) ? requested : "en";
+}
+
 /** A consent for the current wording, recorded once; an old version is refused, said in words. */
 export async function giveConsent(
   deps: OnboardingDeps,
@@ -138,11 +155,22 @@ export async function giveConsent(
       kind: request.kind,
     });
   }
-  const outcome = await repo.recordConsent(deps.db, accountId, request, deps.now());
+  const locale = shownLocale(request.kind, request.locale);
+  const outcome = await repo.recordConsent(
+    deps.db,
+    accountId,
+    { kind: request.kind, version: request.version, locale },
+    deps.now(),
+  );
   if (outcome === "no_account") throw new AppError(404, "not_found", "No live account");
+  if (outcome === "too_many") {
+    throw new AppError(429, "too_many_changes", "The research opt-in changed too often today", {
+      kind: request.kind,
+    });
+  }
   if (outcome === "recorded") {
     deps.logger.info(
-      { accountId, kind: request.kind, version: request.version, locale: request.locale },
+      { accountId, kind: request.kind, version: request.version, locale },
       "consent given",
     );
   }

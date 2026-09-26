@@ -1,5 +1,9 @@
 export { formatDate, formatNumber, formatPond, type PondCase, type PondName } from "./format.ts";
-export { CONSENT_VERSIONS } from "./generated/consent.ts";
+export {
+  CONSENT_TEXT_HASHES,
+  CONSENT_TEXT_LOCALES,
+  CONSENT_VERSIONS,
+} from "./generated/consent.ts";
 export type { MessageKey, MessageParams } from "./generated/keys.ts";
 export {
   type CreateI18nOptions,

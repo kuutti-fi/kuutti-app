@@ -1,9 +1,11 @@
-import { AccountExport, ConsentsResponse, OnboardingStatus } from "@kuutti/schema";
+import { gender } from "@kuutti/db";
+import { AccountExport, ConsentsResponse, GENDERS, OnboardingStatus } from "@kuutti/schema";
 import { describe, expect, it } from "vitest";
 import { createApp } from "../app.ts";
 import { signedInAccount } from "../test/account.ts";
 import { captureLogger, type TestContext, test, testConfig } from "../test/harness.ts";
-import { CURRENT_CONSENT_VERSIONS, missingSteps } from "./onboarding.ts";
+import { CURRENT_CONSENT_VERSIONS, missingSteps, shownLocale } from "./onboarding.ts";
+import { CONSENT_CHURN_PER_DAY } from "./repo.ts";
 
 // features/identity/onboarding.feature (#46, ADR-010).
 
@@ -232,6 +234,92 @@ describe("onboarding and consents", () => {
       ["privacy", false],
       ["research", true],
     ]);
+  });
+
+  test("unauthenticated: 401 on every onboarding, consent, pond and preference route", async ({
+    ctx,
+  }) => {
+    const { app } = await appWith(ctx);
+    for (const [method, path] of [
+      ["GET", "/onboarding"],
+      ["PUT", "/account/gender"],
+      ["GET", "/consents"],
+      ["POST", "/consents"],
+      ["DELETE", "/consents/research"],
+      ["GET", "/ponds"],
+      ["PUT", "/account/pond"],
+      ["GET", "/preferences"],
+      ["PUT", "/preferences"],
+    ] as const) {
+      expect((await app.request(path, { method })).status, `${method} ${path}`).toBe(401);
+    }
+  });
+
+  test("validation: a gender or a consent outside the closed lists is refused", async ({ ctx }) => {
+    const { app } = await appWith(ctx);
+    const a = await signedInAccount(ctx.client);
+    const post = (path: string, method: string, body: unknown) =>
+      app.request(path, { method, headers: jsonHeaders(a.headers), body: JSON.stringify(body) });
+    for (const [path, method, body] of [
+      ["/account/gender", "PUT", { gender: "female" }],
+      ["/account/gender", "PUT", { gender: "woman", extra: 1 }],
+      ["/consents", "POST", { kind: "cookies", version: "1", locale: "fi" }],
+      [
+        "/consents",
+        "POST",
+        { kind: "terms", version: CURRENT_CONSENT_VERSIONS.terms, locale: "de" },
+      ],
+      ["/account/pond", "PUT", { pondId: "not-a-uuid" }],
+    ] as const) {
+      const response = await post(path, method, body);
+      expect(response.status, JSON.stringify(body)).toBe(400);
+    }
+    expect(await consentRows(ctx, a.accountId)).toBe(0);
+  });
+
+  test("The language on the row is one the wording exists in", async ({ ctx }) => {
+    const { app } = await appWith(ctx);
+    const a = await signedInAccount(ctx.client);
+    // No Swedish legal text has been written: a Swedish phone read the English fallback.
+    const response = await app.request("/consents", {
+      method: "POST",
+      headers: jsonHeaders(a.headers),
+      body: JSON.stringify({
+        kind: "terms",
+        version: CURRENT_CONSENT_VERSIONS.terms,
+        locale: "sv",
+      }),
+    });
+    expect(response.status).toBe(200);
+    expect(ConsentsResponse.parse(await response.json()).consents[0]?.locale).toBe("en");
+    expect(shownLocale("terms", "fi")).toBe("fi");
+    expect(shownLocale("terms", "sv")).toBe("en");
+  });
+
+  test("The research opt-in cannot be toggled without bound", async ({ ctx }) => {
+    const { app } = await appWith(ctx);
+    const a = await signedInAccount(ctx.client);
+    for (let i = 0; i < CONSENT_CHURN_PER_DAY; i += 1) {
+      expect(
+        (await consent(app, a.headers, "research", CURRENT_CONSENT_VERSIONS.research)).status,
+      ).toBe(200);
+      await app.request("/consents/research", { method: "DELETE", headers: a.headers });
+    }
+    const refused = await consent(app, a.headers, "research", CURRENT_CONSENT_VERSIONS.research);
+    expect(refused.status).toBe(429);
+    expect(((await refused.json()) as { error: { code: string } }).error.code).toBe(
+      "too_many_changes",
+    );
+    expect(await consentRows(ctx, a.accountId, "research")).toBe(CONSENT_CHURN_PER_DAY);
+    // The list stays within the contract's cap however many rows exist.
+    const listed = ConsentsResponse.parse(
+      await (await app.request("/consents", { headers: a.headers })).json(),
+    );
+    expect(listed.consents.length).toBeLessThanOrEqual(100);
+  });
+
+  it("GENDERS mirrors the database enum", () => {
+    expect([...GENDERS]).toEqual([...gender.enumValues]);
   });
 
   it("missingSteps names what activation waits for, never research", () => {

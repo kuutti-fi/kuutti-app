@@ -676,11 +676,16 @@ export type ConsentRow = {
   withdrawnAt: Date | null;
 };
 
+/** The newest hundred, oldest first: the contracts cap the list, and the rows are proof, not a feed. */
+export const CONSENTS_LISTED = 100;
+
 export async function listConsents(db: Queryable, accountId: string): Promise<ConsentRow[]> {
   const { rows } = await db.query<Row>(
-    `SELECT kind, version, locale_shown, given_at, withdrawn_at FROM consent
-     WHERE account_id = $1 ORDER BY given_at, kind`,
-    [accountId],
+    `SELECT kind, version, locale_shown, given_at, withdrawn_at FROM (
+       SELECT kind, version, locale_shown, given_at, withdrawn_at FROM consent
+       WHERE account_id = $1 ORDER BY given_at DESC LIMIT $2) newest
+     ORDER BY given_at, kind`,
+    [accountId, CONSENTS_LISTED],
   );
   return rows.map((r) => ({
     kind: r.kind as string,
@@ -696,12 +701,15 @@ export async function listConsents(db: Queryable, accountId: string): Promise<Co
  * not written twice; a withdrawn research consent given again is a new row.
  * A tombstone takes none (#51).
  */
+/** Research consents given within a day before the next is refused: the rows are kept for good, so churn is capped. */
+export const CONSENT_CHURN_PER_DAY = 10;
+
 export async function recordConsent(
   db: Queryable,
   accountId: string,
   input: { kind: string; version: string; locale: string },
   at: Date,
-): Promise<"recorded" | "already" | "no_account"> {
+): Promise<"recorded" | "already" | "no_account" | "too_many"> {
   return transaction(db, async (tx) => {
     // The lock erasure takes first (ADR-009 §8), so no consent row lands behind the deletes.
     const live = await tx.query(
@@ -709,6 +717,12 @@ export async function recordConsent(
       [accountId],
     );
     if (live.rows.length === 0) return "no_account";
+    const recent = await tx.query<{ n: string }>(
+      `SELECT count(*) AS n FROM consent
+       WHERE account_id = $1 AND kind = $2 AND given_at > $3::timestamptz - interval '1 day'`,
+      [accountId, input.kind, at],
+    );
+    if (Number(recent.rows[0]?.n ?? 0) >= CONSENT_CHURN_PER_DAY) return "too_many";
     const result = await tx.query(
       `INSERT INTO consent (account_id, kind, version, locale_shown, given_at)
        SELECT $1, $2, $3, $4, $5

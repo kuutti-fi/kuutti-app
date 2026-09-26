@@ -80,6 +80,9 @@ const consentRoute = createRoute({
     401: unauthenticated,
     404: errorContent("No live account (erased meanwhile)."),
     409: errorContent("agreement_outdated: the wording has a newer version."),
+    429: errorContent(
+      "too_many_changes: the research opt-in was given and withdrawn more than the day allows.",
+    ),
   },
 });
 

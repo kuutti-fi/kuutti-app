@@ -19,6 +19,7 @@ export {
   exportConsents,
   missingSteps,
   onboardingStatus,
+  shownLocale,
 } from "./onboarding.ts";
 export { onboardingRoutes } from "./onboarding-routes.ts";
 export {
