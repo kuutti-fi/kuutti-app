@@ -1,4 +1,4 @@
-import type { Queryable } from "@kuutti/db";
+import { type Queryable, transaction } from "@kuutti/db";
 import type {
   ModerationLabel,
   Photo,
@@ -119,18 +119,10 @@ export async function findVisiblePhoto(
   return rows[0] ? photoFrom(rows[0]) : null;
 }
 
-/** Whether a photo exists at all: for the refusal's log line only, never for a response. */
-export async function photoExists(db: Queryable, photoId: string): Promise<boolean> {
-  const { rows } = await db.query<{ exists: boolean }>(
-    "SELECT EXISTS (SELECT 1 FROM photo WHERE id = $1) AS exists",
-    [photoId],
-  );
-  return rows[0]?.exists === true;
-}
-
 /**
  * What the card route writes when it serves a card (#47): the viewer's own
- * account id and the photos on the card. The shown-record rule of #52 reads it.
+ * account id and the photos of the card the server built, never ids from a
+ * request body. The shown-record rule of #52 reads it.
  */
 export async function recordCardShown(
   db: Queryable,
@@ -139,8 +131,10 @@ export async function recordCardShown(
   at: Date,
 ): Promise<number> {
   if (photoIds.length === 0) return 0;
+  // Set membership is all the visibility rule reads, so a photo shown again is one row.
   const result = await db.query(
-    "INSERT INTO card_shown (account_id, photo_id, at) SELECT $1, unnest($2::uuid[]), $3",
+    `INSERT INTO card_shown (account_id, photo_id, at) SELECT $1, unnest($2::uuid[]), $3
+     ON CONFLICT (account_id, photo_id) DO NOTHING`,
     [accountId, photoIds, at],
   );
   return result.rowCount ?? 0;
@@ -212,8 +206,11 @@ export type PhotoAccessResult = {
 /**
  * The fetch-log row and the exposure budget in one statement (#52, TD-6,
  * rule 6): the day's fetches of the variant are counted for the caller's
- * account and the row is written only under the limit, so two requests
- * cannot both pass a count taken separately. A tombstone writes nothing (#51).
+ * account and the row is written only under the limit. The statement runs
+ * under a transaction-scoped advisory lock on (account, variant): under READ
+ * COMMITTED each statement takes its own snapshot, so without the lock a
+ * parallel burst could pass the count together (budget.test.ts proves the
+ * limit holds against a pool). A tombstone writes nothing (#51).
  */
 export async function insertPhotoAccess(
   db: Queryable,
@@ -227,8 +224,12 @@ export async function insertPhotoAccess(
     limit: number;
   },
 ): Promise<PhotoAccessResult> {
-  const { rows } = await db.query<{ live: boolean; used: number; inserted: number }>(
-    `WITH live AS (SELECT 1 FROM account WHERE id = $1 AND state <> 'deleted'),
+  return transaction(db, async (tx) => {
+    await tx.query("SELECT pg_advisory_xact_lock(hashtext($1))", [
+      `photo_access:${input.accountId}:${input.variant}`,
+    ]);
+    const { rows } = await tx.query<{ live: boolean; used: number; inserted: number }>(
+      `WITH live AS (SELECT 1 FROM account WHERE id = $1 AND state <> 'deleted'),
           used AS (SELECT count(*)::int AS n FROM photo_access
                    WHERE account_id = $1 AND variant = $3 AND at >= $5),
           ins AS (INSERT INTO photo_access (account_id, photo_id, variant, at)
@@ -237,11 +238,12 @@ export async function insertPhotoAccess(
      SELECT EXISTS (SELECT 1 FROM live) AS live,
             (SELECT n FROM used) AS used,
             (SELECT count(*) FROM ins)::int AS inserted`,
-    [input.accountId, input.photoId, input.variant, input.at, input.since, input.limit],
-  );
-  const row = rows[0];
-  if (!row) throw new Error("photo_access insert returned no row");
-  return { live: row.live, used: row.used, recorded: row.inserted === 1 };
+      [input.accountId, input.photoId, input.variant, input.at, input.since, input.limit],
+    );
+    const row = rows[0];
+    if (!row) throw new Error("photo_access insert returned no row");
+    return { live: row.live, used: row.used, recorded: row.inserted === 1 };
+  });
 }
 
 // Moderation (#49). The automatic check and the staff routes read photos

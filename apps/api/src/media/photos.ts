@@ -196,17 +196,19 @@ export async function issuePhotoUrl(
 ): Promise<PhotoUrlResponse> {
   const row = await repo.findVisiblePhoto(deps.db, input.accountId, input.photoId);
   if (!row) {
-    if (await repo.photoExists(deps.db, input.photoId)) {
-      deps.logger.warn(
-        {
-          accountId: input.accountId,
-          photoId: input.photoId,
-          variant: input.variant,
-          reason: "not_shown",
-        },
-        "photo refused",
-      );
-    }
+    // Every miss is one line: an unshown or unapproved photo of someone else
+    // and a guessed id look the same, and both are what enumeration looks
+    // like. The API never asks whether the photo exists outside the caller's
+    // scope (rule 6).
+    deps.logger.warn(
+      {
+        accountId: input.accountId,
+        photoId: input.photoId,
+        variant: input.variant,
+        reason: "not_visible",
+      },
+      "photo refused",
+    );
     throw new AppError(404, "not_found", "No such photo for this account");
   }
   const at = deps.now();

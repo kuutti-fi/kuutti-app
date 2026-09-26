@@ -72,5 +72,5 @@ The four surfaces that matter most, in order: the OIDC exchange with Telia, the 
 
 - [ ] No empty `catch` blocks; errors are logged with context and rethrown or mapped.
 - [ ] Error responses are generic; detail goes to logs and Sentry.
-- [x] Rate-limited and moderation-gated endpoints fail closed. (#52: a request without a trusted client address shares one bucket instead of bypassing the limit, `apps/api/src/lib/rate-limit.ts`; the address comes from the trusted proxy's own hop or header, never one the client wrote (audit F19), and the request id is the server's (F26), ADR-008.)
+- [x] Rate-limited and moderation-gated endpoints fail closed. (#52: a request without a trusted client address shares one bucket instead of bypassing the limit, `apps/api/src/lib/rate-limit.ts`; the address comes from the trusted proxy's own hop or header, never one the client wrote (audit F19), and the request id is the server's (F26); the exposure budget is counted under an advisory lock per account and variant, so a parallel burst cannot overshoot it, `apps/api/src/media/repo.ts`, ADR-008.)
 - [x] Image processing returns 503 with `Retry-After` above the concurrency limit instead of queueing unbounded work. (#48: `p-limit` at the vCPU count, checked before the work is queued.)

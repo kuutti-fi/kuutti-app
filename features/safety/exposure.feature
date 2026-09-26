@@ -43,6 +43,11 @@ Feature: Exposure is budgeted and counted
     When this account fetches its card and full variants
     Then both are issued and written to the fetch log under this account
 
+  Scenario: A photo shown twice is one shown record
+    Given a photo of another account on a card this account was shown
+    When the card is served to this account again
+    Then card_shown still has one row for this account and the photo
+
   Scenario: A photo not yet approved is not served from a shown card
     Given a pending photo of another account on a card this account was shown
     When this account fetches its card variant

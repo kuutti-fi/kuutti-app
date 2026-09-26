@@ -77,12 +77,12 @@ export function clientAddress(c: Context, trusted: TrustedProxy): string | null 
   switch (trusted) {
     case "cloudfront": {
       // CloudFront-Viewer-Address is "ip:port", the port after the last colon
-      // (IPv6 included). Behind the distribution Traefik appends CloudFront's
-      // own address to X-Forwarded-For after the viewer CloudFront appended,
-      // so the hop before the last is the viewer when the header is absent.
+      // (IPv6 included); any other shape is no address. Without the header
+      // there is no guess: the origin request policy forwards it
+      // (infra/modules/media), and its absence is a misconfiguration that
+      // must show as everyone sharing one bucket, not hide behind a hop.
       const viewer = c.req.header("cloudfront-viewer-address");
-      if (viewer) return stripPort(viewer);
-      return hops.length >= 2 ? (hops[hops.length - 2] ?? null) : null;
+      return viewer ? viewerAddress(viewer) : null;
     }
     case "traefik":
       return hops.length > 0 ? (hops[hops.length - 1] ?? null) : null;
@@ -95,7 +95,9 @@ export function clientAddress(c: Context, trusted: TrustedProxy): string | null 
   }
 }
 
-function stripPort(address: string): string {
-  const colon = address.lastIndexOf(":");
-  return colon > 0 ? address.slice(0, colon) : address;
+const VIEWER_ADDRESS = /^((?:\d{1,3}\.){3}\d{1,3}|[0-9a-fA-F:]{2,45}):\d{1,5}$/;
+
+/** The address out of CloudFront's "ip:port", or null for a shape CloudFront never sends. */
+export function viewerAddress(header: string): string | null {
+  return VIEWER_ADDRESS.exec(header)?.[1] ?? null;
 }

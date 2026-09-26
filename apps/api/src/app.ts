@@ -69,7 +69,7 @@ export function createApp(deps: Deps) {
   app.use("*", serverRequestId());
   // Before everything that may answer, so a refusal speaks the request's language (#13).
   app.use("*", requestLocale());
-  app.use("*", requestLogger(deps.logger));
+  app.use("*", requestLogger(deps.logger, { trustedProxy: deps.config.TRUSTED_PROXY }));
   app.use("*", secureHeaders());
   // No environment of this API is a web surface (rule 8); previews have public
   // URLs that a crawler may still find (#9).

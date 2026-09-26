@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { describe, expect, it } from "vitest";
-import { rateLimit, type TrustedProxy } from "./rate-limit.ts";
+import { rateLimit, type TrustedProxy, viewerAddress } from "./rate-limit.ts";
 import { serverRequestId } from "./request-id.ts";
 
 function limitedApp(now: () => number, trustedProxy: TrustedProxy = "traefik") {
@@ -56,14 +56,19 @@ describe("rate limit", () => {
     expect((await app.request("/", ipv6)).status).toBe(200);
   });
 
-  it("behind CloudFront without the viewer header, the hop before the last is the viewer", async () => {
+  it("behind CloudFront, a missing or malformed viewer header shares the one bucket, forwarded hops notwithstanding", async () => {
     const app = limitedApp(() => 1_000, "cloudfront");
-    // client-written, viewer as CloudFront appended it, CloudFront as Traefik appended it
-    const a = from({ "x-forwarded-for": "1.1.1.1, 198.51.100.7, 130.176.0.1" });
-    const b = from({ "x-forwarded-for": "2.2.2.2, 198.51.100.7, 130.176.0.2" });
-    await app.request("/", a);
-    await app.request("/", a);
-    expect((await app.request("/", b)).status).toBe(429);
+    await app.request("/", from({ "x-forwarded-for": "1.1.1.1, 198.51.100.7, 130.176.0.1" }));
+    await app.request("/", from({ "cloudfront-viewer-address": "not an address" }));
+    expect((await app.request("/", from({ "x-forwarded-for": "2.2.2.2" }))).status).toBe(429);
+  });
+
+  it("reads only the shapes CloudFront sends", () => {
+    expect(viewerAddress("198.51.100.7:4711")).toBe("198.51.100.7");
+    expect(viewerAddress("2001:db8::1:40000")).toBe("2001:db8::1");
+    expect(viewerAddress("198.51.100.7")).toBeNull();
+    expect(viewerAddress("[2001:db8::1]:40000")).toBeNull();
+    expect(viewerAddress("bucket-of-my-choosing")).toBeNull();
   });
 
   it("shares one bucket when the trusted proxy left no address, rather than skipping the limit", async () => {

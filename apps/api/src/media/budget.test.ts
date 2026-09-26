@@ -2,10 +2,10 @@ import { Photo, type PhotoFetchBudget, type PhotoVariant } from "@kuutti/schema"
 import { describe, expect, it } from "vitest";
 import { createApp } from "../app.ts";
 import { signedInAccount, withMatchingConfig } from "../test/account.ts";
-import { captureLogger, type TestContext, test, testConfig } from "../test/harness.ts";
+import { captureLogger, type TestContext, test, testConfig, testPool } from "../test/harness.ts";
 import { fixturePng, testMediaDeps } from "../test/media.ts";
 import { dayWindow, secondsUntil } from "./budget.ts";
-import { recordCardShown } from "./repo.ts";
+import { insertPhoto, insertPhotoAccess, recordCardShown } from "./repo.ts";
 
 // The exposure budget and the shown-record rule (#52, TD-6, ADR-008),
 // features/safety/exposure.feature. Photos are uploaded through the API so
@@ -127,8 +127,22 @@ describe("exposure", () => {
       accountId: a.accountId,
       photoId: theirs.id,
       variant: "full",
-      reason: "not_shown",
+      reason: "not_visible",
     });
+  });
+
+  test("A photo shown twice is one shown record", async ({ ctx }) => {
+    const { app } = await appWith(ctx);
+    const a = await signedInAccount(ctx.client);
+    const b = await signedInAccount(ctx.client);
+    const theirs = await upload(app, b.headers, await fixturePng(64, 64));
+    expect(await recordCardShown(ctx.client, a.accountId, [theirs.id], new Date())).toBe(1);
+    expect(await recordCardShown(ctx.client, a.accountId, [theirs.id], new Date())).toBe(0);
+    const { rows } = await ctx.client.query<{ n: string }>(
+      "SELECT count(*) AS n FROM card_shown WHERE account_id = $1",
+      [a.accountId],
+    );
+    expect(Number(rows[0]?.n)).toBe(1);
   });
 
   test("A photo on a card the account was shown is served", async ({ ctx }) => {
@@ -160,6 +174,57 @@ describe("exposure", () => {
     const mine = await upload(app, a.headers, await fixturePng(64, 64));
     expect(mine.state).toBe("pending");
     expect((await fetchUrl(app, a.headers, mine.id, "full")).status).toBe(200);
+  });
+});
+
+describe("the budget under load", () => {
+  // Outside the rolled-back transaction on purpose: the race is between
+  // connections, and one connection cannot race itself. Rows are committed
+  // and removed again.
+  it("holds against a parallel burst: exactly the limit is written", async () => {
+    const pool = testPool();
+    const a = await signedInAccount(pool, `budget-burst-${Date.now()}`);
+    try {
+      const photo = await insertPhoto(pool, {
+        accountId: a.accountId,
+        key: `burst-${a.accountId}`,
+        blurhash: "LEHV6nWB2yk8pyo0adR*.7kCMdnj",
+        width: 64,
+        height: 64,
+        maxPhotos: 3,
+      });
+      if (!photo) throw new Error("photo not written");
+      const since = new Date(Date.now() - 3_600_000);
+      const results = await Promise.all(
+        Array.from({ length: 24 }, () =>
+          insertPhotoAccess(pool, {
+            accountId: a.accountId,
+            photoId: photo.id,
+            variant: "thumb",
+            at: new Date(),
+            since,
+            limit: 5,
+          }),
+        ),
+      );
+      expect(results.filter((r) => r.recorded)).toHaveLength(5);
+      expect(results.every((r) => r.live)).toBe(true);
+      const { rows } = await pool.query<{ n: string }>(
+        "SELECT count(*) AS n FROM photo_access WHERE account_id = $1",
+        [a.accountId],
+      );
+      expect(Number(rows[0]?.n)).toBe(5);
+    } finally {
+      const identity = await pool.query<{ identity_id: string }>(
+        "SELECT identity_id FROM account WHERE id = $1",
+        [a.accountId],
+      );
+      await pool.query("DELETE FROM photo_access WHERE account_id = $1", [a.accountId]);
+      await pool.query("DELETE FROM photo WHERE account_id = $1", [a.accountId]);
+      await pool.query("DELETE FROM session WHERE account_id = $1", [a.accountId]);
+      await pool.query("DELETE FROM account WHERE id = $1", [a.accountId]);
+      await pool.query("DELETE FROM identity WHERE id = $1", [identity.rows[0]?.identity_id]);
+    }
   });
 });
 
