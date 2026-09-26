@@ -1,3 +1,4 @@
+import { formatDate } from "@kuutti/i18n";
 import type { HealthResponse } from "@kuutti/schema";
 import Constants from "expo-constants";
 import { Image } from "expo-image";
@@ -51,7 +52,7 @@ const MARK_CLASS = cn("h-24 w-24 text-foreground", Platform.select({ web: "dark:
 export function SmokeScreen() {
   const [state, setState] = useState<State>({ kind: "loading" });
   const tap = useHapticTap();
-  const { t } = useT();
+  const { t, locale } = useT();
   const session = useSession();
   const router = useRouter();
   // An account that has not finished onboarding (#46) is sent there first; until
@@ -65,6 +66,24 @@ export function SmokeScreen() {
     typeof appCommit === "string" && appCommit.length > 0
       ? t("smoke.status.commit", { commit: appCommit })
       : t("smoke.app.noCommit");
+  // The native build's runtime (the fingerprint, ADR-004) and the update it
+  // runs: an update only reaches a build with the same runtime, so a commit
+  // that stops moving here while the API's moves on means this build is
+  // behind the fingerprint and needs reinstalling, not that updates stopped.
+  const runtime: unknown = Updates.runtimeVersion;
+  const runtimeLine =
+    typeof runtime === "string" && runtime.length > 0
+      ? t("smoke.app.runtime", { runtime: runtime.slice(0, 7) })
+      : t("smoke.app.noRuntime");
+  const updatedAt: unknown = Updates.createdAt;
+  const updateLine =
+    Updates.isEmbeddedLaunch === true
+      ? t("smoke.app.embedded")
+      : updatedAt instanceof Date && !Number.isNaN(updatedAt.getTime())
+        ? t("smoke.app.updated", {
+            date: formatDate(locale, updatedAt, { dateStyle: "medium", timeStyle: "short" }),
+          })
+        : null;
 
   const load = useCallback(async () => {
     setState({ kind: "loading" });
@@ -142,6 +161,8 @@ export function SmokeScreen() {
             <CardHeader>
               <CardTitle>{t("smoke.app.title")}</CardTitle>
               <CardDescription>{appCommitLine}</CardDescription>
+              <CardDescription>{runtimeLine}</CardDescription>
+              {updateLine && <CardDescription>{updateLine}</CardDescription>}
             </CardHeader>
           </View>
         </Card>

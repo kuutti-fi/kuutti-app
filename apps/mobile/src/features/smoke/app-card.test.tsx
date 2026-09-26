@@ -29,6 +29,14 @@ async function renderAndSettle() {
   await waitFor(() => expect(screen.getByText("git commit abc1234")).toBeTruthy());
 }
 
+// expo-updates as a staging build that runs an over-the-air update would report it.
+jest.mock("expo-updates", () => ({
+  channel: "staging",
+  runtimeVersion: "88a4337f0053b4dd4b1b1f9560daf6ddf0fcf68d",
+  isEmbeddedLaunch: false,
+  createdAt: new Date("2026-09-26T17:35:00.000Z"),
+}));
+
 describe("the App card: the app's own commit, apart from the API's", () => {
   beforeEach(() => {
     globalThis.fetch = jest.fn(
@@ -51,5 +59,11 @@ describe("the App card: the app's own commit, apart from the API's", () => {
     await renderAndSettle();
     expect(screen.getByText("git commit not recorded in this build")).toBeTruthy();
     expect(screen.queryByText("git commit 1a2b3c4")).toBeNull();
+  });
+
+  it("names the native build's runtime and the update it runs, so a stalled commit is explained", async () => {
+    await renderAndSettle();
+    expect(screen.getByText("native build 88a4337")).toBeTruthy();
+    expect(screen.getByText(/^update applied /)).toBeTruthy();
   });
 });
