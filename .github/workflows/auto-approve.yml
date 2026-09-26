@@ -1,34 +1,35 @@
 name: Auto-approve own pull requests
 
-# The maintainer's own pull requests (#8): the ruleset asks for one approving
-# review and an author cannot approve their own, so a review from the Actions
-# bot stands in, for pull requests the maintainer authored from a branch of
-# this repository and for nobody else's. pull_request, never
-# pull_request_target: same-repository token, nothing checked out, no write
-# token for a fork. Stale reviews are dismissed on push, so this runs again on
-# every push. Needs "Allow GitHub Actions to create and approve pull requests".
+# Runs from main only (schedule and manual dispatch never run a pull request's
+# copy of this file), so a contributor cannot edit the condition in their own
+# pull request and approve themselves. It reads nothing from a pull request but
+# its author, draft state and head repository. Latency: GitHub's schedule, a
+# few minutes. Needs "Allow GitHub Actions to create and approve pull requests".
 on:
-  pull_request:
-    types: [opened, synchronize, reopened, ready_for_review]
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
   approve:
-    name: approve the maintainer's pull request
-    if: >-
-      github.event.pull_request.user.login == 'superseacat' &&
-      github.event.pull_request.head.repo.full_name == github.repository &&
-      github.event.pull_request.draft == false
+    name: approve the maintainer's open pull requests
     runs-on: ubuntu-latest
     permissions:
       pull-requests: write
     steps:
-      - name: Approve
+      - name: Approve what the maintainer authored from this repository and nobody approved yet
         env:
           GH_TOKEN: ${{ github.token }}
-          PR_URL: ${{ github.event.pull_request.html_url }}
+          REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
-          gh pr review --approve --body "Approved automatically: authored by the maintainer from this repository (#8, auto-approve.yml)." "$PR_URL"
+          gh pr list --repo "$REPO" --author superseacat --state open \
+            --json number,isDraft,reviewDecision,headRepositoryOwner \
+            --jq '.[] | select(.isDraft == false and .reviewDecision != "APPROVED" and .headRepositoryOwner.login == "kuutti-fi") | .number' |
+          while read -r n; do
+            gh pr review --repo "$REPO" --approve \
+              --body "Approved automatically: authored by the maintainer from this repository (#8, auto-approve.yml)." "$n"
+          done
