@@ -115,10 +115,11 @@ describe("formatting", () => {
   });
 
   it("reads a pond's case form from the database and never builds one", () => {
-    const helsinki = { name: "Helsinki", name_inessive: "Helsingissä" };
+    // The shape of PondSummary: every case form is required, so none is dropped silently.
+    const helsinki = { name: "Helsinki", nameInessive: "Helsingissä" };
     expect(formatPond(helsinki, "inessive", "fi")).toBe("Helsingissä");
     expect(formatPond(helsinki, "inessive", "en")).toBe("Helsinki");
+    expect(formatPond(helsinki, "inessive", "sv")).toBe("Helsinki");
     expect(formatPond(helsinki, "nominative", "fi")).toBe("Helsinki");
-    expect(formatPond({ name: "Oulu" }, "inessive", "fi")).toBe("Oulu");
   });
 });
