@@ -15,12 +15,15 @@
  * Usage: node scripts/check-licenses.ts [--list] [--self-test]
  * No dependencies. Needs Node 22.18+ (type stripping).
  */
+import { execFileSync } from "node:child_process";
 import { existsSync, lstatSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 type Policy = {
   allow: string[];
   exceptions: Array<{ name: string; license: string; reason: string }>;
+  /** GitHub Actions the workflows use under a licence outside `allow`: CI tools, never shipped. */
+  actions?: Array<{ name: string; license: string; reason: string }>;
 };
 
 const ROOT = process.cwd();
@@ -160,6 +163,20 @@ function reviewList(key: string): string[] {
   );
 }
 
+/** The SPDX id of a GitHub repository's licence, as GitHub detects it; undefined when unreachable. */
+function repositoryLicense(name: string): string | undefined {
+  try {
+    const out = execFileSync("gh", ["api", `repos/${name}`, "--jq", ".license.spdx_id"], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+      timeout: 20_000,
+    }).trim();
+    return out === "" ? undefined : out;
+  } catch {
+    return undefined;
+  }
+}
+
 if (process.argv.includes("--self-test")) selfTest();
 
 const policy = JSON.parse(
@@ -175,7 +192,14 @@ if (!same(reviewList("allow-licenses"), policy.allow)) {
     "allow-licenses in .github/dependency-review-config.yml differs from `allow` in scripts/license-policy.json",
   );
 }
-const exceptionUrls = policy.exceptions.map((e) => `pkg:npm/${e.name.replace("@", "%40")}`);
+const exceptionUrls = [
+  ...policy.exceptions.map((e) => `pkg:npm/${e.name.replace("@", "%40")}`),
+  // An action is a dependency of the workflows, not of the packages: the pull
+  // request check sees it as pkg:githubactions, and nothing here installs it.
+  // (The review config's list holds bare items only: a comment line inside
+  // it would end the block for reviewList.)
+  ...(policy.actions ?? []).map((a) => `pkg:githubactions/${a.name}`),
+];
 if (!same(reviewList("allow-dependencies-licenses"), exceptionUrls)) {
   problems.push(
     "allow-dependencies-licenses in .github/dependency-review-config.yml differs from the exceptions in scripts/license-policy.json",
@@ -226,6 +250,44 @@ policy.exceptions.forEach((exception, index) => {
   );
 });
 
+// A GitHub Action the workflows run under a licence outside `allow` (`actions`
+// in the policy) ships nowhere, so the exemption costs nothing; it still stays
+// specific to what the maintainer read. The action must be in use by a
+// workflow, and its repository's licence, as GitHub reports it, must be the one
+// named, so a change of licence brings the entry back for review instead of
+// passing under the URL's blanket exemption in the dependency review check.
+const workflowsDir = join(ROOT, ".github", "workflows");
+const workflows = existsSync(workflowsDir)
+  ? readdirSync(workflowsDir)
+      .filter((file) => /\.ya?ml$/.test(file))
+      .map((file) => readFileSync(join(workflowsDir, file), "utf8"))
+      .join("\n")
+  : "";
+const notes: string[] = [];
+for (const action of policy.actions ?? []) {
+  const used = new RegExp(
+    `^\\s*-?\\s*uses:\\s*${action.name.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&")}@`,
+    "m",
+  );
+  if (!used.test(workflows)) {
+    problems.push(
+      `action ${action.name} (${action.license}) is used by no workflow: delete its entry`,
+    );
+    continue;
+  }
+  const reported = repositoryLicense(action.name);
+  if (reported === undefined) {
+    const line = `licence of the action ${action.name} not read from GitHub (offline, or gh not signed in): the policy names ${action.license}`;
+    // CI has a token, so there the lookup has to work.
+    if (process.env.GH_TOKEN || process.env.GITHUB_TOKEN) problems.push(line);
+    else notes.push(line);
+  } else if (reported !== action.license) {
+    problems.push(
+      `action ${action.name}: GitHub reports ${reported}, the policy names ${action.license}: review the entry`,
+    );
+  }
+}
+
 if (process.argv.includes("--list")) {
   const counts = new Map<string, number>();
   for (const { license } of packages.values()) counts.set(license, (counts.get(license) ?? 0) + 1);
@@ -234,8 +296,9 @@ if (process.argv.includes("--list")) {
   }
 }
 
+for (const note of notes) console.warn(`• ${note}`);
 for (const problem of problems) console.error(`✖ ${problem}`);
 if (problems.length > 0) process.exit(1);
 console.log(
-  `✔ check-licenses: ${checked} packages, ${policy.allow.length} allowed licences, ${usedExceptions.size} exceptions in use`,
+  `✔ check-licenses: ${checked} packages, ${policy.allow.length} allowed licences, ${usedExceptions.size} exceptions in use, ${(policy.actions ?? []).length} actions`,
 );
