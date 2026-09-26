@@ -1,7 +1,8 @@
 /**
  * `pnpm i18n:translate [--locale fi|sv] [--dry-run]`: fills missing Finnish and
  * Swedish texts by machine, flagged `machine: true` for a native reviewer.
- * `pnpm i18n:translate --review` lists what still carries the flag.
+ * `pnpm i18n:translate --review` lists what still carries the flag (as does
+ * `pnpm i18n:review --list`, which also approves it).
  * legal.* keys are never sent; admin.* keys are English only (#13, TD-17).
  */
 import { readFileSync, writeFileSync } from "node:fs";
@@ -21,6 +22,7 @@ const locales: TranslatedLocale[] =
     : [...TRANSLATED_LOCALES];
 
 if (args.includes("--review")) {
+  // Kept from #13: the list now lives in `pnpm i18n:review --list`.
   const messages = parseMessages(readFileSync(file, "utf8"));
   for (const locale of locales) {
     const keys = unreviewed(messages, locale);
@@ -31,7 +33,7 @@ if (args.includes("--review")) {
       );
   }
   console.log(
-    "\nTo clear one: correct the text if needed, then delete its locale from `machine:`.",
+    "\nA native reviewer approves them through `pnpm i18n:review` (docs/i18n/translation-review-guide.md).",
   );
   process.exit(0);
 }

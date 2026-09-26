@@ -16,6 +16,7 @@
     "check": "node scripts/check.ts",
     "check:ui-strings": "node scripts/check-ui-strings.ts",
     "translate": "node scripts/translate.ts",
+    "review": "node scripts/review.ts",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run"
   },
