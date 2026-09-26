@@ -33,8 +33,8 @@ const accountFrom = (r: Row): Account => ({
   identityId: r.identity_id as string,
   state: r.state as Account["state"],
   stateChangedAt: (r.state_changed_at as Date | null) ?? null,
-  birthYear: r.birth_year as number,
-  birthMonth: r.birth_month as number,
+  birthYear: (r.birth_year as number | null) ?? null,
+  birthMonth: (r.birth_month as number | null) ?? null,
   registeredAt: r.registered_at as Date,
   deletedAt: (r.deleted_at as Date | null) ?? null,
 });
@@ -92,15 +92,22 @@ export async function findAuthRequestByCodeHash(
   return rows[0] ? authRequestFrom(rows[0]) : null;
 }
 
+/**
+ * Publishes the one-time code for the account the callback resolved. False
+ * when the account was erased between the resolution and this statement
+ * (#51): no code is attached to a tombstone, and the caller resolves again,
+ * which now reads the cooldown.
+ */
 export async function attachCode(
   db: Queryable,
   input: { id: string; codeHash: string; codeExpiresAt: Date; accountId: string; outcome: string },
-): Promise<void> {
-  await db.query(
+): Promise<boolean> {
+  const result = await db.query(
     `UPDATE auth_request SET code_hash = $2, code_expires_at = $3, account_id = $4, outcome = $5
-     WHERE id = $1`,
+     WHERE id = $1 AND EXISTS (SELECT 1 FROM account WHERE id = $4 AND state <> 'deleted')`,
     [input.id, input.codeHash, input.codeExpiresAt, input.accountId, input.outcome],
   );
+  return result.rowCount === 1;
 }
 
 /** Ends a login attempt without a code: the person cancelled at the bank. */
@@ -223,6 +230,7 @@ const sessionFrom = (r: Row): SessionRow => ({
 
 const SESSION_COLUMNS = "id, account_id, platform, created_at, expires_at, revoked_at";
 
+/** Null when the account is no longer live: a login that outlived the erasure gets no session (#51). */
 export async function insertSession(
   db: Queryable,
   input: {
@@ -235,10 +243,12 @@ export async function insertSession(
     expiresAt: Date;
     at: Date;
   },
-): Promise<SessionRow> {
+): Promise<SessionRow | null> {
   const { rows } = await db.query<Row>(
     `INSERT INTO session (account_id, platform, user_agent, access_hash, access_expires_at, refresh_hash, expires_at, created_at, last_used_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $8) RETURNING ${SESSION_COLUMNS}`,
+     SELECT $1, $2, $3, $4, $5, $6, $7, $8, $8
+     WHERE EXISTS (SELECT 1 FROM account WHERE id = $1 AND state <> 'deleted')
+     RETURNING ${SESSION_COLUMNS}`,
     [
       input.accountId,
       input.platform,
@@ -250,9 +260,7 @@ export async function insertSession(
       input.at,
     ],
   );
-  const row = rows[0];
-  if (!row) throw new Error("session insert returned no row");
-  return sessionFrom(row);
+  return rows[0] ? sessionFrom(rows[0]) : null;
 }
 
 /** The middleware's lookup: the session with the account's state, by the access token's hash. */
@@ -389,14 +397,15 @@ export async function revokeAccountSessions(
   return result.rowCount ?? 0;
 }
 
-/** Ended before `endedBefore`, or whose refresh token expired: gone. */
+/** Ended before `endedBefore`, whose refresh token expired, or whose account is erased (#51): gone. */
 export async function deleteDeadSessions(
   db: Queryable,
   endedBefore: Date,
   now: Date,
 ): Promise<number> {
   const result = await db.query(
-    "DELETE FROM session WHERE (revoked_at IS NOT NULL AND revoked_at < $1) OR expires_at < $2",
+    `DELETE FROM session WHERE (revoked_at IS NOT NULL AND revoked_at < $1) OR expires_at < $2
+       OR account_id IN (SELECT id FROM account WHERE state = 'deleted')`,
     [endedBefore, now],
   );
   return result.rowCount ?? 0;
@@ -510,4 +519,96 @@ export async function deleteDeadAdminSessions(db: Queryable, now: Date): Promise
     [now],
   );
   return result.rowCount ?? 0;
+}
+
+// Erasure and export (#51, TD-7). Every statement is keyed by the caller's
+// account id; the identity is reached through its account only.
+
+export async function findAccountById(db: Queryable, accountId: string): Promise<Account | null> {
+  const { rows } = await db.query<Row>("SELECT * FROM account WHERE id = $1", [accountId]);
+  return rows[0] ? accountFrom(rows[0]) : null;
+}
+
+/** What the export says about the person's identity row: dates and the login level, never the hash. */
+export async function findIdentitySummaryForAccount(
+  db: Queryable,
+  accountId: string,
+): Promise<{
+  identityId: string;
+  createdAt: Date;
+  authenticatedAt: Date | null;
+  acr: string | null;
+  deletionCount: number;
+} | null> {
+  const { rows } = await db.query<Row>(
+    `SELECT i.id, i.created_at, i.authenticated_at, i.acr, i.deletion_count
+     FROM identity i JOIN account a ON a.identity_id = i.id WHERE a.id = $1`,
+    [accountId],
+  );
+  const r = rows[0];
+  if (!r) return null;
+  return {
+    identityId: r.id as string,
+    createdAt: r.created_at as Date,
+    authenticatedAt: (r.authenticated_at as Date | null) ?? null,
+    acr: (r.acr as string | null) ?? null,
+    deletionCount: r.deletion_count as number,
+  };
+}
+
+export async function listSessionsForAccount(
+  db: Queryable,
+  accountId: string,
+): Promise<Array<SessionRow & { lastUsedAt: Date }>> {
+  const { rows } = await db.query<Row>(
+    `SELECT ${SESSION_COLUMNS}, last_used_at FROM session
+     WHERE account_id = $1 AND revoked_at IS NULL ORDER BY created_at`,
+    [accountId],
+  );
+  return rows.map((r) => ({ ...sessionFrom(r), lastUsedAt: r.last_used_at as Date }));
+}
+
+/** Every session of the account, gone (not revoked and kept: erasure). */
+export async function deleteAccountSessions(db: Queryable, accountId: string): Promise<number> {
+  const result = await db.query("DELETE FROM session WHERE account_id = $1", [accountId]);
+  return result.rowCount ?? 0;
+}
+
+export async function deleteAuthRequestsOfAccount(
+  db: Queryable,
+  accountId: string,
+): Promise<number> {
+  const result = await db.query("DELETE FROM auth_request WHERE account_id = $1", [accountId]);
+  return result.rowCount ?? 0;
+}
+
+/**
+ * The account row stays as an anonymised tombstone (#34, #51): state deleted,
+ * the age gone, the dates kept. The partial unique index then admits a new
+ * live account for the identity once the cooldown has passed.
+ */
+export async function tombstoneAccount(
+  db: Queryable,
+  accountId: string,
+  at: Date,
+): Promise<boolean> {
+  const result = await db.query(
+    `UPDATE account SET state = 'deleted', state_changed_at = $2, deleted_at = $2,
+       birth_year = NULL, birth_month = NULL
+     WHERE id = $1 AND state <> 'deleted'`,
+    [accountId, at],
+  );
+  return result.rowCount === 1;
+}
+
+export async function recordIdentityDeletion(
+  db: Queryable,
+  identityId: string,
+  input: { deletionCount: number; reregisterAfter: Date },
+): Promise<void> {
+  await db.query("UPDATE identity SET deletion_count = $2, reregister_after = $3 WHERE id = $1", [
+    identityId,
+    input.deletionCount,
+    input.reregisterAfter,
+  ]);
 }

@@ -624,6 +624,122 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/account/delete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Delete this account
+         * @description Erasure per TD-7: every session, login attempt, photo (with its objects unless another account shares them), review row and fetch log entry goes; the account row stays as an anonymised tombstone and the identity keeps a deletion count and a 30-day cooldown before a new account. The audit log is untouched. The body confirms; the app asks first.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["AccountDeletionRequest"];
+                };
+            };
+            responses: {
+                /** @description Erased. Every token of this account has stopped working. */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Validation failed (confirm missing). */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description unauthenticated, session_expired or session_revoked. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description No live account: a second deletion that passed the session guard before the first committed (not_found). */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/account/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Everything Kuutti holds about this account
+         * @description One JSON document: the account, the identity's dates and login level, the devices signed in, the photos with fifteen-minute URLs and their moderation outcome, and the person's own fetch log. Nothing about anyone else.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The export. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["AccountExport"];
+                    };
+                };
+                /** @description unauthenticated, session_expired or session_revoked. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/photos": {
         parameters: {
             query?: never;
@@ -1328,6 +1444,104 @@ export interface components {
             /** Format: date-time */
             expiresAt: string;
         };
+        AccountDeletionRequest: {
+            /**
+             * @description Must be true: the person confirmed in the app.
+             * @enum {boolean}
+             */
+            confirm: true;
+        };
+        AccountExport: {
+            /** Format: date-time */
+            exportedAt: string;
+            account: {
+                /** Format: uuid */
+                id: string;
+                /** @enum {string} */
+                state: "registered" | "active" | "paused" | "shadow_banned" | "suspended" | "banned" | "deleted";
+                /** Format: date-time */
+                registeredAt: string;
+                birthYear: number | null;
+                birthMonth: number | null;
+            };
+            identity: {
+                /** Format: date-time */
+                firstSeenAt: string;
+                /** Format: date-time */
+                lastBankLoginAt: string | null;
+                loginLevel: string | null;
+                deletionCount: number;
+            };
+            sessions: {
+                /** Format: uuid */
+                sessionId: string;
+                platform: components["schemas"]["AuthPlatform"];
+                /** Format: date-time */
+                createdAt: string;
+                /** Format: date-time */
+                lastUsedAt: string;
+                /** Format: date-time */
+                expiresAt: string;
+            }[];
+            photos: components["schemas"]["ExportedPhoto"][];
+            photoAccessLog: {
+                /** Format: uuid */
+                photoId: string;
+                variant: components["schemas"]["PhotoVariant"];
+                /** Format: date-time */
+                at: string;
+            }[];
+        };
+        ExportedPhoto: {
+            id: components["schemas"]["PhotoId"];
+            /** @description Placeholder the app paints before the thumb arrives (computed from the thumb). */
+            blurhash: string;
+            /** @description Of the full variant. */
+            width: number;
+            /** @description Of the full variant. */
+            height: number;
+            state: components["schemas"]["PhotoState"];
+            /**
+             * @description Set when state is rejected: the reason the owner is told.
+             * @enum {string|null}
+             */
+            rejectionReason: "nudity" | "no_person" | "several_people" | "minor" | "violence" | "contact_details" | "other" | null;
+            /** @description 0 is the main photo; the owner sets the order. */
+            position: number;
+            /** Format: date-time */
+            createdAt: string;
+            urls: components["schemas"]["SignedVariantUrls"];
+            /** @description The moderation outcome; label names are not part of it. */
+            review: {
+                /** @enum {string} */
+                decision: "approved" | "queued" | "rejected";
+                reason: components["schemas"]["PhotoRejectionReason"];
+                /** @description True when a person decided, false when the automatic check did. */
+                decidedByStaff: boolean;
+                /** Format: date-time */
+                decidedAt: string | null;
+            } | null;
+        };
+        /** Format: uuid */
+        PhotoId: string;
+        /** @enum {string} */
+        PhotoState: "pending" | "approved" | "queued" | "rejected";
+        /** @description Fifteen-minute URLs, one per variant. */
+        SignedVariantUrls: {
+            /** Format: uri */
+            thumb: string;
+            /** Format: uri */
+            card: string;
+            /** Format: uri */
+            full: string;
+        } | null;
+        /** @enum {string|null} */
+        PhotoRejectionReason: "nudity" | "no_person" | "several_people" | "minor" | "violence" | "contact_details" | "other" | null;
+        /**
+         * @description thumb: 200×200 for lists. card: 800×1067 when a profile is opened. full: 1600 px long edge, requested only from the zoom screen.
+         * @enum {string}
+         */
+        PhotoVariant: "thumb" | "card" | "full";
         PhotoList: {
             photos: components["schemas"]["Photo"][];
             /** @description matching_config max_photos. */
@@ -1352,10 +1566,6 @@ export interface components {
             /** Format: date-time */
             createdAt: string;
         };
-        /** Format: uuid */
-        PhotoId: string;
-        /** @enum {string} */
-        PhotoState: "pending" | "approved" | "queued" | "rejected";
         PhotoUploadRequest: {
             /**
              * Format: binary
@@ -1373,11 +1583,6 @@ export interface components {
             /** Format: date-time */
             expiresAt: string;
         };
-        /**
-         * @description thumb: 200×200 for lists. card: 800×1067 when a profile is opened. full: 1600 px long edge, requested only from the zoom screen.
-         * @enum {string}
-         */
-        PhotoVariant: "thumb" | "card" | "full";
         PhotoReviewQueue: {
             items: components["schemas"]["PhotoReviewItem"][];
             total: number;
@@ -1408,8 +1613,6 @@ export interface components {
             state: components["schemas"]["PhotoState"];
             rejectionReason: components["schemas"]["PhotoRejectionReason"];
         };
-        /** @enum {string|null} */
-        PhotoRejectionReason: "nudity" | "no_person" | "several_people" | "minor" | "violence" | "contact_details" | "other" | null;
         PhotoDecisionRequest: {
             /** @enum {string} */
             decision: "approve";

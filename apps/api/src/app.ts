@@ -5,6 +5,7 @@ import { requestId } from "hono/request-id";
 import { secureHeaders } from "hono/secure-headers";
 import { healthRoutes } from "./health/index.ts";
 import {
+  accountRoutes,
   adminSessionStore,
   authRoutes,
   type IdentityBroker,
@@ -117,6 +118,7 @@ export function createApp(deps: Deps) {
 
   app.route("/", healthRoutes(deps));
   app.route("/", authRoutes(deps, guard, anyStaff));
+  app.route("/", accountRoutes(deps, guard));
   app.route("/", wellKnownRoutes(deps));
   app.route("/", photoRoutes(deps, guard));
   app.route("/", photoAdminRoutes(deps, moderators));

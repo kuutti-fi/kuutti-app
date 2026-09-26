@@ -51,12 +51,19 @@ export function s3MediaStore(client: S3Client, bucket: string): MediaStore {
     },
     async delete(keys) {
       if (keys.length === 0) return;
-      await client.send(
+      // DeleteObjects answers 200 with a per-object error list; quiet mode
+      // still lists the failures, and a partial failure is a failure here.
+      const out = await client.send(
         new DeleteObjectsCommand({
           Bucket: bucket,
           Delete: { Objects: keys.map((Key) => ({ Key })), Quiet: true },
         }),
       );
+      const failed = out.Errors ?? [];
+      if (failed.length > 0) {
+        const codes = [...new Set(failed.map((e) => e.Code ?? "unknown"))].join(", ");
+        throw new Error(`DeleteObjects left ${failed.length} of ${keys.length} objects (${codes})`);
+      }
     },
   };
 }

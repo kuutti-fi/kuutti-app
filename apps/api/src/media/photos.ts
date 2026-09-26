@@ -192,12 +192,14 @@ export async function issuePhotoUrl(
   if (!row) throw new AppError(404, "not_found", "No such photo of this account");
   const at = deps.now();
   const expiresAt = new Date(at.getTime() + URL_TTL_MS);
-  await repo.insertPhotoAccess(deps.db, {
+  const recorded = await repo.insertPhotoAccess(deps.db, {
     accountId: input.accountId,
     photoId: input.photoId,
     variant: input.variant,
     at,
   });
+  // No row, no URL: the account was erased between the guard and here (#51).
+  if (!recorded) throw new AppError(404, "not_found", "No such photo of this account");
   const url = await deps.signer.sign(objectKey(row.key, input.variant), expiresAt);
   deps.logger.info(
     { accountId: input.accountId, photoId: input.photoId, variant: input.variant, at },

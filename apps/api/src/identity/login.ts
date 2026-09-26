@@ -107,17 +107,22 @@ async function finishLogin(
     });
   }
 
-  const { accountId, outcome } = await resolveAccount(deps, derived, now);
-
-  const { code, hash } = newOneTimeCode();
-  await repo.attachCode(deps.db, {
-    id: request.id,
-    codeHash: hash,
-    codeExpiresAt: new Date(now.getTime() + ONE_TIME_CODE_TTL_MS),
-    accountId,
-    outcome,
-  });
-  return new URL(appReturnUrl(code));
+  // The account can be erased (#51) between its resolution and the code: the
+  // attach then writes nothing, and resolving again reads the cooldown the
+  // erasure recorded, so the browser leaves with auth_cooldown, not a code.
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const { accountId, outcome } = await resolveAccount(deps, derived, now);
+    const { code, hash } = newOneTimeCode();
+    const attached = await repo.attachCode(deps.db, {
+      id: request.id,
+      codeHash: hash,
+      codeExpiresAt: new Date(now.getTime() + ONE_TIME_CODE_TTL_MS),
+      accountId,
+      outcome,
+    });
+    if (attached) return new URL(appReturnUrl(code));
+  }
+  throw new Error("account erased twice during one login");
 }
 
 type Derived = Awaited<ReturnType<typeof deriveFromBroker>>;

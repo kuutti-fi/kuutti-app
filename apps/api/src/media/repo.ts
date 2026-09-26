@@ -51,9 +51,10 @@ export async function countPhotos(db: Queryable, accountId: string): Promise<num
 
 /**
  * Appends after the account's last photo, and only while the account has
- * fewer than `maxPhotos`: the cap is the statement's HAVING clause, so a
- * request that arrives after another's commit is refused here even when it
- * passed the service's count. Null means the cap refused this one. Two
+ * fewer than `maxPhotos` and is still live: both are the statement's HAVING
+ * clause, so a request that arrives after another's commit (an upload that
+ * outlived the erasure of its account, #51) is refused here even when it
+ * passed the guard and the service's count. Null means the statement refused. Two
  * inserts that run at the same instant can still both see the old count
  * under READ COMMITTED and both succeed, one photo over the cap and on the
  * same position; the order stays stable through created_at and is renumbered
@@ -77,6 +78,7 @@ export async function insertPhoto(
     `INSERT INTO photo (account_id, key, blurhash, width, height, position)
      SELECT $1, $2, $3, $4, $5, coalesce(max(position) + 1, 0) FROM photo WHERE account_id = $1
      HAVING count(*) < $6
+        AND EXISTS (SELECT 1 FROM account WHERE id = $1 AND state <> 'deleted')
      RETURNING ${COLUMNS}`,
     [input.accountId, input.key, input.blurhash, input.width, input.height, input.maxPhotos],
   );
@@ -142,14 +144,17 @@ export async function compactPositions(db: Queryable, accountId: string): Promis
   );
 }
 
+/** False when the account is no longer live: a fetch that outlived the erasure writes nothing (#51). */
 export async function insertPhotoAccess(
   db: Queryable,
   input: { accountId: string; photoId: string; variant: PhotoVariant; at: Date },
-): Promise<void> {
-  await db.query(
-    "INSERT INTO photo_access (account_id, photo_id, variant, at) VALUES ($1, $2, $3, $4)",
+): Promise<boolean> {
+  const result = await db.query(
+    `INSERT INTO photo_access (account_id, photo_id, variant, at)
+     SELECT $1, $2, $3, $4 WHERE EXISTS (SELECT 1 FROM account WHERE id = $1 AND state <> 'deleted')`,
     [input.accountId, input.photoId, input.variant, input.at],
   );
+  return result.rowCount === 1;
 }
 
 // Moderation (#49). The automatic check and the staff routes read photos
@@ -306,4 +311,85 @@ export async function decidePhoto(
     [input.photoId, input.decision, input.decidedBy, input.at, input.reason],
   );
   return photoFrom(row);
+}
+
+// Erasure and export (#51, TD-7): the account's photos, their review rows
+// (cascade) and its own fetch log go; the objects go when no other row shares
+// the content, decided by the caller after the transaction.
+
+/** Deletes every photo row of the account; returns their content keys. */
+export async function deletePhotosOfAccount(db: Queryable, accountId: string): Promise<string[]> {
+  const { rows } = await db.query<{ key: string }>(
+    "DELETE FROM photo WHERE account_id = $1 RETURNING key",
+    [accountId],
+  );
+  return rows.map((r) => r.key);
+}
+
+export async function deletePhotoAccessOfAccount(
+  db: Queryable,
+  accountId: string,
+): Promise<number> {
+  const result = await db.query("DELETE FROM photo_access WHERE account_id = $1", [accountId]);
+  return result.rowCount ?? 0;
+}
+
+/** Of the given keys, those no photo row references any more. */
+export async function orphanedKeys(db: Queryable, keys: string[]): Promise<string[]> {
+  if (keys.length === 0) return [];
+  const { rows } = await db.query<{ key: string }>(
+    `SELECT k.key FROM unnest($1::text[]) AS k(key)
+     WHERE NOT EXISTS (SELECT 1 FROM photo p WHERE p.key = k.key)`,
+    [[...new Set(keys)]],
+  );
+  return rows.map((r) => r.key);
+}
+
+export async function listPhotoAccessOfAccount(
+  db: Queryable,
+  accountId: string,
+  limit: number,
+): Promise<Array<{ photoId: string; variant: PhotoVariant; at: Date }>> {
+  const { rows } = await db.query<Row>(
+    "SELECT photo_id, variant, at FROM photo_access WHERE account_id = $1 ORDER BY at DESC LIMIT $2",
+    [accountId, limit],
+  );
+  return rows.map((r) => ({
+    photoId: r.photo_id as string,
+    variant: r.variant as PhotoVariant,
+    at: r.at as Date,
+  }));
+}
+
+/** The moderation outcome per photo of the account, for the export; never the labels. */
+export async function listReviewsForAccount(
+  db: Queryable,
+  accountId: string,
+): Promise<
+  Map<
+    string,
+    {
+      decision: "approved" | "queued" | "rejected";
+      reason: PhotoRejectionReason | null;
+      decidedBy: string | null;
+      decidedAt: Date | null;
+    }
+  >
+> {
+  const { rows } = await db.query<Row>(
+    `SELECT r.photo_id, r.decision, r.reason, r.decided_by, r.decided_at
+     FROM photo_review r JOIN photo p ON p.id = r.photo_id WHERE p.account_id = $1`,
+    [accountId],
+  );
+  return new Map(
+    rows.map((r) => [
+      r.photo_id as string,
+      {
+        decision: r.decision as "approved" | "queued" | "rejected",
+        reason: (r.reason as PhotoRejectionReason | null) ?? null,
+        decidedBy: (r.decided_by as string | null) ?? null,
+        decidedAt: (r.decided_at as Date | null) ?? null,
+      },
+    ]),
+  );
 }
