@@ -2308,3 +2308,47 @@ account.delete.failed:
   fi: Poisto ei onnistunut. Yritä uudelleen.
   sv: Borttagningen gick inte igenom. Försök igen.
   machine: { fi: true, sv: true }
+
+# --- Research opt-in on the account card, and the home screen's onboarding gate (#46) ---
+
+account.research.label:
+  en: "Take part in research"
+  description: "Label of the research opt-in switch on the account card (#46): on when the active research consent names the current wording."
+  fi: "Osallistu tutkimukseen"
+  sv: "Delta i forskningen"
+  machine: { fi: true, sv: true }
+
+account.research.explain:
+  en: "Anonymised events about how you use Kuutti, under a separate research identifier. You can change this at any time."
+  description: "Line under the research switch."
+  fi: "Anonymisoituja tapahtumia Kuutin käytöstäsi erillisellä tutkimustunnisteella. Voit muuttaa tätä milloin tahansa."
+  sv: "Anonymiserade händelser om hur du använder Kuutti, under ett separat forskningsid. Du kan ändra det här när som helst."
+  machine: { fi: true, sv: true }
+
+account.research.failed:
+  en: "The research choice could not be saved. Try again."
+  description: "Notice when giving or withdrawing the research consent failed."
+  fi: "Tutkimusvalintaa ei voitu tallentaa. Yritä uudelleen."
+  sv: "Forskningsvalet kunde inte sparas. Försök igen."
+  machine: { fi: true, sv: true }
+
+smoke.gate.checking:
+  en: "Checking your account setup…"
+  description: "Home screen while GET /onboarding is in flight (#46): nothing that needs a finished account shows until it says complete."
+  fi: "Tarkistetaan tilisi asetuksia…"
+  sv: "Kontrollerar din kontoinställning…"
+  machine: { fi: true, sv: true }
+
+smoke.gate.failed:
+  en: "Your account setup could not be checked."
+  description: "Home screen when GET /onboarding failed: the gate stays closed and offers a retry."
+  fi: "Tilisi asetuksia ei voitu tarkistaa."
+  sv: "Din kontoinställning kunde inte kontrolleras."
+  machine: { fi: true, sv: true }
+
+smoke.gate.retry:
+  en: "Check again"
+  description: "Retry button of the home screen's onboarding gate."
+  fi: "Tarkista uudelleen"
+  sv: "Kontrollera igen"
+  machine: { fi: true, sv: true }

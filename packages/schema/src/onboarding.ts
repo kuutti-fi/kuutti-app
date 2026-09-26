@@ -108,6 +108,7 @@ export type ConsentVersions = z.infer<typeof ConsentVersions>;
 
 export const ConsentsResponse = z
   .object({
+    /** The newest hundred, oldest first; the export carries every row. */
     consents: z.array(ConsentRecord).max(100),
     currentVersions: ConsentVersions,
   })

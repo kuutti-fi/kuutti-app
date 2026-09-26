@@ -17,6 +17,9 @@ export type MessageParams = {
   "account.export.failed": Record<never, never>;
   "account.export.title": Record<never, never>;
   "account.export.working": Record<never, never>;
+  "account.research.explain": Record<never, never>;
+  "account.research.failed": Record<never, never>;
+  "account.research.label": Record<never, never>;
   "account.title": Record<never, never>;
   "admin.empty": Record<never, never>;
   "admin.forbidden": Record<never, never>;
@@ -334,6 +337,9 @@ export type MessageParams = {
   "smoke.app.label": Record<never, never>;
   "smoke.app.noCommit": Record<never, never>;
   "smoke.app.title": Record<never, never>;
+  "smoke.gate.checking": Record<never, never>;
+  "smoke.gate.failed": Record<never, never>;
+  "smoke.gate.retry": Record<never, never>;
   "smoke.loading": Record<never, never>;
   "smoke.photos.open": Record<never, never>;
   "smoke.retry": Record<never, never>;

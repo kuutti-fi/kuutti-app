@@ -13,9 +13,9 @@ import {
  * revert the text.
  */
 const GOLDEN: Record<string, { version: string; hash: string }> = {
-  privacy: { version: "2026-09-draft-1", hash: CONSENT_TEXT_HASHES.privacy ?? "" },
-  research: { version: "2026-09-draft-1", hash: CONSENT_TEXT_HASHES.research ?? "" },
-  terms: { version: "2026-09-draft-1", hash: CONSENT_TEXT_HASHES.terms ?? "" },
+  privacy: { version: "2026-09-draft-1", hash: "7197e6c3209d4b4a" },
+  research: { version: "2026-09-draft-1", hash: "b55ab7542a8d4bb2" },
+  terms: { version: "2026-09-draft-1", hash: "a947eb54ce1338cd" },
 };
 
 describe("consent versions", () => {

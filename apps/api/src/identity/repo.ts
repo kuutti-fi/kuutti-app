@@ -676,24 +676,48 @@ export type ConsentRow = {
   withdrawnAt: Date | null;
 };
 
-/** The newest hundred, oldest first: the contracts cap the list, and the rows are proof, not a feed. */
+/** What GET /consents lists: the newest hundred, oldest first. The export and the status read past that. */
 export const CONSENTS_LISTED = 100;
 
-export async function listConsents(db: Queryable, accountId: string): Promise<ConsentRow[]> {
+const consentFrom = (r: Row): ConsentRow => ({
+  kind: r.kind as string,
+  version: r.version as string,
+  locale: r.locale_shown as string,
+  givenAt: r.given_at as Date,
+  withdrawnAt: (r.withdrawn_at as Date | null) ?? null,
+});
+
+/** Every consent row of the account, oldest first; `limit` keeps the newest that many (the list route). */
+export async function listConsents(
+  db: Queryable,
+  accountId: string,
+  limit?: number,
+): Promise<ConsentRow[]> {
+  const { rows } =
+    limit === undefined
+      ? await db.query<Row>(
+          `SELECT kind, version, locale_shown, given_at, withdrawn_at FROM consent
+           WHERE account_id = $1 ORDER BY given_at, kind`,
+          [accountId],
+        )
+      : await db.query<Row>(
+          `SELECT kind, version, locale_shown, given_at, withdrawn_at FROM (
+             SELECT kind, version, locale_shown, given_at, withdrawn_at FROM consent
+             WHERE account_id = $1 ORDER BY given_at DESC LIMIT $2) newest
+           ORDER BY given_at, kind`,
+          [accountId, limit],
+        );
+  return rows.map(consentFrom);
+}
+
+/** The newest active row per kind: what the status and the activation rule look at, however long the history. */
+export async function activeConsents(db: Queryable, accountId: string): Promise<ConsentRow[]> {
   const { rows } = await db.query<Row>(
-    `SELECT kind, version, locale_shown, given_at, withdrawn_at FROM (
-       SELECT kind, version, locale_shown, given_at, withdrawn_at FROM consent
-       WHERE account_id = $1 ORDER BY given_at DESC LIMIT $2) newest
-     ORDER BY given_at, kind`,
-    [accountId, CONSENTS_LISTED],
+    `SELECT DISTINCT ON (kind) kind, version, locale_shown, given_at, withdrawn_at FROM consent
+     WHERE account_id = $1 AND withdrawn_at IS NULL ORDER BY kind, given_at DESC`,
+    [accountId],
   );
-  return rows.map((r) => ({
-    kind: r.kind as string,
-    version: r.version as string,
-    locale: r.locale_shown as string,
-    givenAt: r.given_at as Date,
-    withdrawnAt: (r.withdrawn_at as Date | null) ?? null,
-  }));
+  return rows.map(consentFrom);
 }
 
 /**
@@ -734,16 +758,23 @@ export async function recordConsent(
   });
 }
 
-/** Marks every active consent of the kind withdrawn; the rows stay. */
+/** Marks every active consent of the kind withdrawn; the rows stay. Under the account row's lock like every writer (ADR-010 §8). */
 export async function withdrawConsent(
   db: Queryable,
   accountId: string,
   kind: string,
   at: Date,
-): Promise<number> {
-  const result = await db.query(
-    "UPDATE consent SET withdrawn_at = $3 WHERE account_id = $1 AND kind = $2 AND withdrawn_at IS NULL",
-    [accountId, kind, at],
-  );
-  return result.rowCount ?? 0;
+): Promise<{ live: boolean; withdrawn: number }> {
+  return transaction(db, async (tx) => {
+    const live = await tx.query(
+      "SELECT 1 FROM account WHERE id = $1 AND state <> 'deleted' FOR UPDATE",
+      [accountId],
+    );
+    if (live.rows.length === 0) return { live: false, withdrawn: 0 };
+    const result = await tx.query(
+      "UPDATE consent SET withdrawn_at = $3 WHERE account_id = $1 AND kind = $2 AND withdrawn_at IS NULL",
+      [accountId, kind, at],
+    );
+    return { live: true, withdrawn: result.rowCount ?? 0 };
+  });
 }

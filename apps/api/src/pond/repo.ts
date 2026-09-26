@@ -19,10 +19,15 @@ const pondFrom = (r: Row): PondSummary => ({
 
 const COLUMNS = "id, slug, name_nominative, name_inessive, parent_id";
 
-/** Every pond, parents first, so the app can show the tree in order. */
+/** Every pond in tree order: each parent right before its descendants, siblings by name. */
 export async function listPonds(db: Queryable): Promise<PondSummary[]> {
   const { rows } = await db.query<Row>(
-    `SELECT ${COLUMNS} FROM ponds ORDER BY parent_id IS NOT NULL, name_nominative`,
+    `WITH RECURSIVE tree AS (
+       SELECT ${COLUMNS}, ARRAY[name_nominative] AS path FROM ponds WHERE parent_id IS NULL
+       UNION ALL
+       SELECT p.id, p.slug, p.name_nominative, p.name_inessive, p.parent_id, t.path || p.name_nominative
+       FROM ponds p JOIN tree t ON p.parent_id = t.id)
+     SELECT ${COLUMNS} FROM tree ORDER BY path`,
   );
   return rows.map(pondFrom);
 }

@@ -10,7 +10,7 @@ import { createApp } from "../app.ts";
 import { signedInAccount, withMatchingConfig } from "../test/account.ts";
 import { captureLogger, type TestContext, test, testConfig } from "../test/harness.ts";
 import { fixturePng, testMediaDeps } from "../test/media.ts";
-import { buildCard } from "./card.ts";
+import { ageInYears, buildCard } from "./card.ts";
 import { consentMissingFor } from "./service.ts";
 
 // The profile routes end to end (#47, ADR-009): real Postgres in a rolled-back
@@ -205,9 +205,9 @@ describe("profile routes", () => {
     const response = await app.request("/profile/card", { headers: a.headers });
     expect(response.status).toBe(200);
     const body = CardPreviewResponse.parse(await response.json());
-    // signedInAccount registers the account as born 1990-06.
-    const now = new Date();
-    const years = now.getUTCFullYear() - 1990 - (now.getUTCMonth() + 1 >= 6 ? 0 : 1);
+    // signedInAccount registers the account as born 1990-06; the arithmetic is tested against
+    // fixed instants in completeness.test.ts, this checks the wiring by the same rule.
+    const years = ageInYears(1990, 6, new Date());
     expect(body.card).toMatchObject({
       accountId: a.accountId,
       displayName: "Aino",

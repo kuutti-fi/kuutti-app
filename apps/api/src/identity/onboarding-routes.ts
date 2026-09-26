@@ -96,6 +96,7 @@ const withdrawRoute = createRoute({
   responses: {
     200: { description: "Withdrawn; the consents as stored.", ...json(ConsentsResponse) },
     401: unauthenticated,
+    404: errorContent("No live account (erased meanwhile)."),
   },
 });
 

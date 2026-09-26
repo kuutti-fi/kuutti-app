@@ -88,7 +88,8 @@ export async function onboardingStatus(
   const [preferences, pond, consents] = await Promise.all([
     readPreferences(deps.db, accountId),
     findPondOfAccount(deps.db, accountId),
-    repo.listConsents(deps.db, accountId),
+    // The newest active row per kind, however long the history (#65 review).
+    repo.activeConsents(deps.db, accountId),
   ]);
   const terms = acceptedCurrent(consents, "terms")?.version ?? null;
   const privacy = acceptedCurrent(consents, "privacy")?.version ?? null;
@@ -127,7 +128,7 @@ export async function consentsOf(
   deps: OnboardingDeps,
   accountId: string,
 ): Promise<ConsentsResponse> {
-  const rows = await repo.listConsents(deps.db, accountId);
+  const rows = await repo.listConsents(deps.db, accountId, repo.CONSENTS_LISTED);
   return { consents: rows.map(toRecord), currentVersions: CURRENT_CONSENT_VERSIONS };
 }
 
@@ -182,8 +183,9 @@ export async function withdrawResearchConsent(
   deps: OnboardingDeps,
   accountId: string,
 ): Promise<ConsentsResponse> {
-  const withdrawn = await repo.withdrawConsent(deps.db, accountId, "research", deps.now());
-  if (withdrawn > 0) deps.logger.info({ accountId, kind: "research" }, "consent withdrawn");
+  const outcome = await repo.withdrawConsent(deps.db, accountId, "research", deps.now());
+  if (!outcome.live) throw new AppError(404, "not_found", "No live account");
+  if (outcome.withdrawn > 0) deps.logger.info({ accountId, kind: "research" }, "consent withdrawn");
   return consentsOf(deps, accountId);
 }
 
@@ -199,7 +201,7 @@ export async function declareGender(
   deps.logger.info({ accountId }, "gender declared");
 }
 
-/** The export (#51): every consent ever given, withdrawn ones included (ADR-010). */
+/** The export (#51): every consent ever given, withdrawn ones included, none left out (ADR-010). */
 export async function exportConsents(db: Queryable, accountId: string): Promise<ConsentRecord[]> {
   return (await repo.listConsents(db, accountId)).map(toRecord);
 }

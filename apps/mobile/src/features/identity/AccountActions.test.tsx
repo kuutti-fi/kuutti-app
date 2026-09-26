@@ -109,12 +109,19 @@ describe("AccountActions", () => {
   });
 
   it("deletes only after the confirmation, with confirm true, and signs the device out", async () => {
-    const calls = fetchMock([
+    const requests = fetchMock([
       (req) =>
         req.method === "POST" && new URL(req.url).pathname === "/account/delete"
           ? new Response(null, { status: 204 })
           : null,
     ]);
+    // The card reads the consents on mount (the research switch); only writes count here.
+    const calls = {
+      get length() {
+        return requests.filter((r) => r.method !== "GET").length;
+      },
+      at: (i: number) => requests.filter((r) => r.method !== "GET")[i],
+    };
     await show(<AccountActions />);
     await fireEvent.press(screen.getByRole("button", { name: "Delete my account" }));
     expect(await screen.findByText("Delete your account?")).toBeTruthy();
@@ -131,7 +138,7 @@ describe("AccountActions", () => {
     await fireEvent.press(screen.getByRole("button", { name: "Delete my account" }));
     await fireEvent.press(await screen.findByRole("button", { name: "Delete everything" }));
     await waitFor(() => expect(calls).toHaveLength(1));
-    expect(JSON.parse(await (calls[0] as Request).text())).toEqual({ confirm: true });
+    expect(JSON.parse(await (calls.at(0) as Request).text())).toEqual({ confirm: true });
     await waitFor(() => expect(currentSession()).toBeNull());
     // Signed out: the card is gone with the session.
     await waitFor(() => expect(screen.queryByText("Your account")).toBeNull());
@@ -149,5 +156,43 @@ describe("AccountActions", () => {
     await fireEvent.press(await screen.findByRole("button", { name: "Delete everything" }));
     expect(await screen.findByText("The deletion did not go through. Try again.")).toBeTruthy();
     expect(currentSession()?.sessionId).toBe(session.sessionId);
+  });
+
+  it("shows the research opt-in as a switch and withdraws it", async () => {
+    const version = "2026-09-draft-1";
+    const given = {
+      kind: "research",
+      version,
+      locale: "en",
+      givenAt: "2026-09-26T10:00:00.000Z",
+      withdrawnAt: null,
+    };
+    const versions = { terms: version, privacy: version, research: version };
+    let consents = [given];
+    fetchMock([
+      (req) => {
+        const path = new URL(req.url).pathname;
+        if (req.method === "GET" && path === "/consents") {
+          return json({ consents, currentVersions: versions });
+        }
+        if (req.method === "DELETE" && path === "/consents/research") {
+          consents = [{ ...given, withdrawnAt: "2026-09-26T11:00:00.000Z" }];
+          return json({ consents, currentVersions: versions });
+        }
+        return null;
+      },
+    ]);
+    await show(<AccountActions />);
+    const toggle = await screen.findByLabelText("Take part in research");
+    expect(toggle.props.accessibilityState?.checked).toBe(true);
+    expect(screen.getByText(/You can change this at any time/)).toBeTruthy();
+    await fireEvent(toggle, "press");
+    await waitFor(() =>
+      expect(screen.getByLabelText("Take part in research").props.accessibilityState?.checked).toBe(
+        false,
+      ),
+    );
+    const found = pressables(screen.toJSON() as HostNode);
+    expect(found.flatMap((node) => a11yProblems(node))).toEqual([]);
   });
 });

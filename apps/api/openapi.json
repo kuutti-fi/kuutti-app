@@ -388,7 +388,7 @@
             "items": {
               "$ref": "#/components/schemas/ConsentRecord"
             },
-            "maxItems": 100
+            "maxItems": 10000
           },
           "identity": {
             "type": "object",
@@ -3263,6 +3263,16 @@
           },
           "401": {
             "description": "unauthenticated, session_expired or session_revoked.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No live account (erased meanwhile).",
             "content": {
               "application/json": {
                 "schema": {

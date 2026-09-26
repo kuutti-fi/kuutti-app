@@ -52,6 +52,22 @@ export async function choosePond(pondId: string): Promise<void> {
   if (!response.ok) throw failed(response, error, "pond");
 }
 
+/** The consent texts exist in fi, sv and en; the pseudo-locale reads the English. */
+export const consentLocale = (locale: string): "fi" | "sv" | "en" =>
+  locale === "fi" || locale === "sv" ? locale : "en";
+
+export async function fetchConsents(): Promise<ConsentsResponse> {
+  const { data, error, response } = await api.GET("/consents");
+  if (!data) throw failed(response, error, "consents");
+  return ConsentsResponse.parse(data);
+}
+
+export async function withdrawResearch(): Promise<ConsentsResponse> {
+  const { data, error, response } = await api.DELETE("/consents/research");
+  if (!data) throw failed(response, error, "research withdrawal");
+  return ConsentsResponse.parse(data);
+}
+
 export async function giveConsent(
   kind: ConsentKind,
   version: string,

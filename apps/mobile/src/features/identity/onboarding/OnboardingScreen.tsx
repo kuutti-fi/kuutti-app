@@ -19,7 +19,7 @@ import { Input } from "@/components/ui/input";
 import { Text } from "@/components/ui/text";
 import { useT } from "@/lib/locale";
 import { useHapticTap } from "@/theme/haptics";
-import { choosePond, declareGender, giveConsent, savePreferences } from "./client";
+import { choosePond, consentLocale, declareGender, giveConsent, savePreferences } from "./client";
 import { useOnboarding } from "./useOnboarding";
 
 type Step = "consents" | "gender" | "seeks" | "age" | "pond" | "research" | "done";
@@ -82,10 +82,6 @@ function Chip({
     </Button>
   );
 }
-
-/** The consent texts exist in fi, sv and en; the pseudo-locale reads the English. */
-const consentLocale = (locale: string): "fi" | "sv" | "en" =>
-  locale === "fi" || locale === "sv" ? locale : "en";
 
 /**
  * The first minutes after the bank login (#46, ADR-010): one question per
@@ -352,7 +348,7 @@ export function OnboardingScreen() {
                 disabled={busy}
                 onPress={() => {
                   tap();
-                  setResearchOffered(true);
+                  // A recorded yes shows up in the status; only "Not now" marks the offer as made.
                   void step(() =>
                     giveConsent("research", bundledVersion("research"), consentLocale(locale)),
                   );

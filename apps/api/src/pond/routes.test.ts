@@ -12,16 +12,19 @@ async function appWith(ctx: TestContext) {
   return createApp({ config: testConfig(), logger, db: ctx.client });
 }
 
+const NAMES: Record<string, [string, string]> = {
+  "test-otaniemi": ["Otaniemi", "Otaniemessä"],
+  "test-espoo": ["Espoo", "Espoossa"],
+  // Sorts before its parent by name: the order must come from the tree, not the alphabet.
+  "test-aalto": ["Aalto", "Aallossa"],
+};
+
 async function pond(ctx: TestContext, slug: string, parentId: string | null = null) {
+  const [nominative, inessive] = NAMES[slug] ?? [slug, slug];
   const { rows } = await ctx.client.query<{ id: string }>(
     `INSERT INTO ponds (slug, name_nominative, name_inessive, parent_id)
      VALUES ($1, $2, $3, $4) RETURNING id`,
-    [
-      slug,
-      slug === "test-otaniemi" ? "Otaniemi" : "Espoo",
-      slug === "test-otaniemi" ? "Otaniemessä" : "Espoossa",
-      parentId,
-    ],
+    [slug, nominative, inessive, parentId],
   );
   return rows[0]?.id ?? "";
 }
@@ -32,6 +35,7 @@ describe("pond choice", () => {
     const a = await signedInAccount(ctx.client);
     const espoo = await pond(ctx, "test-espoo");
     const otaniemi = await pond(ctx, "test-otaniemi", espoo);
+    const aalto = await pond(ctx, "test-aalto", otaniemi);
     const response = await app.request("/ponds", { headers: a.headers });
     expect(response.status).toBe(200);
     const { ponds } = PondList.parse(await response.json());
@@ -43,10 +47,10 @@ describe("pond choice", () => {
       nameInessive: "Otaniemessä",
       parentId: espoo,
     });
-    // Parents come first.
-    expect(ponds.findIndex((p) => p.id === espoo)).toBeLessThan(
-      ponds.findIndex((p) => p.id === otaniemi),
-    );
+    // Tree order: each parent right before its descendants, whatever the names.
+    const at = (id: string) => ponds.findIndex((p) => p.id === id);
+    expect(at(espoo)).toBeLessThan(at(otaniemi));
+    expect(at(otaniemi)).toBeLessThan(at(aalto));
   });
 
   test("A pond is chosen from the list and an unknown id is refused", async ({ ctx }) => {

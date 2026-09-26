@@ -318,6 +318,52 @@ describe("onboarding and consents", () => {
     expect(listed.consents.length).toBeLessThanOrEqual(100);
   });
 
+  test("A long research history hides neither the required consents nor any proof row", async ({
+    ctx,
+  }) => {
+    const { app } = await appWith(ctx);
+    const a = await signedInAccount(ctx.client);
+    await consent(app, a.headers, "terms", CURRENT_CONSENT_VERSIONS.terms);
+    await consent(app, a.headers, "privacy", CURRENT_CONSENT_VERSIONS.privacy);
+    // More rows than GET /consents lists, written straight in: the churn cap keeps a day to ten.
+    await ctx.client.query(
+      `INSERT INTO consent (account_id, kind, version, locale_shown, given_at, withdrawn_at)
+       SELECT $1, 'research', $2, 'fi', now() + (g || ' seconds')::interval, now() + (g || ' seconds')::interval
+       FROM generate_series(1, 120) AS g`,
+      [a.accountId, CURRENT_CONSENT_VERSIONS.research],
+    );
+    const shown = await status(app, a.headers);
+    expect(shown.consents.terms).toBe(CURRENT_CONSENT_VERSIONS.terms);
+    expect(shown.consents.privacy).toBe(CURRENT_CONSENT_VERSIONS.privacy);
+    expect(shown.missing).not.toContain("terms");
+    const listed = ConsentsResponse.parse(
+      await (await app.request("/consents", { headers: a.headers })).json(),
+    );
+    expect(listed.consents).toHaveLength(100);
+    const exported = AccountExport.parse(
+      await (await app.request("/account/export", { headers: a.headers })).json(),
+    );
+    expect(exported.consents).toHaveLength(122);
+  });
+
+  test("Withdrawing on an erased account writes nothing", async ({ ctx }) => {
+    const { app } = await appWith(ctx);
+    const a = await signedInAccount(ctx.client);
+    await consent(app, a.headers, "research", CURRENT_CONSENT_VERSIONS.research);
+    await ctx.client.query("UPDATE account SET state = 'deleted' WHERE id = $1", [a.accountId]);
+    const refused = await app.request("/consents/research", {
+      method: "DELETE",
+      headers: a.headers,
+    });
+    // The guard may already refuse the token of a deleted account; the writer refuses on its own too.
+    expect([401, 404]).toContain(refused.status);
+    const { rows } = await ctx.client.query(
+      "SELECT 1 FROM consent WHERE account_id = $1 AND withdrawn_at IS NOT NULL",
+      [a.accountId],
+    );
+    expect(rows).toHaveLength(0);
+  });
+
   it("GENDERS mirrors the database enum", () => {
     expect([...GENDERS]).toEqual([...gender.enumValues]);
   });
