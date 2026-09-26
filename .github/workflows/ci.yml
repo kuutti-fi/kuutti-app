@@ -117,6 +117,9 @@ jobs:
       # exception with its reason (#16 C.2, scripts/license-policy.json).
       - name: Dependency licences follow the policy
         run: pnpm check:licenses --self-test
+        env:
+          # Reads the licence GitHub reports for each action named in the policy.
+          GH_TOKEN: ${{ github.token }}
 
   audit:
     name: audit
