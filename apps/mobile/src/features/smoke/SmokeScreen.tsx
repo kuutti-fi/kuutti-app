@@ -13,7 +13,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Icon } from "@/components/ui/icon";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Text } from "@/components/ui/text";
-import { AccountActions, useSession } from "@/features/identity";
+import { AccountActions, useOnboardingGate, useSession } from "@/features/identity";
 import { apiBaseUrl, fetchHealth } from "@/lib/api";
 import { useT } from "@/lib/locale";
 import { cn } from "@/lib/utils";
@@ -54,6 +54,8 @@ export function SmokeScreen() {
   const { t } = useT();
   const session = useSession();
   const router = useRouter();
+  // An account that has not finished onboarding (#46) is sent there first.
+  useOnboardingGate();
 
   // The app's own git commit, as opposed to the API's: app.config.ts stamped
   // it into the config when this JavaScript was exported or built.

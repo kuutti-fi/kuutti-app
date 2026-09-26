@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { and, eq, ne } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import type { Pool } from "./pool.ts";
-import { account, identity, matchingConfig, ponds, profile } from "./schema/index.ts";
+import { account, identity, matchingConfig, ponds, preferences, profile } from "./schema/index.ts";
 
 /** Otaniemi first, then the city, then the region (project context §1). */
 export const SEED_PONDS = [
@@ -147,6 +147,28 @@ export async function seed(pool: Pool, createdBy = "seed"): Promise<SeedResult> 
         .from(account)
         .where(and(eq(account.identityId, row.id), ne(account.state, "deleted")));
       if (current) {
+        // Onboarding (#46): gender, pond and the two hard rows; the consents
+        // are left for the flow to ask, so the screens can be tried locally.
+        const [otaniemi] = await db
+          .select({ id: ponds.id })
+          .from(ponds)
+          .where(eq(ponds.slug, "otaniemi"));
+        await db
+          .update(account)
+          .set({ gender: "woman", pondId: otaniemi?.id ?? null })
+          .where(eq(account.id, current.id));
+        for (const [field, value] of [
+          ["seeks", ["man", "non_binary"]],
+          ["age_window", { min: 25, max: 40 }],
+        ] as const) {
+          await db
+            .insert(preferences)
+            .values({ accountId: current.id, field, value, mode: "hard" })
+            .onConflictDoUpdate({
+              target: [preferences.accountId, preferences.field],
+              set: { value },
+            });
+        }
         await db
           .insert(profile)
           .values({

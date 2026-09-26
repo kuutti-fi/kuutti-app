@@ -10,6 +10,10 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
+import { ponds } from "./ponds.ts";
+
+/** Self-declared, one of a closed list (#46, rule 3); mirrors GENDERS in packages/schema (a test keeps them equal). */
+export const gender = pgEnum("gender", ["woman", "man", "non_binary"]);
 
 /**
  * The person and the account are two rows (TD-1, TD-7, rules/db.md). The
@@ -75,6 +79,10 @@ export const account = pgTable(
     // anonymised tombstone of a deleted account.
     birthYear: smallint("birth_year"),
     birthMonth: smallint("birth_month"),
+    // Onboarding (#46): self-declared gender and the pond matching happens
+    // in; null until answered, nulled again at erasure with the age.
+    gender: gender("gender"),
+    pondId: uuid("pond_id").references(() => ponds.id),
     registeredAt: timestamp("registered_at", { withTimezone: true }).notNull().defaultNow(),
     deletedAt: timestamp("deleted_at", { withTimezone: true }),
   },

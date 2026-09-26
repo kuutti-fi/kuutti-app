@@ -30,6 +30,7 @@ export function ProfileCardView({ card }: { card: ProfileCard }) {
       <CardHeader>
         <CardTitle>{card.displayName}</CardTitle>
         <Text variant="muted">{t("profile.card.verifiedAge", { years: card.age.years })}</Text>
+        {card.pond && <Text variant="muted">{card.pond.name}</Text>}
       </CardHeader>
       <CardContent className="gap-4">
         {rest.length > 0 && (

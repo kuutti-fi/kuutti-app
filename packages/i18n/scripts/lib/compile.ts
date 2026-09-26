@@ -37,6 +37,35 @@ function keysModule(messages: Messages): string {
 }
 
 /**
+ * legal.<kind>.* wordings each carry a consent_version; a consent row must
+ * name it to count (#46, ADR-010). One kind, one version: two versions under
+ * one kind would mean a person could accept a wording nobody can point at.
+ */
+function consentModule(messages: Messages): string {
+  const versions = new Map<string, Set<string>>();
+  for (const [key, message] of Object.entries(messages)) {
+    const kind = key.split(".")[1];
+    if (!key.startsWith("legal.") || !message.consent_version || !kind) continue;
+    versions.set(kind, (versions.get(kind) ?? new Set()).add(message.consent_version));
+  }
+  const entries = [...versions.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([kind, set]) => {
+      if (set.size > 1) {
+        throw new Error(
+          `legal.${kind}.* carries ${set.size} consent versions (${[...set].join(", ")}): one wording, one version`,
+        );
+      }
+      return `  ${JSON.stringify(kind)}: ${JSON.stringify([...set][0])},`;
+    })
+    .join("\n");
+  return (
+    `${HEADER}/** The consent_version each legal.<kind>.* wording belongs to: what a consent row must name to count (#46). */\n` +
+    `export const CONSENT_VERSIONS: Readonly<Record<string, string>> = {\n${entries}\n};\n`
+  );
+}
+
+/**
  * messages.yaml compiled to the modules the runtimes import: one catalogue per
  * locale (a translation that is missing falls back to en at run time), the
  * en-XA pseudo-locale, and the key type that makes t() fail on a typo.
@@ -61,5 +90,6 @@ export function compile(messages: Messages): Record<string, string> {
     "sv.ts": catalogModule("sv", pick("sv")),
     "en-XA.ts": catalogModule("enXA", pseudo),
     "keys.ts": keysModule(messages),
+    "consent.ts": consentModule(messages),
   };
 }

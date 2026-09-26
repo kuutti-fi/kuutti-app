@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { PhotoId } from "./media.ts";
+import { PondSummary } from "./onboarding.ts";
 import { ProfileFields } from "./profile-fields.ts";
 
 /**
@@ -144,6 +145,8 @@ export const ProfileCard = z
       years: z.int().min(18).max(130),
       verifiedByBank: z.literal(true),
     }),
+    /** Where the person matches (#46); null until onboarding set it. */
+    pond: PondSummary.nullable(),
     photos: z.array(CardPhoto).max(50),
     fields: ProfileFields,
     bio: z.string().max(BIO_MAX).nullable(),

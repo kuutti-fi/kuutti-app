@@ -18,6 +18,13 @@ const card = {
   accountId: "6f1c1c4e-9a8e-4a0b-9c3a-0c8d1e2f3a4b",
   displayName: "Aino",
   age: { years: 36, verifiedByBank: true },
+  pond: {
+    id: "5f1c1c4e-9a8e-4a0b-9c3a-0c8d1e2f3a00",
+    slug: "espoo",
+    name: "Espoo",
+    nameInessive: "Espoossa",
+    parentId: null,
+  },
   photos: [
     { id: PHOTO_A, blurhash: "LEHV6nWB2yk8pyo0adR*.7kCMdnj", width: 1200, height: 1600 },
     { id: PHOTO_B, blurhash: "LEHV6nWB2yk8pyo0adR*.7kCMdnj", width: 1200, height: 1600 },
@@ -66,6 +73,7 @@ describe("CardPreviewScreen", () => {
     });
     await waitFor(() => expect(screen.getByText("Aino")).toBeTruthy());
     expect(screen.getByText("36, age verified by your bank")).toBeTruthy();
+    expect(screen.getByText("Espoo")).toBeTruthy();
     expect(screen.getByText("Finnish, English")).toBeTruthy();
     expect(screen.getByText("Something long-term")).toBeTruthy();
     expect(screen.getByText("Otaniemi")).toBeTruthy();

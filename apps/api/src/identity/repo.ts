@@ -1,4 +1,10 @@
-import type { Account, AuthRequest, Identity, Queryable } from "@kuutti/db";
+import {
+  type Account,
+  type AuthRequest,
+  type Identity,
+  type Queryable,
+  transaction,
+} from "@kuutti/db";
 import type { ModeratorRole } from "@kuutti/schema";
 
 // Raw parameterised SQL rather than the Drizzle builder (rules/api.md asks for
@@ -35,6 +41,8 @@ const accountFrom = (r: Row): Account => ({
   stateChangedAt: (r.state_changed_at as Date | null) ?? null,
   birthYear: (r.birth_year as number | null) ?? null,
   birthMonth: (r.birth_month as number | null) ?? null,
+  gender: (r.gender as Account["gender"]) ?? null,
+  pondId: (r.pond_id as string | null) ?? null,
   registeredAt: r.registered_at as Date,
   deletedAt: (r.deleted_at as Date | null) ?? null,
 });
@@ -594,7 +602,7 @@ export async function tombstoneAccount(
 ): Promise<boolean> {
   const result = await db.query(
     `UPDATE account SET state = 'deleted', state_changed_at = $2, deleted_at = $2,
-       birth_year = NULL, birth_month = NULL
+       birth_year = NULL, birth_month = NULL, gender = NULL, pond_id = NULL
      WHERE id = $1 AND state <> 'deleted'`,
     [accountId, at],
   );
@@ -629,4 +637,99 @@ export async function lockAccountForErasure(
     [accountId],
   );
   return rows[0] ?? null;
+}
+
+// Onboarding and consents (#46, ADR-010). Every statement carries the
+// caller's account id (rule 6); a consent row is never rewritten, only
+// withdrawn, because it is the proof of what was agreed.
+
+export async function setGender(
+  db: Queryable,
+  accountId: string,
+  gender: string,
+): Promise<boolean> {
+  const result = await db.query(
+    "UPDATE account SET gender = $2 WHERE id = $1 AND state <> 'deleted'",
+    [accountId, gender],
+  );
+  return result.rowCount === 1;
+}
+
+/** registered becomes active once (the onboarding rule decides when); nothing else changes here. */
+export async function activateAccount(
+  db: Queryable,
+  accountId: string,
+  at: Date,
+): Promise<boolean> {
+  const result = await db.query(
+    "UPDATE account SET state = 'active', state_changed_at = $2 WHERE id = $1 AND state = 'registered'",
+    [accountId, at],
+  );
+  return result.rowCount === 1;
+}
+
+export type ConsentRow = {
+  kind: string;
+  version: string;
+  locale: string;
+  givenAt: Date;
+  withdrawnAt: Date | null;
+};
+
+export async function listConsents(db: Queryable, accountId: string): Promise<ConsentRow[]> {
+  const { rows } = await db.query<Row>(
+    `SELECT kind, version, locale_shown, given_at, withdrawn_at FROM consent
+     WHERE account_id = $1 ORDER BY given_at, kind`,
+    [accountId],
+  );
+  return rows.map((r) => ({
+    kind: r.kind as string,
+    version: r.version as string,
+    locale: r.locale_shown as string,
+    givenAt: r.given_at as Date,
+    withdrawnAt: (r.withdrawn_at as Date | null) ?? null,
+  }));
+}
+
+/**
+ * One row per consent given: the same kind and version, still active, is
+ * not written twice; a withdrawn research consent given again is a new row.
+ * A tombstone takes none (#51).
+ */
+export async function recordConsent(
+  db: Queryable,
+  accountId: string,
+  input: { kind: string; version: string; locale: string },
+  at: Date,
+): Promise<"recorded" | "already" | "no_account"> {
+  return transaction(db, async (tx) => {
+    // The lock erasure takes first (ADR-009 §8), so no consent row lands behind the deletes.
+    const live = await tx.query(
+      "SELECT 1 FROM account WHERE id = $1 AND state <> 'deleted' FOR UPDATE",
+      [accountId],
+    );
+    if (live.rows.length === 0) return "no_account";
+    const result = await tx.query(
+      `INSERT INTO consent (account_id, kind, version, locale_shown, given_at)
+       SELECT $1, $2, $3, $4, $5
+       WHERE NOT EXISTS (SELECT 1 FROM consent
+                         WHERE account_id = $1 AND kind = $2 AND version = $3 AND withdrawn_at IS NULL)`,
+      [accountId, input.kind, input.version, input.locale, at],
+    );
+    return result.rowCount === 1 ? "recorded" : "already";
+  });
+}
+
+/** Marks every active consent of the kind withdrawn; the rows stay. */
+export async function withdrawConsent(
+  db: Queryable,
+  accountId: string,
+  kind: string,
+  at: Date,
+): Promise<number> {
+  const result = await db.query(
+    "UPDATE consent SET withdrawn_at = $3 WHERE account_id = $1 AND kind = $2 AND withdrawn_at IS NULL",
+    [accountId, kind, at],
+  );
+  return result.rowCount ?? 0;
 }

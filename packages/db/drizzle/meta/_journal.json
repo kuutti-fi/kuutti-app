@@ -92,6 +92,13 @@
       "when": 1790429086059,
       "tag": "0012_card_shown_photo_idx",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1790429826701,
+      "tag": "0013_onboarding",
+      "breakpoints": true
     }
   ]
 }

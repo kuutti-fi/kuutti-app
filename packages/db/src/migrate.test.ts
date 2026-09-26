@@ -83,6 +83,7 @@ describe("migrate", () => {
           "audit_log",
           "auth_request",
           "card_shown",
+          "consent",
           "identity",
           "matching_config",
           "moderator_roles",
@@ -90,6 +91,7 @@ describe("migrate", () => {
           "photo_access",
           "photo_review",
           "ponds",
+          "preferences",
           "profile",
           "session",
         ]);

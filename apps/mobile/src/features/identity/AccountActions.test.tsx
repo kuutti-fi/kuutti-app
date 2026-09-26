@@ -24,6 +24,8 @@ const exported = {
     registeredAt: "2026-09-01T00:00:00.000Z",
     birthYear: 1990,
     birthMonth: 6,
+    gender: null,
+    pond: null,
   },
   identity: {
     firstSeenAt: "2026-09-01T00:00:00.000Z",
@@ -33,6 +35,8 @@ const exported = {
   },
   sessions: [],
   profile: null,
+  preferences: { seeks: null, ageWindow: null },
+  consents: [],
   photos: [],
   photoAccessLog: [],
 };

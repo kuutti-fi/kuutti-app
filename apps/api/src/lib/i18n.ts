@@ -87,6 +87,8 @@ export const ERROR_MESSAGE_KEYS = {
   card_budget_exceeded: "errors.card_budget_exceeded",
   text_contact_details: "errors.text_contact_details",
   consent_required: "errors.special_category_locked",
+  agreement_outdated: "errors.agreement_outdated",
+  pond_unknown: "errors.pond_unknown",
   admin_not_allowed: "errors.admin_not_allowed",
   admin_forbidden: "errors.admin_forbidden",
 } as const satisfies Record<string, MessageKey>;

@@ -4,6 +4,7 @@ import type { MiddlewareHandler } from "hono";
 import type { Deps } from "../app.ts";
 import { callerOf } from "../lib/auth-middleware.ts";
 import type { AppEnv } from "../lib/env.ts";
+import { readPreferences } from "../matching/index.ts";
 import { buildCard, type CardDeps } from "./card.ts";
 import { readProfile, saveProfile } from "./service.ts";
 
@@ -65,7 +66,13 @@ const cardRoute = createRoute({
 
 export function profileRoutes(deps: Deps, requireSession: MiddlewareHandler<AppEnv>) {
   const app = new OpenAPIHono<AppEnv>();
-  const cardDeps: CardDeps = { db: deps.db, logger: deps.logger, now: () => new Date() };
+  // Onboarding's two hard rows (#46) are what completeness waits for.
+  const cardDeps: CardDeps = {
+    db: deps.db,
+    logger: deps.logger,
+    now: () => new Date(),
+    readPreferences,
+  };
   for (const path of new Set([readRoute, saveRoute, cardRoute].map((r) => r.getRoutingPath()))) {
     app.use(path, requireSession);
   }

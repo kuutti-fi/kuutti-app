@@ -7,11 +7,13 @@ export {
   type NewAdminSession,
 } from "./admin.ts";
 export { type AuthRequest, authRequest, type NewAuthRequest } from "./auth-request.ts";
+export { type Consent, consent, consentKind, type NewConsent } from "./consent.ts";
 export {
   type Account,
   type AccountState,
   account,
   accountState,
+  gender,
   type Identity,
   type IdentityStanding,
   identity,
@@ -40,6 +42,12 @@ export {
   photoVariant,
 } from "./media.ts";
 export { type NewPond, type Pond, ponds } from "./ponds.ts";
+export {
+  type NewPreference,
+  type Preference,
+  preferenceMode,
+  preferences,
+} from "./preferences.ts";
 export { type NewProfile, type Profile, profile } from "./profile.ts";
 export { type AuditLog, auditLog, type NewAuditLog } from "./safety.ts";
 export { type NewSession, type Session, session } from "./sessions.ts";

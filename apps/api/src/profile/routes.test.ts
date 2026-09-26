@@ -216,6 +216,7 @@ describe("profile routes", () => {
       fields: update.fields,
     });
     expect(body.card?.photos.map((p) => p.id)).toEqual([approved]);
+    expect(body.card?.pond).toBeNull();
     expect(body.completeness.missing).toEqual(["photos", "seeks", "age_window"]);
     // A preview records nothing.
     const { rows } = await ctx.client.query("SELECT 1 FROM card_shown WHERE account_id = $1", [

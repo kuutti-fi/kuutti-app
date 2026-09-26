@@ -362,6 +362,12 @@
               "birthMonth": {
                 "type": "integer",
                 "nullable": true
+              },
+              "gender": {
+                "$ref": "#/components/schemas/Gender"
+              },
+              "pond": {
+                "$ref": "#/components/schemas/PondSummary"
               }
             },
             "required": [
@@ -369,8 +375,20 @@
               "state",
               "registeredAt",
               "birthYear",
-              "birthMonth"
+              "birthMonth",
+              "gender",
+              "pond"
             ]
+          },
+          "preferences": {
+            "$ref": "#/components/schemas/PreferencesResponse"
+          },
+          "consents": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ConsentRecord"
+            },
+            "maxItems": 100
           },
           "identity": {
             "type": "object",
@@ -473,11 +491,145 @@
         "required": [
           "exportedAt",
           "account",
+          "preferences",
+          "consents",
           "identity",
           "sessions",
           "profile",
           "photos",
           "photoAccessLog"
+        ]
+      },
+      "Gender": {
+        "type": "string",
+        "nullable": true,
+        "enum": [
+          "woman",
+          "man",
+          "non_binary",
+          null
+        ]
+      },
+      "PondSummary": {
+        "type": "object",
+        "nullable": true,
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "slug": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 60
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "nameInessive": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "parentId": {
+            "type": "string",
+            "nullable": true,
+            "format": "uuid"
+          }
+        },
+        "required": [
+          "id",
+          "slug",
+          "name",
+          "nameInessive",
+          "parentId"
+        ]
+      },
+      "PreferencesResponse": {
+        "type": "object",
+        "properties": {
+          "seeks": {
+            "type": "array",
+            "nullable": true,
+            "items": {
+              "$ref": "#/components/schemas/Gender"
+            },
+            "maxItems": 3
+          },
+          "ageWindow": {
+            "$ref": "#/components/schemas/AgeWindow"
+          }
+        },
+        "required": [
+          "seeks",
+          "ageWindow"
+        ]
+      },
+      "AgeWindow": {
+        "type": "object",
+        "nullable": true,
+        "properties": {
+          "min": {
+            "type": "integer",
+            "minimum": 18,
+            "maximum": 99
+          },
+          "max": {
+            "type": "integer",
+            "minimum": 18,
+            "maximum": 99
+          }
+        },
+        "required": [
+          "min",
+          "max"
+        ],
+        "additionalProperties": false
+      },
+      "ConsentRecord": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "$ref": "#/components/schemas/ConsentKind"
+          },
+          "version": {
+            "type": "string",
+            "maxLength": 40
+          },
+          "locale": {
+            "type": "string",
+            "enum": [
+              "fi",
+              "sv",
+              "en"
+            ]
+          },
+          "givenAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "withdrawnAt": {
+            "type": "string",
+            "nullable": true,
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "kind",
+          "version",
+          "locale",
+          "givenAt",
+          "withdrawnAt"
+        ]
+      },
+      "ConsentKind": {
+        "type": "string",
+        "enum": [
+          "terms",
+          "privacy",
+          "research"
         ]
       },
       "ProfileDocument": {
@@ -1305,6 +1457,9 @@
               "verifiedByBank"
             ]
           },
+          "pond": {
+            "$ref": "#/components/schemas/PondSummary"
+          },
           "photos": {
             "type": "array",
             "items": {
@@ -1335,6 +1490,7 @@
           "accountId",
           "displayName",
           "age",
+          "pond",
           "photos",
           "fields",
           "bio",
@@ -1370,6 +1526,234 @@
           "width",
           "height"
         ]
+      },
+      "OnboardingStatus": {
+        "type": "object",
+        "properties": {
+          "state": {
+            "type": "string",
+            "enum": [
+              "registered",
+              "active",
+              "paused",
+              "shadow_banned",
+              "suspended",
+              "banned",
+              "deleted"
+            ]
+          },
+          "gender": {
+            "$ref": "#/components/schemas/Gender"
+          },
+          "pond": {
+            "$ref": "#/components/schemas/PondSummary"
+          },
+          "preferences": {
+            "$ref": "#/components/schemas/PreferencesResponse"
+          },
+          "consents": {
+            "type": "object",
+            "properties": {
+              "terms": {
+                "type": "string",
+                "nullable": true,
+                "maxLength": 40
+              },
+              "privacy": {
+                "type": "string",
+                "nullable": true,
+                "maxLength": 40
+              },
+              "research": {
+                "type": "object",
+                "nullable": true,
+                "properties": {
+                  "version": {
+                    "type": "string",
+                    "maxLength": 40
+                  },
+                  "givenAt": {
+                    "type": "string",
+                    "format": "date-time"
+                  }
+                },
+                "required": [
+                  "version",
+                  "givenAt"
+                ]
+              }
+            },
+            "required": [
+              "terms",
+              "privacy",
+              "research"
+            ]
+          },
+          "currentVersions": {
+            "$ref": "#/components/schemas/ConsentVersions"
+          },
+          "missing": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OnboardingStep"
+            },
+            "maxItems": 6
+          },
+          "complete": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "state",
+          "gender",
+          "pond",
+          "preferences",
+          "consents",
+          "currentVersions",
+          "missing",
+          "complete"
+        ]
+      },
+      "ConsentVersions": {
+        "type": "object",
+        "properties": {
+          "terms": {
+            "type": "string",
+            "maxLength": 40
+          },
+          "privacy": {
+            "type": "string",
+            "maxLength": 40
+          },
+          "research": {
+            "type": "string",
+            "maxLength": 40
+          }
+        },
+        "required": [
+          "terms",
+          "privacy",
+          "research"
+        ],
+        "description": "The consent_version of the current wording per kind."
+      },
+      "OnboardingStep": {
+        "type": "string",
+        "enum": [
+          "gender",
+          "seeks",
+          "age_window",
+          "pond",
+          "terms",
+          "privacy"
+        ]
+      },
+      "GenderUpdate": {
+        "type": "object",
+        "properties": {
+          "gender": {
+            "$ref": "#/components/schemas/Gender"
+          }
+        },
+        "required": [
+          "gender"
+        ],
+        "additionalProperties": false
+      },
+      "ConsentsResponse": {
+        "type": "object",
+        "properties": {
+          "consents": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ConsentRecord"
+            },
+            "maxItems": 100
+          },
+          "currentVersions": {
+            "$ref": "#/components/schemas/ConsentVersions"
+          }
+        },
+        "required": [
+          "consents",
+          "currentVersions"
+        ]
+      },
+      "ConsentRequest": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "$ref": "#/components/schemas/ConsentKind"
+          },
+          "version": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 40
+          },
+          "locale": {
+            "type": "string",
+            "enum": [
+              "fi",
+              "sv",
+              "en"
+            ]
+          }
+        },
+        "required": [
+          "kind",
+          "version",
+          "locale"
+        ],
+        "additionalProperties": false
+      },
+      "PondList": {
+        "type": "object",
+        "properties": {
+          "ponds": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PondSummary"
+            },
+            "maxItems": 200
+          }
+        },
+        "required": [
+          "ponds"
+        ]
+      },
+      "PondChoice": {
+        "type": "object",
+        "properties": {
+          "pondId": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "required": [
+          "pondId"
+        ],
+        "additionalProperties": false
+      },
+      "PreferencesUpdate": {
+        "type": "object",
+        "properties": {
+          "seeks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Gender"
+            },
+            "minItems": 1,
+            "maxItems": 3
+          },
+          "ageWindow": {
+            "$ref": "#/components/schemas/AgeWindow"
+          }
+        },
+        "required": [
+          "seeks",
+          "ageWindow"
+        ],
+        "additionalProperties": false
       }
     },
     "parameters": {}
@@ -2644,6 +3028,413 @@
           },
           "401": {
             "description": "unauthenticated, session_expired or session_revoked.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/onboarding": {
+      "get": {
+        "summary": "What the caller has answered and what activation still waits for",
+        "description": "Gender, pond, the two hard preferences, the consents given for the current wordings and the current versions. When nothing required is missing and the account is still registered, it becomes active here.",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OnboardingStatus"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "unauthenticated, session_expired or session_revoked.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/account/gender": {
+      "put": {
+        "summary": "Declare the caller's gender",
+        "description": "Self-declared, one of a closed list (rule 3); nothing from the bank informs it.",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GenderUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Declared."
+          },
+          "400": {
+            "description": "Validation failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "unauthenticated, session_expired or session_revoked.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No live account (erased meanwhile).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/consents": {
+      "get": {
+        "summary": "Every consent the caller has given, and the current versions",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The consents.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConsentsResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "unauthenticated, session_expired or session_revoked.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Record a consent for the current wording",
+        "description": "The kind, the consent_version the person read and the language it was shown in. An old version is refused with agreement_outdated; the same consent twice is recorded once.",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConsentRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Recorded; the consents as stored.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConsentsResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "unauthenticated, session_expired or session_revoked.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No live account (erased meanwhile).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "agreement_outdated: the wording has a newer version.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/consents/research": {
+      "delete": {
+        "summary": "Withdraw the research opt-in",
+        "description": "The one consent a person withdraws; terms and privacy end with the account. The rows stay as the record of what was agreed and when.",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Withdrawn; the consents as stored.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConsentsResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "unauthenticated, session_expired or session_revoked.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ponds": {
+      "get": {
+        "summary": "The ponds a person can choose",
+        "description": "Every pond with both Finnish case forms (TD-17), parents first. Where matching happens (TD-10); the choice is one per account.",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The ponds.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PondList"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "unauthenticated, session_expired or session_revoked.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/account/pond": {
+      "put": {
+        "summary": "Choose the caller's pond",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PondChoice"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Chosen."
+          },
+          "400": {
+            "description": "Validation failed, or pond_unknown.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "unauthenticated, session_expired or session_revoked.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No live account (erased meanwhile).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/preferences": {
+      "get": {
+        "summary": "Whom the caller seeks and the age window",
+        "description": "The two hard filters of rule 7 as the person set them; null until onboarding sets them.",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The preferences.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PreferencesResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "unauthenticated, session_expired or session_revoked.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "summary": "Set whom the caller seeks and the age window",
+        "description": "Both at once: a non-empty set of genders and an age window within 18 and 99 with min at most max. Hard rows: the round builder never crosses them, in either direction.",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PreferencesUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Saved; the preferences as stored.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PreferencesResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "unauthenticated, session_expired or session_revoked.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No live account (erased meanwhile).",
             "content": {
               "application/json": {
                 "schema": {

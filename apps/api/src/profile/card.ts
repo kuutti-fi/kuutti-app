@@ -10,12 +10,13 @@ import {
   recordCardServed,
   secondsUntil,
 } from "../media/index.ts";
+import { findPondOfAccount } from "../pond/index.ts";
 import { completeness } from "./completeness.ts";
 import * as repo from "./repo.ts";
 
 export const CARDS_PER_DAY_KEY = "exposure_cards_per_day";
 
-/** What onboarding (#46) will know about the subject; until it lands, nothing, and no profile is complete. */
+/** What onboarding (#46) knows about the subject: the matching slice's readPreferences; without a reader nothing is complete. */
 export type PreferenceReader = (
   db: Queryable,
   accountId: string,
@@ -81,7 +82,10 @@ export async function buildCard(
   if (!own && subject.state !== "active") {
     throw new AppError(404, "not_found", "No such card");
   }
-  const photos = await listApprovedPhotos(deps.db, subject.accountId);
+  const [photos, pond] = await Promise.all([
+    listApprovedPhotos(deps.db, subject.accountId),
+    findPondOfAccount(deps.db, subject.accountId),
+  ]);
   const done = await completenessOf(deps, subject.accountId, subject.profile, photos.length);
   const at = deps.now();
   if (!subject.profile || subject.birthYear === null || subject.birthMonth === null) {
@@ -136,6 +140,7 @@ export async function buildCard(
       accountId: subject.accountId,
       displayName: subject.profile.displayName,
       age: { years: ageInYears(subject.birthYear, subject.birthMonth, at), verifiedByBank: true },
+      pond,
       photos: cardPhotos,
       fields: subject.profile.fields,
       bio: subject.profile.bio,

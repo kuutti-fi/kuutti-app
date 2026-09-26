@@ -19,7 +19,11 @@ export type SignedIn = {
   headers: { authorization: string };
 };
 
-export async function signedInAccount(db: Queryable, label?: string): Promise<SignedIn> {
+export async function signedInAccount(
+  db: Queryable,
+  label?: string,
+  options: { state?: "registered" | "active" } = {},
+): Promise<SignedIn> {
   const who = label ?? randomBytes(6).toString("hex");
   // A hash of the label, never of any code: no bank login maps to it.
   const hetuHmac = createHash("sha256").update(`kuutti test account: ${who}`).digest("hex");
@@ -30,8 +34,8 @@ export async function signedInAccount(db: Queryable, label?: string): Promise<Si
   const identityId = identity.rows[0]?.id;
   if (!identityId) throw new Error("test identity not written");
   const account = await db.query<{ id: string }>(
-    "INSERT INTO account (identity_id, state, birth_year, birth_month) VALUES ($1, 'active', 1990, 6) RETURNING id",
-    [identityId],
+    "INSERT INTO account (identity_id, state, birth_year, birth_month) VALUES ($1, $2, 1990, 6) RETURNING id",
+    [identityId, options.state ?? "active"],
   );
   const accountId = account.rows[0]?.id;
   if (!accountId) throw new Error("test account not written");
