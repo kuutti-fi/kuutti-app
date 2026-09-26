@@ -1,0 +1,34 @@
+name: Auto-approve own pull requests
+
+# The maintainer's own pull requests (#8): the ruleset asks for one approving
+# review and an author cannot approve their own, so a review from the Actions
+# bot stands in, for pull requests the maintainer authored from a branch of
+# this repository and for nobody else's. pull_request, never
+# pull_request_target: same-repository token, nothing checked out, no write
+# token for a fork. Stale reviews are dismissed on push, so this runs again on
+# every push. Needs "Allow GitHub Actions to create and approve pull requests".
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: read
+
+jobs:
+  approve:
+    name: approve the maintainer's pull request
+    if: >-
+      github.event.pull_request.user.login == 'superseacat' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    steps:
+      - name: Approve
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+        run: |
+          set -euo pipefail
+          gh pr review --approve --body "Approved automatically: authored by the maintainer from this repository (#8, auto-approve.yml)." "$PR_URL"
