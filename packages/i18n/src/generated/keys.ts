@@ -76,6 +76,7 @@ export type MessageParams = {
   "errors.media_unavailable": Record<never, never>;
   "errors.not_found": Record<never, never>;
   "errors.payload_too_large": Record<never, never>;
+  "errors.photo_budget_exceeded": Record<never, never>;
   "errors.photo_invalid": Record<never, never>;
   "errors.photo_limit": Record<never, never>;
   "errors.photo_order_invalid": Record<never, never>;
@@ -95,6 +96,7 @@ export type MessageParams = {
   "photos.error.media_busy": Record<never, never>;
   "photos.error.media_unavailable": Record<never, never>;
   "photos.error.permission": Record<never, never>;
+  "photos.error.photo_budget_exceeded": Record<never, never>;
   "photos.error.photo_invalid": Record<never, never>;
   "photos.error.photo_limit": Record<never, never>;
   "photos.error.photo_order_invalid": Record<never, never>;

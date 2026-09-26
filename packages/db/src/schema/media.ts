@@ -7,6 +7,7 @@ import {
   smallint,
   text,
   timestamp,
+  uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
 import { account, identity } from "./identity.ts";
@@ -82,8 +83,35 @@ export const photoAccess = pgTable(
   (table) => [index("photo_access_account_at_idx").on(table.accountId, table.at)],
 );
 
+/**
+ * The shown record (#52, TD-6): one row per photo on a card the viewer was
+ * served, written by the card route (#47) for the viewer's own account. Another
+ * account's photo is issued a URL only against such a row, so a scraper
+ * cannot enumerate photos it was never shown. One row per viewer and photo,
+ * however often the card comes round: the rule reads set membership. The row
+ * goes with the photo (cascade) and with the viewer's erasure
+ * (media/erasure.ts); M4's nightly sweep trims rows older than
+ * shown_cooldown_days once the round logic has no use for them (ADR-008).
+ */
+export const cardShown = pgTable(
+  "card_shown",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    accountId: uuid("account_id")
+      .notNull()
+      .references(() => account.id),
+    photoId: uuid("photo_id")
+      .notNull()
+      .references(() => photo.id, { onDelete: "cascade" }),
+    at: timestamp("at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [uniqueIndex("card_shown_account_photo_idx").on(table.accountId, table.photoId)],
+);
+
 export type Photo = typeof photo.$inferSelect;
 export type NewPhoto = typeof photo.$inferInsert;
+export type CardShown = typeof cardShown.$inferSelect;
+export type NewCardShown = typeof cardShown.$inferInsert;
 export type PhotoState = Photo["state"];
 export type PhotoAccess = typeof photoAccess.$inferSelect;
 export type NewPhotoAccess = typeof photoAccess.$inferInsert;

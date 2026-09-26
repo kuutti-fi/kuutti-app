@@ -64,7 +64,7 @@ export async function signedInAccount(db: Queryable, label?: string): Promise<Si
 /** matching_config rows a test needs, upserted inside its transaction (rolled back with it). */
 export async function withMatchingConfig(
   db: Queryable,
-  values: Record<string, number>,
+  values: Record<string, unknown>,
 ): Promise<void> {
   for (const [key, value] of Object.entries(values)) {
     await db.query(

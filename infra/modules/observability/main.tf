@@ -7,9 +7,9 @@
 # us-east-1 for the same reason and is not reused). The email subscription is
 # confirmed by hand from the mailbox, like the billing one.
 #
-# Cost: five standard alarms at 0.10 USD and one custom metric at 0.30 USD, so
-# about 0.80 USD a month per environment; query definitions and the topic are
-# free. The probe from outside the box, which is what catches a stopped
+# Cost: standard alarms at 0.10 USD and custom metrics at 0.30 USD each (the
+# 5xx and Rekognition metrics, and the exposure-budget one of #52), so about
+# 1.60 USD a month per environment; query definitions and the topic are free. The probe from outside the box, which is what catches a stopped
 # container, is probe.tf (#29): a Route 53 health check with its alarm and
 # topic in us-east-1.
 # ---------------------------------------------------------------------------
@@ -209,4 +209,36 @@ resource "aws_cloudwatch_query_definition" "boot" {
     | sort @timestamp desc
     | limit 50
   EOT
+}
+
+# A photo URL the API refused for the day's exposure budget is one warn line
+# ({"msg":"photo refused","reason":"budget",...}, #52, TD-6, ADR-008). A few a
+# day are people who scrolled a lot; a hundred is somebody's script, or a
+# budget set too low, and either is worth a mail.
+resource "aws_cloudwatch_log_metric_filter" "photo_budget_refusals" {
+  name           = "${local.name}-photo-budget-refusals"
+  log_group_name = var.log_group_name
+  pattern        = "{ $.msg = \"photo refused\" && $.reason = \"budget\" }"
+
+  metric_transformation {
+    name          = "PhotoBudgetRefusals"
+    namespace     = local.namespace
+    value         = "1"
+    default_value = "0"
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "photo_budget_refusals" {
+  alarm_name          = "${local.name}-photo-budget-refusals"
+  alarm_description   = "The API refused ${var.budget_refusals_per_day} or more photo fetches for the exposure budget within a day (#52): a scraper, or a budget set too low."
+  namespace           = local.namespace
+  metric_name         = "PhotoBudgetRefusals"
+  statistic           = "Sum"
+  period              = 86400
+  evaluation_periods  = 1
+  threshold           = var.budget_refusals_per_day
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  treat_missing_data  = "notBreaching" # no refusals is the normal day
+  alarm_actions       = [aws_sns_topic.alerts.arn]
+  ok_actions          = [aws_sns_topic.alerts.arn]
 }

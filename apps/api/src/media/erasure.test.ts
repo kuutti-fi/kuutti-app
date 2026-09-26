@@ -25,14 +25,15 @@ describe("media inserts after erasure", () => {
         maxPhotos: 6,
       }),
     ).toBeNull();
-    expect(
-      await insertPhotoAccess(ctx.client, {
-        accountId: a.accountId,
-        photoId: "6f1c1c4e-9a8e-4a0b-9c3a-0c8d1e2f3a4b",
-        variant: "thumb",
-        at: new Date(),
-      }),
-    ).toBe(false);
+    const access = await insertPhotoAccess(ctx.client, {
+      accountId: a.accountId,
+      photoId: "6f1c1c4e-9a8e-4a0b-9c3a-0c8d1e2f3a4b",
+      variant: "thumb",
+      at: new Date(),
+      since: new Date(Date.now() - 3_600_000),
+      limit: 100,
+    });
+    expect(access).toMatchObject({ live: false, recorded: false });
     for (const table of ["photo", "photo_access"]) {
       const { rows } = await ctx.client.query<{ n: string }>(
         `SELECT count(*) AS n FROM ${table} WHERE account_id = $1`,

@@ -32,6 +32,7 @@ export type ErasureSummary = {
   authRequests: number;
   photos: number;
   accessRows: number;
+  shownRows: number;
   objects: number;
   reregisterAfter: string;
 };
@@ -74,6 +75,7 @@ export async function eraseAccount(deps: ErasureDeps, accountId: string): Promis
     authRequests: result.authRequests,
     photos: result.photos.photos,
     accessRows: result.photos.accessRows,
+    shownRows: result.photos.shownRows,
     objects,
     reregisterAfter: result.reregisterAfter.toISOString(),
   };

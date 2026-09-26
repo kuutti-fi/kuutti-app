@@ -10,6 +10,7 @@ import type { LimitFunction } from "p-limit";
 import { AppError } from "../lib/errors.ts";
 import type { Logger } from "../lib/logger.ts";
 import { matchingConfigNumber } from "../lib/matching-config.ts";
+import { dayWindow, readPhotoFetchBudget, secondsUntil } from "./budget.ts";
 import { type Moderator, moderatePhoto } from "./moderation.ts";
 import { PipelineError, processPhoto } from "./pipeline.ts";
 import * as repo from "./repo.ts";
@@ -178,28 +179,70 @@ export async function reorderPhotos(
 }
 
 /**
- * A signed URL for one variant of the caller's own photo. Visibility is the
- * query's WHERE clause (rule 6). Other people's photos arrive with the profile
- * card (#47) and the shown-record rule of the exposure budget (#52); until
- * then nothing but one's own is served. Every issuance is a photo_access row
- * and a log line with account, photo, variant and time.
+ * A signed URL for one variant of a photo the caller may see: their own, or
+ * another account's approved photo on a card they were shown (#52, the
+ * shown-record rule; the card route of #47 writes the record). Visibility is
+ * the query's WHERE clause (rule 6). Every issuance is a photo_access row,
+ * written by the statement that counts the day's fetches of the variant
+ * against matching_config.photo_fetches_per_day (TD-6, ADR-008): over the
+ * budget there is no row and no URL, a 429 with Retry-After until the Finnish
+ * day rolls, and a log line the budget metric counts. A fetch of a photo the
+ * caller was not shown is a 404 like a missing photo, and a log line for M4's
+ * safety review. Nobody is limited in silence: the refusal says so.
  */
 export async function issuePhotoUrl(
   deps: PhotoServiceDeps,
   input: { accountId: string; photoId: string; variant: PhotoVariant },
 ): Promise<PhotoUrlResponse> {
-  const row = await repo.findPhoto(deps.db, input.accountId, input.photoId);
-  if (!row) throw new AppError(404, "not_found", "No such photo of this account");
+  const row = await repo.findVisiblePhoto(deps.db, input.accountId, input.photoId);
+  if (!row) {
+    // Every miss is one line: an unshown or unapproved photo of someone else
+    // and a guessed id look the same, and both are what enumeration looks
+    // like. The API never asks whether the photo exists outside the caller's
+    // scope (rule 6).
+    deps.logger.warn(
+      {
+        accountId: input.accountId,
+        photoId: input.photoId,
+        variant: input.variant,
+        reason: "not_visible",
+      },
+      "photo refused",
+    );
+    throw new AppError(404, "not_found", "No such photo for this account");
+  }
   const at = deps.now();
-  const expiresAt = new Date(at.getTime() + URL_TTL_MS);
-  const recorded = await repo.insertPhotoAccess(deps.db, {
+  const day = dayWindow(at);
+  const limit = (await readPhotoFetchBudget(deps.db))[input.variant];
+  const access = await repo.insertPhotoAccess(deps.db, {
     accountId: input.accountId,
     photoId: input.photoId,
     variant: input.variant,
     at,
+    since: day.start,
+    limit,
   });
-  // No row, no URL: the account was erased between the guard and here (#51).
-  if (!recorded) throw new AppError(404, "not_found", "No such photo of this account");
+  // No live account, no URL: the account was erased between the guard and here (#51).
+  if (!access.live) throw new AppError(404, "not_found", "No such photo for this account");
+  if (!access.recorded) {
+    const retryAfterSeconds = secondsUntil(day.end, at);
+    deps.logger.warn(
+      {
+        accountId: input.accountId,
+        variant: input.variant,
+        used: access.used,
+        limit,
+        retryAfterSeconds,
+        reason: "budget",
+      },
+      "photo refused",
+    );
+    throw new AppError(429, "photo_budget_exceeded", "The day's photo fetches are used up", {
+      retryAfterSeconds,
+      variant: input.variant,
+    });
+  }
+  const expiresAt = new Date(at.getTime() + URL_TTL_MS);
   const url = await deps.signer.sign(objectKey(row.key, input.variant), expiresAt);
   deps.logger.info(
     { accountId: input.accountId, photoId: input.photoId, variant: input.variant, at },

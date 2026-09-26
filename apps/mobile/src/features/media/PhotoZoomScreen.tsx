@@ -1,4 +1,5 @@
 import { useRouter } from "expo-router";
+import { useState } from "react";
 import { View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Button } from "@/components/ui/button";
@@ -24,6 +25,8 @@ export function PhotoZoomScreen({ id, blurhash, position, total }: PhotoZoomPara
   const { t } = useT();
   const router = useRouter();
   const tap = useHapticTap();
+  // The API said no (#52): the person reads why under the placeholder, never a silent gap.
+  const [refusal, setRefusal] = useState<string | null>(null);
   return (
     <SafeAreaView className="flex-1 bg-background">
       <View className="flex-row items-center justify-between px-4 py-2">
@@ -46,7 +49,17 @@ export function PhotoZoomScreen({ id, blurhash, position, total }: PhotoZoomPara
           contentFit="contain"
           accessibilityLabel={t("photos.zoom.label", { position, total })}
           style={{ flex: 1 }}
+          onRefused={(code) => setRefusal(code ?? "unknown")}
         />
+        {refusal !== null && (
+          <Text variant="muted" className="px-4 py-3 text-center">
+            {t(
+              refusal === "photo_budget_exceeded"
+                ? "photos.error.photo_budget_exceeded"
+                : "photos.error.generic",
+            )}
+          </Text>
+        )}
       </View>
     </SafeAreaView>
   );

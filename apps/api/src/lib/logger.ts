@@ -1,5 +1,7 @@
 import type { MiddlewareHandler } from "hono";
 import pino, { type Logger } from "pino";
+import type { TrustedProxy } from "./rate-limit.ts";
+import { cloudFrontRequestId } from "./request-id.ts";
 
 export type { Logger };
 
@@ -68,13 +70,21 @@ export async function createLogger(options: LoggerOptions): Promise<Logger> {
 }
 
 /** Structured request log with the fields the checklist allows: ids, route, status, timing. */
-export function requestLogger(logger: Logger): MiddlewareHandler {
+export function requestLogger(
+  logger: Logger,
+  options: { trustedProxy: TrustedProxy } = { trustedProxy: "none" },
+): MiddlewareHandler {
   return async (c, next) => {
     const started = performance.now();
     await next();
     logger.info(
       {
         requestId: c.get("requestId"),
+        // CloudFront's id is a correlation field only, and only once nothing
+        // but CloudFront can reach the box; before that a client could plant one.
+        ...(options.trustedProxy === "cloudfront"
+          ? { cfRequestId: cloudFrontRequestId(c.req.header("x-amz-cf-id")) }
+          : {}),
         accountId: c.get("accountId"),
         method: c.req.method,
         route: c.req.routePath,

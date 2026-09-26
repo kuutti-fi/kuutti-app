@@ -1,7 +1,6 @@
 import { OpenAPIHono } from "@hono/zod-openapi";
 import type { Queryable } from "@kuutti/db";
 import { bodyLimit } from "hono/body-limit";
-import { requestId } from "hono/request-id";
 import { secureHeaders } from "hono/secure-headers";
 import { healthRoutes } from "./health/index.ts";
 import {
@@ -28,6 +27,7 @@ import { requestLocale } from "./lib/i18n.ts";
 import { type Logger, requestLogger } from "./lib/logger.ts";
 import { openApiDocument } from "./lib/openapi.ts";
 import { rateLimit } from "./lib/rate-limit.ts";
+import { serverRequestId } from "./lib/request-id.ts";
 import { type MediaDeps, photoAdminRoutes, photoRoutes, UPLOAD_ROUTE } from "./media/index.ts";
 
 export type { AppEnv };
@@ -66,10 +66,10 @@ export function createApp(deps: Deps) {
 
   // Order matters: id first so every later line carries it, logging next so
   // even rejected requests are logged, then the protections, then routes.
-  app.use("*", requestId());
+  app.use("*", serverRequestId());
   // Before everything that may answer, so a refusal speaks the request's language (#13).
   app.use("*", requestLocale());
-  app.use("*", requestLogger(deps.logger));
+  app.use("*", requestLogger(deps.logger, { trustedProxy: deps.config.TRUSTED_PROXY }));
   app.use("*", secureHeaders());
   // No environment of this API is a web surface (rule 8); previews have public
   // URLs that a crawler may still find (#9).
@@ -94,6 +94,7 @@ export function createApp(deps: Deps) {
     rateLimit({
       limit: deps.config.RATE_LIMIT_PER_MINUTE,
       windowMs: 60_000,
+      trustedProxy: deps.config.TRUSTED_PROXY,
       skip: (path) => UNLIMITED_PATHS.has(path),
     }),
   );

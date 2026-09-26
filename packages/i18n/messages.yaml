@@ -376,6 +376,13 @@ errors.media_busy:
   sv: Många foton bearbetas just nu. Försök igen om en stund.
   machine: { fi: true, sv: true }
 
+errors.photo_budget_exceeded:
+  en: You have looked at many photos today. Photos are available again after midnight.
+  description: Photo URL route (429 with Retry-After), the account's fetches of that variant have reached the day's budget from matching_config (TD-6, #52); the day rolls at midnight in Finland. Said plainly, nobody is limited in silence.
+  fi: Olet katsonut tänään paljon kuvia. Kuvat ovat taas saatavilla keskiyön jälkeen.
+  sv: Du har tittat på många foton i dag. Fotona är tillgängliga igen efter midnatt.
+  machine: { fi: true, sv: true }
+
 errors.admin_not_allowed:
   en: This bank login has no moderator role.
   description: Staff sign-in (403), the identified person has no row in moderator_roles or their identity is not in good standing; nothing was created.
@@ -837,6 +844,13 @@ photos.error.media_unavailable:
   description: Photos screen, the API has no photo storage configured (503 media_unavailable).
   fi: Kuvat eivät ole juuri nyt käytettävissä.
   sv: Foton är inte tillgängliga just nu.
+  machine: { fi: true, sv: true }
+
+photos.error.photo_budget_exceeded:
+  en: That is enough photos for today. They load again after midnight.
+  description: Notice on the photos screen and the zoom screen when the API refused a photo URL with photo_budget_exceeded (429, #52).
+  fi: Kuvia on katsottu tänään riittävästi. Ne latautuvat taas keskiyön jälkeen.
+  sv: Det räcker med foton för i dag. De laddas igen efter midnatt.
   machine: { fi: true, sv: true }
 
 photos.zoom.label:

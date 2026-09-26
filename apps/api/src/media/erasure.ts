@@ -1,5 +1,6 @@
 import type { Queryable } from "@kuutti/db";
 import { type ExportedPhoto, PHOTO_VARIANTS } from "@kuutti/schema";
+import { AppError } from "../lib/errors.ts";
 import type { Logger } from "../lib/logger.ts";
 import { issuePhotoUrl, type PhotoServiceDeps, toPhoto } from "./photos.ts";
 import * as repo from "./repo.ts";
@@ -12,6 +13,8 @@ import { type MediaStore, objectKey } from "./store.ts";
 export type PhotoErasure = {
   photos: number;
   accessRows: number;
+  /** Cards shown to the person (#52); the rows about their own photos went with the photos. */
+  shownRows: number;
   /** Content keys of the deleted rows; which of their objects still have an owner is decided after the commit. */
   keys: string[];
 };
@@ -22,7 +25,8 @@ export async function erasePhotosOfAccount(
 ): Promise<PhotoErasure> {
   const keys = await repo.deletePhotosOfAccount(tx, accountId);
   const accessRows = await repo.deletePhotoAccessOfAccount(tx, accountId);
-  return { photos: keys.length, accessRows, keys };
+  const shownRows = await repo.deleteCardShownOfAccount(tx, accountId);
+  return { photos: keys.length, accessRows, shownRows, keys };
 }
 
 /**
@@ -84,11 +88,22 @@ export async function exportPhotos(
   for (const row of rows) {
     let urls: ExportedPhoto["urls"] = null;
     if (withStore) {
-      const [thumb, card, full] = await Promise.all(
-        PHOTO_VARIANTS.map((variant) =>
-          issuePhotoUrl(withStore, { accountId, photoId: row.id, variant }).then((r) => r.url),
-        ),
-      );
+      // The export's URLs count against the day's budget like any fetch (#52);
+      // over it, the export still lists the photo, without URLs. One after the
+      // other: each issuance is its own short transaction on the caller's
+      // connection, and the budget lock serialises them anyway.
+      const issued: (string | null)[] = [];
+      for (const variant of PHOTO_VARIANTS) {
+        try {
+          issued.push(
+            (await issuePhotoUrl(withStore, { accountId, photoId: row.id, variant })).url,
+          );
+        } catch (error) {
+          if (!(error instanceof AppError && error.code === "photo_budget_exceeded")) throw error;
+          issued.push(null);
+        }
+      }
+      const [thumb, card, full] = issued;
       if (thumb && card && full) urls = { thumb, card, full };
     }
     const review = reviews.get(row.id);

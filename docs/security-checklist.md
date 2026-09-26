@@ -8,12 +8,12 @@ The four surfaces that matter most, in order: the OIDC exchange with Telia, the 
 
 - [ ] Every query that touches user data is scoped by the session's `account_id` inside the query, never by a check after the fetch.
 - [x] Admin routes check role (moderator / admin / researcher) server-side, and the admin allowlist is by `hetu_hmac`. (#49: `requireAdmin` in `apps/api/src/lib/admin-middleware.ts` re-reads `moderator_roles` on every request; the row is keyed by the identity the `hetu_hmac` resolves to.)
-- [ ] No endpoint returns another user's data beyond what a profile card shows; no bulk export endpoint exists.
+- [x] No endpoint returns another user's data beyond what a profile card shows; no bulk export endpoint exists. (#52: another account's photo is issued a URL only against a `card_shown` row the card route writes for the viewer, one photo at a time and counted against the day's budget in the same statement, `apps/api/src/media/repo.ts`; `/account/export` is one person's own data, #51. The card itself is #47.)
 - [ ] Hard filters are enforced in the round builder query, in both directions.
 
 ## Security misconfiguration
 
-- [ ] CORS: product API routes refuse browser origins; only the admin SPA, the waitlist site, and a pull-request preview's own web origin are allowlisted.
+- [x] CORS: product API routes refuse browser origins; only the admin SPA, the waitlist site, and a pull-request preview's own web origin are allowlisted. (#52: `corsAllowlist` answers only the configured origins and production refuses http ones, `apps/api/src/lib/config.ts`; `app.test.ts` asks every route with an unknown browser origin, direct and preflight, and finds no Access-Control-Allow-Origin.)
 - [ ] No debug or introspection routes outside `NODE_ENV=development`.
 - [ ] Deployed configuration comes only from SSM Parameter Store via the instance role; `.env` is local-only.
 - [ ] CloudFront is the only public entry; nothing listens on plain HTTP. (ADR-005: the distribution fronts the API once `media_enabled` is set; the box still admits 443 from anywhere because Dokploy and the previews are served there directly, and 80 for the ACME challenge. `cloudfront_only_ingress` is the switch; the follow-up that lets it flip is in ADR-005.)
@@ -72,5 +72,5 @@ The four surfaces that matter most, in order: the OIDC exchange with Telia, the 
 
 - [ ] No empty `catch` blocks; errors are logged with context and rethrown or mapped.
 - [ ] Error responses are generic; detail goes to logs and Sentry.
-- [ ] Rate-limited and moderation-gated endpoints fail closed.
+- [x] Rate-limited and moderation-gated endpoints fail closed. (#52: a request without a trusted client address shares one bucket instead of bypassing the limit, `apps/api/src/lib/rate-limit.ts`; the address comes from the trusted proxy's own hop or header, never one the client wrote (audit F19), and the request id is the server's (F26); the exposure budget is counted under an advisory lock per account and variant, so a parallel burst cannot overshoot it, `apps/api/src/media/repo.ts`, ADR-008.)
 - [x] Image processing returns 503 with `Retry-After` above the concurrency limit instead of queueing unbounded work. (#48: `p-limit` at the vCPU count, checked before the work is queued.)

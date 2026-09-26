@@ -158,7 +158,13 @@ export function usePhotos() {
 
   const dismissNotice = useCallback(() => update({ notice: null }), [update]);
 
-  return { ...state, reload, add, remove, move, makeMain, dismissNotice };
+  /** A photo URL the API refused (#52): the grid tells the person instead of showing a silent gap. */
+  const reportRefusal = useCallback(
+    (code: string | undefined) => update({ notice: { kind: "error", code } }),
+    [update],
+  );
+
+  return { ...state, reload, add, remove, move, makeMain, dismissNotice, reportRefusal };
 }
 
 function renumber(list: PhotoList, photos: Photo[]): PhotoList {
