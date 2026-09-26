@@ -9,7 +9,7 @@ import {
   TRANSLATED_LOCALES,
   type TranslatedLocale,
 } from "./schema.ts";
-import { untrustedTextProblem } from "./translate.ts";
+import { graphemeLength, untrustedTextProblem } from "./translate.ts";
 
 // i18next reads these from the same object as the ICU arguments: a message
 // that declared one would let a caller's value choose the language, the
@@ -51,8 +51,7 @@ function sameArguments(a: Record<string, ArgumentType>, b: Record<string, Argume
   );
 }
 
-const graphemes = new Intl.Segmenter(undefined, { granularity: "grapheme" });
-const lengthOf = (text: string): number => [...graphemes.segment(text)].length;
+const lengthOf = graphemeLength;
 
 /** True when `locale`'s text carries a review hash that no longer matches it and its English. */
 export function isStale(message: Message, locale: TranslatedLocale): boolean {

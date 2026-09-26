@@ -1,10 +1,15 @@
 import { describe, expect, it } from "vitest";
 import { checkMessages } from "./check.ts";
+import { reviewHash } from "./review-hash.ts";
 import { parseMessages } from "./schema.ts";
 import {
   applyTranslations,
   missingTranslations,
+  planChunks,
   rejectionReason,
+  reviewedExamples,
+  selectForTranslation,
+  type TranslationItem,
   type Translator,
 } from "./translate.ts";
 
@@ -154,5 +159,115 @@ describe("untrusted text (#55)", () => {
     ).toBeUndefined();
     expect(rejectionReason("<b>Hello</b>", "<b>Hei</b>", "fi")).toBeUndefined();
     expect(rejectionReason("Opens at 12.30", "Aukeaa klo 12.30", "fi")).toBeUndefined();
+  });
+});
+
+describe("what a translation run covers (#55)", () => {
+  const FILE = `demo.hello:
+  en: Hello
+  description: d
+  fi: Hei
+  machine: { fi: true }
+
+demo.bye:
+  en: Goodbye for now
+  description: d
+  fi: Näkemiin
+  reviewed: { fi: "${reviewHash("Goodbye", "Näkemiin")}" }
+
+demo.thanks:
+  en: Thanks
+  description: d
+  fi: Kiitos
+  reviewed: { fi: "${reviewHash("Thanks", "Kiitos")}" }
+
+demo.save:
+  en: Save
+  description: a button
+  max_length: 12
+
+other.title:
+  en: Title
+  description: d
+  fi: Otsikko
+  machine: { fi: true }
+
+legal.terms.title:
+  en: Terms
+  description: d
+  fi: Käyttöehdot
+  consent_version: "1"
+`;
+  const messages = parseMessages(FILE);
+  const keys = (items: TranslationItem[]): string[] => items.map((item) => item.key);
+
+  it("selects missing text, machine text to write again, or reviews gone stale, never legal text", () => {
+    expect(keys(selectForTranslation(messages, "fi", { mode: "missing" }))).toEqual(["demo.save"]);
+    expect(keys(selectForTranslation(messages, "fi", { mode: "retranslate" }))).toEqual([
+      "demo.hello",
+      "other.title",
+    ]);
+    // demo.bye's English changed after its review; demo.thanks is still current.
+    expect(keys(selectForTranslation(messages, "fi", { mode: "stale" }))).toEqual(["demo.bye"]);
+    expect(
+      keys(selectForTranslation(messages, "fi", { mode: "retranslate", prefix: "other." })),
+    ).toEqual(["other.title"]);
+    expect(
+      keys(selectForTranslation(messages, "fi", { mode: "retranslate", keys: ["demo.hello"] })),
+    ).toEqual(["demo.hello"]);
+    // The room a text has goes to the translator with it.
+    expect(selectForTranslation(messages, "fi", { mode: "missing" })[0]?.max_length).toBe(12);
+  });
+
+  it("sends only current reviews as examples, from the same namespace", () => {
+    expect(reviewedExamples(messages, "fi", "demo")).toEqual([{ en: "Thanks", text: "Kiitos" }]);
+    expect(reviewedExamples(messages, "fi", "other")).toEqual([]);
+  });
+
+  it("splits a selection per namespace into evenly sized requests", () => {
+    const items = (prefix: string, n: number): TranslationItem[] =>
+      Array.from({ length: n }, (_, i) => ({ key: `${prefix}.k${i}`, en: "x", description: "d" }));
+    const plan = planChunks([...items("profile", 90), ...items("smoke", 3)], 40);
+    expect(plan.map((chunk) => [chunk.namespace, chunk.items.length])).toEqual([
+      ["profile", 30],
+      ["profile", 30],
+      ["profile", 30],
+      ["smoke", 3],
+    ]);
+  });
+
+  it("writes a stale text again as machine text, dropping its old review", () => {
+    const items = selectForTranslation(messages, "fi", { mode: "stale" });
+    const result = applyTranslations(FILE, messages, "fi", { "demo.bye": "Näkemiin nyt" }, items);
+    expect(result.written).toEqual(["demo.bye"]);
+    const after = parseMessages(result.yaml)["demo.bye"];
+    expect(after).toMatchObject({ fi: "Näkemiin nyt", machine: { fi: true } });
+    expect(after?.reviewed).toBeUndefined();
+  });
+
+  it("refuses an answer over its max_length before it is written", () => {
+    const items = selectForTranslation(messages, "fi", { mode: "missing" });
+    const result = applyTranslations(
+      FILE,
+      messages,
+      "fi",
+      { "demo.save": "Tallenna muutokset" },
+      items,
+    );
+    expect(result.rejected).toEqual({ "demo.save": "is over its max_length of 12" });
+    expect(result.written).toEqual([]);
+  });
+
+  it("ignores an answer for a key the run did not select", () => {
+    const items = selectForTranslation(messages, "fi", { mode: "missing" });
+    const result = applyTranslations(
+      FILE,
+      messages,
+      "fi",
+      { "demo.thanks": "Kiitti", "demo.save": "Tallenna" },
+      items,
+    );
+    expect(result.written).toEqual(["demo.save"]);
+    expect(parseMessages(result.yaml)["demo.thanks"]?.fi).toBe("Kiitos");
   });
 });

@@ -47,4 +47,17 @@ A native reviewer reads machine text and approves it; `docs/i18n/translation-rev
 
 `pnpm i18n:check` (CI job `i18n`): the file validates, every key has `fi` (fail) and `sv` (warn), every locale is valid ICU with the source's arguments, every plural form its language needs (CLDR) and the English's exact cases and select options, no dynamic value is inflected, `max_length` holds, and every fi and sv text is machine text or carries a review that still matches it. `--release` (a `v*` tag, a production EAS build) also fails on machine text in a released language (`RELEASED_LOCALES`: en and fi) and on draft legal text. `pnpm lint` fails on a user-facing string literal in the clients' TSX.
 
-`pnpm i18n:translate` sends message text, the glossary and the tone guide to the Claude API, and nothing else; credentials come from the developer's environment (`ANTHROPIC_API_KEY` or an `ant auth login` profile) and are never committed.
+`pnpm i18n:translate` sends message text (with approved translations from the same namespace as examples), the glossary and the tone guide to the Claude API (`claude-opus-5`), and nothing else; credentials come from the developer's environment (`ANTHROPIC_API_KEY` or an `ant auth login` profile) and are never committed. Every answer is validated and written as machine text.
+
+| command | does |
+|---|---|
+| `pnpm i18n:translate` | texts that do not exist yet, in fi and sv (`--locale fi` for one) |
+| `--prefix onboarding.`, `--keys a,b` | narrows the selection |
+| `--retranslate --prefix p.` | writes machine text again, never reviewed text; needs `--prefix` or `--keys`, since a reviewer may be reading the rest |
+| `--stale` | writes again, as machine text, reviewed texts whose English or translation changed |
+| `--dry-run` | the requests it would send, with their keys and the number of examples; sends nothing |
+| `--compare --prefix p.` | sends the requests for machine text (or `--stale`) and prints the current and the new text side by side, with the reason a new text would be refused; writes nothing; needs `--prefix` or `--keys` |
+| `--chunk-size 40` | keys per request, one namespace at a time |
+| `--mode batch`, then `--batch-id <id>` | one Message Batch for every request, at half the price, results within 24 hours; the second command collects them on the same machine (what each request asked for waits in the gitignored `packages/i18n/.batches/`) |
+
+Sync requests ask for the server-side fallback (`fallbacks: "default"`), so a request the model's classifiers decline is answered by the recommended fallback model; the Batches API has no fallback. Only the keys a request asked for are kept from its answer. A request that still fails costs its keys, not the run. Each request's token use is printed; the tone guide and glossary carry a cache breakpoint, and `cache read` shows whether later requests used it.
