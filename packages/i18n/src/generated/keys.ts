@@ -334,9 +334,13 @@ export type MessageParams = {
   "signIn.title": Record<never, never>;
   "signIn.tryAgain": Record<never, never>;
   "smoke.api.title": Record<never, never>;
+  "smoke.app.embedded": Record<never, never>;
   "smoke.app.label": Record<never, never>;
   "smoke.app.noCommit": Record<never, never>;
+  "smoke.app.noRuntime": Record<never, never>;
+  "smoke.app.runtime": { "runtime": string };
   "smoke.app.title": Record<never, never>;
+  "smoke.app.updated": { "date": string };
   "smoke.gate.checking": Record<never, never>;
   "smoke.gate.failed": Record<never, never>;
   "smoke.gate.retry": Record<never, never>;

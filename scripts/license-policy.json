@@ -1,5 +1,5 @@
 {
-  "$comment": "Dependency licence policy (#16 C.2). `allow` is what may enter the tree without a second look; it is also the allow-licenses list of .github/dependency-review-config.yml, and check:licenses fails when the two differ. Anything else, GPL and LGPL included, needs an entry under `exceptions` with the reason: Kuutti is AGPL-3.0 with an App Store exception (LICENSE-EXCEPTION), and a copyleft library in the mobile bundle without an equivalent permission would take the store distribution away again. An exception names the package and the exact licence string, so a licence change brings the question back.",
+  "$comment": "Dependency licence policy (#16 C.2). `allow` is what may enter the tree without a second look; it is also the allow-licenses list of .github/dependency-review-config.yml, and check:licenses fails when the two differ. Anything else, GPL and LGPL included, needs an entry under `exceptions` with the reason: Kuutti is AGPL-3.0 with an App Store exception (LICENSE-EXCEPTION), and a copyleft library in the mobile bundle without an equivalent permission would take the store distribution away again. An exception names the package and the exact licence string, so a licence change brings the question back. `actions` lists GitHub Actions used by the workflows under a licence outside `allow`: they run in CI and never ship, so copyleft costs nothing there; the dependency review check reads them as pkg:githubactions URLs from the same file pair.",
   "allow": [
     "MIT",
     "ISC",
@@ -119,6 +119,13 @@
       "name": "@img/sharp-libvips-linuxmusl-x64",
       "license": "LGPL-3.0-or-later",
       "reason": "libvips prebuilt for linuxmusl-x64; see @img/sharp-libvips."
+    }
+  ],
+  "actions": [
+    {
+      "name": "trufflesecurity/trufflehog",
+      "license": "AGPL-3.0",
+      "reason": "The secret scanner of secret-scan.yml, run on the CI runner against the repository's own history. Never bundled into the app, the API or the admin panel; the same licence as Kuutti itself."
     }
   ]
 }
