@@ -94,8 +94,10 @@ export async function findProfile(db: Queryable, accountId: string): Promise<Pro
 
 /**
  * The whole document, inserted or replaced; a tombstone writes nothing (#51).
- * The consent's time is kept when the version is unchanged and set anew when
- * it changes; null withdraws it.
+ * The account row is taken under lock first, the same lock erasure takes, so
+ * a save racing an erasure either lands before the deletes or sees the
+ * tombstone and writes nothing. The consent's time is kept when the version
+ * is unchanged and set anew when it changes; null withdraws it.
  */
 export async function upsertProfile(
   db: Queryable,
@@ -104,11 +106,12 @@ export async function upsertProfile(
   at: Date,
 ): Promise<ProfileRow | null> {
   const { rows } = await db.query<Row>(
-    `INSERT INTO profile (account_id, display_name, bio, bio_preset, fields, prompts,
+    `WITH live AS (SELECT id FROM account WHERE id = $1 AND state <> 'deleted' FOR UPDATE)
+     INSERT INTO profile (account_id, display_name, bio, bio_preset, fields, prompts,
                           special_category_consent_version, special_category_consented_at,
                           created_at, updated_at)
      SELECT $1, $2, $3, $4, $5::jsonb, $6::jsonb, $7, CASE WHEN $7::text IS NULL THEN NULL ELSE $8::timestamptz END, $8, $8
-     WHERE EXISTS (SELECT 1 FROM account WHERE id = $1 AND state <> 'deleted')
+     FROM live
      ON CONFLICT (account_id) DO UPDATE SET
        display_name = EXCLUDED.display_name,
        bio = EXCLUDED.bio,

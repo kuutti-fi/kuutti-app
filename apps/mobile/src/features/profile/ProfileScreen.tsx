@@ -27,6 +27,7 @@ import { type ProfileNotice, useProfile } from "./useProfile";
 /** The API's refusals the screen has its own words for; anything else is the generic line. */
 const ERROR_TEXT: ReadonlyMap<string, PlainMessageKey> = new Map([
   ["text_contact_details", "profile.error.text_contact_details"],
+  ["consent_required", "errors.special_category_locked"],
 ]);
 
 function noticeText(notice: NonNullable<ProfileNotice>, t: ReturnType<typeof useT>["t"]): string {

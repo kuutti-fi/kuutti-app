@@ -13,13 +13,14 @@ export type ContactKind = "email" | "url" | "phone" | "handle";
 const EMAIL = /[\p{L}\p{N}._+-]+@[\p{L}\p{N}-]+\.[\p{L}\p{N}.-]+/u;
 /** "aino at gmail dot com", "aino (at) gmail (dot) com", "aino[ät]example[piste]fi". */
 const SPELLED_EMAIL = /\b(?:at|ät)\b[^\n]{0,40}\b(?:dot|piste)\b|[([{]\s*(?:at|ät)\s*[)\]}]/iu;
+/** A scheme or www, or any bare domain: a word, a dot and two or more letters, whatever the ending. */
 const URL_LIKE =
-  /\b(?:https?:\/\/|www\.)\S+|\b[\p{L}\p{N}-]+\.(?:fi|se|com|net|org|io|app|me|ee|eu|de|uk)\b/iu;
+  /\b(?:https?:\/\/|www\.)\S+|(?<![\p{L}\p{N}])[\p{L}\p{N}-]+\.\p{L}{2,24}(?![\p{L}\p{N}])/iu;
 /** Seven or more digits, any script, with anything but letters and digits between them. */
 const PHONE = /(?:\+?\p{Nd}[^\p{L}\p{N}]*){7,}/u;
 /** An @handle, a platform name with any suffix (Finnish inflects: "instagramissa"), or an abbreviation with a name after it. */
 const HANDLE =
-  /(?:^|[\s(])@\w{2,}|\b(?:instagram|insta|snapchat|telegram|whatsapp|tiktok|discord|signal)\p{L}*|\b(?:ig|tg|sc)\b\W{0,3}\w{2,}/iu;
+  /(?:^|[^\p{L}\p{N}])@[\p{L}\p{N}_.]{2,}|\b(?:instagram|insta|snapchat|telegram|whatsapp|tiktok|discord|signal)\p{L}*|\b(?:ig|tg|sc)\b\W{0,3}\w{2,}/iu;
 
 export function contactDetailsIn(raw: string): ContactKind | null {
   const text = raw.normalize("NFKC").replace(/\p{Cf}/gu, "");

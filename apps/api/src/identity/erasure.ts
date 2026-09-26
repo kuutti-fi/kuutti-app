@@ -48,8 +48,10 @@ export type ErasureSummary = {
 export async function eraseAccount(deps: ErasureDeps, accountId: string): Promise<ErasureSummary> {
   const at = deps.now();
   const result = await transaction(deps.db, async (tx) => {
-    const account = await repo.findAccountById(tx, accountId);
-    if (!account || account.state === "deleted") {
+    // The account row first, under lock: a profile or preference write that
+    // raced this transaction waits here and then sees the tombstone.
+    const locked = await repo.lockAccountForErasure(tx, accountId);
+    if (!locked || locked.state === "deleted") {
       throw new AppError(404, "not_found", "No live account to erase");
     }
     const identity = await repo.findIdentitySummaryForAccount(tx, accountId);

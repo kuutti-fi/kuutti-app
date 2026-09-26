@@ -22,6 +22,9 @@ describe("the plain-text rule", () => {
     ["\uFF10\uFF14\uFF10\uFF11\uFF12\uFF13\uFF14\uFF15\uFF16\uFF17", "phone"],
     ["\u0660\u0664\u0660\u0661\u0662\u0663\u0664\u0665\u0666\u0667", "phone"],
     ["040/123/4567", "phone"],
+    ["my site is example.xyz", "url"],
+    ["find me:@nick", "handle"],
+    ["@äiti kertoi", "handle"],
     ["0 4 0 · 1 2 3 · 4 5 6 7", "phone"],
   ] as const)("%s is refused as %s", (text, kind) => {
     expect(contactDetailsIn(text)).toBe(kind);
@@ -33,6 +36,8 @@ describe("the plain-text rule", () => {
     "Aalto 2024, guild of the year",
     "email me? no. talk to me here.",
     "10 out of 10 would hike again",
+    "e.g. hiking, i.e. a lot of it",
+    "3.5 km runs before breakfast",
   ])("%s passes", (text) => {
     expect(contactDetailsIn(text)).toBeNull();
   });

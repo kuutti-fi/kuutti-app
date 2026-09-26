@@ -612,3 +612,21 @@ export async function recordIdentityDeletion(
     input.reregisterAfter,
   ]);
 }
+
+/**
+ * The account row under lock for the erasure transaction (#47 review): a
+ * writer of per-account rows that takes the same lock either finishes before
+ * the deletes or sees the tombstone and writes nothing, so no row can slip in
+ * behind the erasure. The state comes back so the caller can refuse a
+ * tombstone before deleting anything.
+ */
+export async function lockAccountForErasure(
+  db: Queryable,
+  accountId: string,
+): Promise<{ state: string } | null> {
+  const { rows } = await db.query<{ state: string }>(
+    "SELECT state FROM account WHERE id = $1 FOR UPDATE",
+    [accountId],
+  );
+  return rows[0] ?? null;
+}
