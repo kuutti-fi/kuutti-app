@@ -60,6 +60,34 @@ smoke.app.label:
   sv: Appens version
   machine: { fi: true, sv: true }
 
+smoke.app.runtime:
+  en: "native build {runtime}"
+  description: "App card: the first seven characters of the native build's runtime version (the fingerprint, ADR-004). An over-the-air update reaches only a build with the same runtime, so this is what to compare with the EAS build list when the commit stops moving."
+  fi: "natiiviversio {runtime}"
+  sv: "nativ version {runtime}"
+  machine: { fi: true, sv: true }
+
+smoke.app.noRuntime:
+  en: "native build not recorded"
+  description: "App card when expo-updates reports no runtime version (the web preview, a dev client on Metro)."
+  fi: "natiiviversiota ei kirjattu"
+  sv: "nativ version inte registrerad"
+  machine: { fi: true, sv: true }
+
+smoke.app.embedded:
+  en: "running the build's own bundle, no update applied yet"
+  description: "App card when the app runs the JavaScript embedded in the native build rather than an over-the-air update."
+  fi: "käytössä version oma paketti, päivitystä ei vielä asennettu"
+  sv: "kör versionens eget paket, ingen uppdatering ännu"
+  machine: { fi: true, sv: true }
+
+smoke.app.updated:
+  en: "update published {date}"
+  description: "App card: when the running over-the-air update was published (expo-updates createdAt; the module does not record when this phone applied it); {date} is already formatted."
+  fi: "päivitys julkaistu {date}"
+  sv: "uppdatering publicerad {date}"
+  machine: { fi: true, sv: true }
+
 smoke.app.noCommit:
   en: git commit not recorded in this build
   description: Smoke screen, App card, when the running code was built before the commit was stamped into it.
