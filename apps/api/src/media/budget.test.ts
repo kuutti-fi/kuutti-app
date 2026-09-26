@@ -183,7 +183,18 @@ describe("the budget under load", () => {
   // and removed again.
   it("holds against a parallel burst: exactly the limit is written", async () => {
     const pool = testPool();
-    const a = await signedInAccount(pool, `budget-burst-${Date.now()}`);
+    // Committed rows, so both connections see them; an account without a
+    // session, so a test file counting sessions meanwhile sees nothing of it.
+    const identity = await pool.query<{ id: string }>(
+      "INSERT INTO identity (hetu_hmac) VALUES ($1) RETURNING id",
+      [`burst-${Date.now()}-${Math.random()}`],
+    );
+    const identityId = identity.rows[0]?.id ?? "";
+    const created = await pool.query<{ id: string }>(
+      "INSERT INTO account (identity_id, state, birth_year, birth_month) VALUES ($1, 'active', 1990, 6) RETURNING id",
+      [identityId],
+    );
+    const a = { accountId: created.rows[0]?.id ?? "" };
     try {
       const photo = await insertPhoto(pool, {
         accountId: a.accountId,
@@ -215,15 +226,10 @@ describe("the budget under load", () => {
       );
       expect(Number(rows[0]?.n)).toBe(5);
     } finally {
-      const identity = await pool.query<{ identity_id: string }>(
-        "SELECT identity_id FROM account WHERE id = $1",
-        [a.accountId],
-      );
       await pool.query("DELETE FROM photo_access WHERE account_id = $1", [a.accountId]);
       await pool.query("DELETE FROM photo WHERE account_id = $1", [a.accountId]);
-      await pool.query("DELETE FROM session WHERE account_id = $1", [a.accountId]);
       await pool.query("DELETE FROM account WHERE id = $1", [a.accountId]);
-      await pool.query("DELETE FROM identity WHERE id = $1", [identity.rows[0]?.identity_id]);
+      await pool.query("DELETE FROM identity WHERE id = $1", [identityId]);
     }
   });
 });
