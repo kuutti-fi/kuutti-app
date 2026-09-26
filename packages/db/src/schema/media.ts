@@ -105,7 +105,11 @@ export const cardShown = pgTable(
       .references(() => photo.id, { onDelete: "cascade" }),
     at: timestamp("at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (table) => [uniqueIndex("card_shown_account_photo_idx").on(table.accountId, table.photoId)],
+  (table) => [
+    uniqueIndex("card_shown_account_photo_idx").on(table.accountId, table.photoId),
+    // The cascade from photo looks rows up by photo_id; without this it scans the table.
+    index("card_shown_photo_idx").on(table.photoId),
+  ],
 );
 
 export type Photo = typeof photo.$inferSelect;
