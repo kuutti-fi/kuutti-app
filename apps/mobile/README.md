@@ -12,8 +12,8 @@ Native binaries come from EAS Build; JavaScript reaches installed binaries as EA
 
 | profile | what | channel | who |
 |---|---|---|---|
-| `development` | dev client, internal distribution: Android APK, iOS ad hoc for registered devices | `staging` | the team, for day-to-day work against Metro or the staging API |
-| `preview` | the app as testers run it, internal distribution | `staging` | staging testers |
+| `development` | dev client, internal distribution: Android APK, iOS ad hoc for registered devices | `staging` | the team, for day-to-day work against Metro or the staging API; it does not apply updates by itself, you pick a branch in the launcher |
+| `preview` | the app as testers run it, internal distribution; checks for an update on every launch and applies it | `staging` | staging testers, and a phone that should follow `main` without anyone doing anything |
 | `production` | store build (AAB, IPA), build number incremented on EAS | `production` | releases on `v*` tags; submission is M5 |
 
 Channels follow the deploy promotion (#8): a merge to `main` deploys the staging API and publishes to `staging`; a `v*` tag deploys prod behind the reviewer and publishes to `production`. Updates are not code-signed for now: Expo sells update signing with its paid plans only, so what may publish is whatever holds `EXPO_TOKEN`, and that token is guarded accordingly (ADR-004, which also says when signing returns). Turning signing on later adds a certificate to `app.json`, hence a new fingerprint and new builds for everyone.
@@ -41,7 +41,7 @@ M1 uses the maintainer's individual Apple developer account for ad hoc distribut
 4. **Credentials.** The first build of each platform is interactive: `eas build --profile development --platform android` lets EAS generate and keep the keystore; `--platform ios` signs in with the Apple account, creates the distribution certificate and the ad hoc profile. Then `eas credentials` to upload the push credentials (FCM service account for Android, APNs key for iOS) so M4 needs no native rebuild. After that CI builds non-interactively with `--freeze-credentials` semantics: credentials exist on EAS and never in the repository.
 5. `gh variable set EAS_ENABLED --body true`. Optional: an issue that mirrors the build links for people without an Expo login, `gh variable set EAS_BUILDS_ISSUE --body <number>` (M1 used #17 and retired it once the team had Expo accounts).
 
-Checks: an Android team member installs the dev client from the link and sees the staging API version; an iOS tester registered by UDID installs from the build page; a JS-only merge to `main` shows up in the dev client's `staging` branch without a new build; a native change on `main` starts new `development` and `preview` builds and the recorded fingerprint changes; `gh secret list --env <env>` shows `EXPO_TOKEN` only in `staging`, `prod` and `preview`; the project on expo.dev is owned by the organisation.
+Checks: an Android team member installs the dev client from the link and sees the staging API version; an iOS tester registered by UDID installs from the build page; a JS-only merge to `main` shows up in the dev client's `staging` branch without a new build; a native change on `main` starts a new `development` build (a `preview` build is dispatched by hand: `gh workflow run eas-build.yml --ref main -f profile=preview -f platform=all`) and the recorded fingerprint changes; a phone on a build with the old fingerprint stops receiving updates until the new build is installed, and the App card names the runtime for that; `gh secret list --env <env>` shows `EXPO_TOKEN` only in `staging`, `prod` and `preview`; the project on expo.dev is owned by the organisation.
 
 ## Signing in and recovering an account
 
