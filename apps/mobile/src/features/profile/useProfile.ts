@@ -69,9 +69,10 @@ export function useProfile() {
   const save = useCallback(async () => {
     setSaving(true);
     setNotice(null);
+    const submitted = draft;
     try {
       const response = await saveProfile({
-        ...draft,
+        ...submitted,
         displayName: draft.displayName.trim(),
         bio: draft.bio?.trim() ? draft.bio.trim() : null,
         prompts: draft.prompts
@@ -79,7 +80,10 @@ export function useProfile() {
           .map((p) => ({ key: p.key, answer: p.answer.trim() })),
       });
       if (!mounted.current) return;
-      if (response.profile) setDraft(toUpdate(response.profile));
+      // The stored document replaces the draft only if nothing was typed while
+      // the save was in flight; otherwise those keystrokes would vanish.
+      const stored = response.profile;
+      if (stored) setDraft((current) => (current === submitted ? toUpdate(stored) : current));
       setCompleteness(response.completeness);
       setNotice({ kind: "saved" });
     } catch (error) {

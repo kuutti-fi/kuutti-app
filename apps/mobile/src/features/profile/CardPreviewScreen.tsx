@@ -22,6 +22,8 @@ export function CardPreviewScreen() {
   const router = useRouter();
   const tap = useHapticTap();
   const [state, setState] = useState<State>({ status: "loading" });
+  // A photo URL the API refused (the day's budget, #52): said under the card, never a silent gap.
+  const [refusal, setRefusal] = useState<string | null>(null);
   useEffect(() => {
     let live = true;
     fetchCardPreview()
@@ -56,7 +58,19 @@ export function CardPreviewScreen() {
         )}
         {state.status === "ready" && !state.preview.card && <Text>{t("profile.card.empty")}</Text>}
         {state.status === "ready" && state.preview.card && (
-          <ProfileCardView card={state.preview.card} />
+          <ProfileCardView
+            card={state.preview.card}
+            onRefused={(code) => setRefusal(code ?? "unknown")}
+          />
+        )}
+        {refusal !== null && (
+          <Text variant="muted" accessibilityLiveRegion="polite">
+            {t(
+              refusal === "photo_budget_exceeded"
+                ? "photos.error.photo_budget_exceeded"
+                : "photos.error.generic",
+            )}
+          </Text>
         )}
         {state.status === "ready" && !state.preview.completeness.complete && (
           <View className="gap-1">

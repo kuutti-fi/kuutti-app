@@ -161,7 +161,9 @@ export type CardServed = {
  * record for every photo on the card and the card budget in one statement,
  * under the viewer's advisory lock. The budget counts distinct subjects the
  * viewer was shown since the day started (matching_config
- * exposure_cards_per_day); a subject already shown today costs nothing more.
+ * exposure_cards_per_day); a subject already shown today costs nothing more,
+ * and a row from an earlier day takes today's date when its card comes round
+ * again, so the card counts against today's budget once (#64 review).
  * The viewer's account id is in every branch (rule 6); the photo ids are the
  * card the server built, never a request body.
  */
@@ -189,7 +191,8 @@ export async function recordCardServed(
                             OR EXISTS (SELECT 1 FROM today WHERE subject = $2) AS ok),
             ins AS (INSERT INTO card_shown (account_id, photo_id, at)
                     SELECT $1, unnest($3::uuid[]), $4 FROM allowed WHERE allowed.ok
-                    ON CONFLICT (account_id, photo_id) DO NOTHING
+                    ON CONFLICT (account_id, photo_id) DO UPDATE SET at = EXCLUDED.at
+                      WHERE card_shown.at < $5
                     RETURNING 1 AS one)
        SELECT (SELECT n FROM used) AS used, (SELECT ok FROM allowed) AS allowed`,
       [
