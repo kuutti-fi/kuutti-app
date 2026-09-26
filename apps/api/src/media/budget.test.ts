@@ -1,8 +1,10 @@
+import { resolve } from "node:path";
+import { createPool, migrate, withTemporaryDatabase } from "@kuutti/db";
 import { Photo, type PhotoFetchBudget, type PhotoVariant } from "@kuutti/schema";
 import { describe, expect, it } from "vitest";
 import { createApp } from "../app.ts";
 import { signedInAccount, withMatchingConfig } from "../test/account.ts";
-import { captureLogger, type TestContext, test, testConfig, testPool } from "../test/harness.ts";
+import { captureLogger, type TestContext, test, testConfig } from "../test/harness.ts";
 import { fixturePng, testMediaDeps } from "../test/media.ts";
 import { dayWindow, secondsUntil } from "./budget.ts";
 import { insertPhoto, insertPhotoAccess, recordCardShown } from "./repo.ts";
@@ -178,60 +180,57 @@ describe("exposure", () => {
 });
 
 describe("the budget under load", () => {
-  // Outside the rolled-back transaction on purpose: the race is between
-  // connections, and one connection cannot race itself. Rows are committed
-  // and removed again.
+  // The race is between connections, and one connection cannot race itself,
+  // so the rows must be committed. They are committed into a database of
+  // their own, migrated for the test and dropped afterwards, so no other
+  // test file, however it counts its tables, ever sees them.
   it("holds against a parallel burst: exactly the limit is written", async () => {
-    const pool = testPool();
-    // Committed rows, so both connections see them; an account without a
-    // session, so a test file counting sessions meanwhile sees nothing of it.
-    const identity = await pool.query<{ id: string }>(
-      "INSERT INTO identity (hetu_hmac) VALUES ($1) RETURNING id",
-      [`burst-${Date.now()}-${Math.random()}`],
-    );
-    const identityId = identity.rows[0]?.id ?? "";
-    const created = await pool.query<{ id: string }>(
-      "INSERT INTO account (identity_id, state, birth_year, birth_month) VALUES ($1, 'active', 1990, 6) RETURNING id",
-      [identityId],
-    );
-    const a = { accountId: created.rows[0]?.id ?? "" };
-    try {
-      const photo = await insertPhoto(pool, {
-        accountId: a.accountId,
-        key: `burst-${a.accountId}`,
-        blurhash: "LEHV6nWB2yk8pyo0adR*.7kCMdnj",
-        width: 64,
-        height: 64,
-        maxPhotos: 3,
-      });
-      if (!photo) throw new Error("photo not written");
-      const since = new Date(Date.now() - 3_600_000);
-      const results = await Promise.all(
-        Array.from({ length: 24 }, () =>
-          insertPhotoAccess(pool, {
-            accountId: a.accountId,
-            photoId: photo.id,
-            variant: "thumb",
-            at: new Date(),
-            since,
-            limit: 5,
-          }),
-        ),
-      );
-      expect(results.filter((r) => r.recorded)).toHaveLength(5);
-      expect(results.every((r) => r.live)).toBe(true);
-      const { rows } = await pool.query<{ n: string }>(
-        "SELECT count(*) AS n FROM photo_access WHERE account_id = $1",
-        [a.accountId],
-      );
-      expect(Number(rows[0]?.n)).toBe(5);
-    } finally {
-      await pool.query("DELETE FROM photo_access WHERE account_id = $1", [a.accountId]);
-      await pool.query("DELETE FROM photo WHERE account_id = $1", [a.accountId]);
-      await pool.query("DELETE FROM account WHERE id = $1", [a.accountId]);
-      await pool.query("DELETE FROM identity WHERE id = $1", [identityId]);
-    }
-  });
+    await withTemporaryDatabase(async (url) => {
+      const pool = createPool({ connectionString: url, max: 6, applicationName: "kuutti-burst" });
+      try {
+        await migrate(pool, resolve(import.meta.dirname, "../../../../packages/db/drizzle"));
+        const identity = await pool.query<{ id: string }>(
+          "INSERT INTO identity (hetu_hmac) VALUES ('burst') RETURNING id",
+        );
+        const created = await pool.query<{ id: string }>(
+          "INSERT INTO account (identity_id, state, birth_year, birth_month) VALUES ($1, 'active', 1990, 6) RETURNING id",
+          [identity.rows[0]?.id],
+        );
+        const accountId = created.rows[0]?.id ?? "";
+        const photo = await insertPhoto(pool, {
+          accountId,
+          key: "burst",
+          blurhash: "LEHV6nWB2yk8pyo0adR*.7kCMdnj",
+          width: 64,
+          height: 64,
+          maxPhotos: 3,
+        });
+        if (!photo) throw new Error("photo not written");
+        const since = new Date(Date.now() - 3_600_000);
+        const results = await Promise.all(
+          Array.from({ length: 24 }, () =>
+            insertPhotoAccess(pool, {
+              accountId,
+              photoId: photo.id,
+              variant: "thumb",
+              at: new Date(),
+              since,
+              limit: 5,
+            }),
+          ),
+        );
+        expect(results.filter((r) => r.recorded)).toHaveLength(5);
+        expect(results.every((r) => r.live)).toBe(true);
+        const { rows } = await pool.query<{ n: string }>(
+          "SELECT count(*) AS n FROM photo_access WHERE account_id = $1",
+          [accountId],
+        );
+        expect(Number(rows[0]?.n)).toBe(5);
+      } finally {
+        await pool.end();
+      }
+    });
+  }, 30_000);
 });
 
 describe("the Finnish day", () => {
