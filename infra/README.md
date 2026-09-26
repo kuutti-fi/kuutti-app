@@ -136,14 +136,14 @@ gh api -X PUT repos/kuutti-fi/kuutti-app/rulesets/23053522 --input - <<'JSON'
  "conditions":{"ref_name":{"include":["~DEFAULT_BRANCH"],"exclude":[]}},
  "rules":[
   {"type":"deletion"},{"type":"non_fast_forward"},{"type":"required_linear_history"},
-  {"type":"pull_request","parameters":{"required_approving_review_count":0,"dismiss_stale_reviews_on_push":false,"require_code_owner_review":false,"require_last_push_approval":false,"required_review_thread_resolution":true,"allowed_merge_methods":["squash","rebase"]}},
+  {"type":"pull_request","parameters":{"required_approving_review_count":1,"dismiss_stale_reviews_on_push":true,"require_code_owner_review":false,"require_last_push_approval":false,"require_extra_approval_for_unattributed_changes":true,"required_review_thread_resolution":false,"allowed_merge_methods":["squash"]}},
   {"type":"required_status_checks","parameters":{"strict_required_status_checks_policy":true,"required_status_checks":[
-   {"context":"DCO sign-off"},{"context":"TruffleHog"},{"context":"typecheck"},{"context":"lint"},{"context":"test-api-packages"},{"context":"test-mobile"},{"context":"scenarios"},{"context":"schema-drift"},{"context":"workflows"}]}}
+   {"context":"typecheck"},{"context":"lint"},{"context":"test-api-packages"},{"context":"test-mobile"},{"context":"i18n"},{"context":"licenses"},{"context":"audit"},{"context":"scenarios"},{"context":"schema-drift"},{"context":"compose"},{"context":"issue-link"},{"context":"workflows"},{"context":"DCO sign-off"},{"context":"TruffleHog"}]}}
  ]}
 JSON
 ```
 
-`i18n` (#13), `licenses` and `dependency review` (#16) join the list: add `{"context":"i18n"},{"context":"licenses"},{"context":"dependency review"}`. Then update `CLAUDE.md` (Git) and `CONTRIBUTING.md` through the first pull request.
+The rules above are the live ones as of 2026-09-26: fourteen checks, `i18n` (#13) and `licenses` (#16) among them; one approving review since the `contributors` team got write (2026-09-25), dismissed when new commits arrive (the native review of #55 relies on that); squash merges only. `dependency review` runs on every pull request without being required. The ruleset on GitHub is the source of truth (`gh api repos/kuutti-fi/kuutti-app/rulesets/23053522`), and a PUT replaces all of it: read its `bypass_actors` with an admin token first (they are not visible without one, and the snippet's empty list would remove the admins' bypass). A change to the ruleset updates this snippet and `CLAUDE.md` (Git) in the same pull request.
 
 ### Hardening settings (#16), maintainer only
 
