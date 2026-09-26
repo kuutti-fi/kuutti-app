@@ -15,6 +15,14 @@ export { wellKnownRoutes } from "./links.ts";
 // hetu.ts stays inside the slice: nothing outside it may hold a hetu (rules/api.md).
 export { brokerOptionsFromConfig, OidcBroker, teliaKeyIds } from "./oidc-broker.ts";
 export {
+  CURRENT_CONSENT_VERSIONS,
+  exportConsents,
+  missingSteps,
+  onboardingStatus,
+  shownLocale,
+} from "./onboarding.ts";
+export { onboardingRoutes } from "./onboarding-routes.ts";
+export {
   decideRegistration,
   REREGISTER_COOLDOWN_DAYS,
   type RegistrationDecision,

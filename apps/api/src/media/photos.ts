@@ -212,6 +212,11 @@ export async function issuePhotoUrl(
     throw new AppError(404, "not_found", "No such photo for this account");
   }
   const at = deps.now();
+  const expiresAt = new Date(at.getTime() + URL_TTL_MS);
+  // Signed first: signing has no side effect, so a failure there costs the
+  // person nothing, while a row written before a failed signature would have
+  // spent budget on a URL nobody received. The URL leaves only with the row.
+  const url = await deps.signer.sign(objectKey(row.key, input.variant), expiresAt);
   const day = dayWindow(at);
   const limit = (await readPhotoFetchBudget(deps.db))[input.variant];
   const access = await repo.insertPhotoAccess(deps.db, {
@@ -242,8 +247,6 @@ export async function issuePhotoUrl(
       variant: input.variant,
     });
   }
-  const expiresAt = new Date(at.getTime() + URL_TTL_MS);
-  const url = await deps.signer.sign(objectKey(row.key, input.variant), expiresAt);
   deps.logger.info(
     { accountId: input.accountId, photoId: input.photoId, variant: input.variant, at },
     "photo url issued",

@@ -26,3 +26,5 @@ export {
   seed,
   seedHetuHmac,
 } from "./seed.ts";
+// For tests that need committed rows visible across connections without touching the shared test database.
+export { TEST_DATABASE_URL, withTemporaryDatabase } from "./test/temporary-database.ts";

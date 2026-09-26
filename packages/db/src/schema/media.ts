@@ -88,7 +88,9 @@ export const photoAccess = pgTable(
  * served, written by the card route (#47) for the viewer's own account. Another
  * account's photo is issued a URL only against such a row, so a scraper
  * cannot enumerate photos it was never shown. One row per viewer and photo,
- * however often the card comes round: the rule reads set membership. The row
+ * however often the card comes round: the rule reads set membership, and `at`
+ * is the last day the card was served, so it counts against that day's
+ * budget once. The row
  * goes with the photo (cascade) and with the viewer's erasure
  * (media/erasure.ts); M4's nightly sweep trims rows older than
  * shown_cooldown_days once the round logic has no use for them (ADR-008).
@@ -105,7 +107,11 @@ export const cardShown = pgTable(
       .references(() => photo.id, { onDelete: "cascade" }),
     at: timestamp("at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (table) => [uniqueIndex("card_shown_account_photo_idx").on(table.accountId, table.photoId)],
+  (table) => [
+    uniqueIndex("card_shown_account_photo_idx").on(table.accountId, table.photoId),
+    // The cascade from photo looks rows up by photo_id; without this it scans the table.
+    index("card_shown_photo_idx").on(table.photoId),
+  ],
 );
 
 export type Photo = typeof photo.$inferSelect;

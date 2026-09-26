@@ -36,6 +36,8 @@ function accountRow(identityId: string): Account {
     birthYear: 1990,
     birthMonth: 1,
     registeredAt: new Date("2026-09-01T00:00:00Z"),
+    gender: null,
+    pondId: null,
     deletedAt: null,
   };
 }

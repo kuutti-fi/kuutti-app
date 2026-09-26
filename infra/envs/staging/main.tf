@@ -121,4 +121,14 @@ resource "aws_ssm_parameter" "config" {
   name  = "${module.compute.ssm_prefix}${each.key}"
   type  = "String"
   value = each.value
+
+  lifecycle {
+    # ADR-008 §5, enforced: with the origin still open to the world, a
+    # cloudfront trusted proxy would let anyone forge the header the rate
+    # limiter keys on. The plan fails before the parameter can say so.
+    precondition {
+      condition     = var.trusted_proxy != "cloudfront" || var.cloudfront_only_ingress
+      error_message = "trusted_proxy = cloudfront needs cloudfront_only_ingress = true in the same apply (ADR-008 §5)."
+    }
+  }
 }
