@@ -40,6 +40,96 @@ export function argumentsOf(message: string): Record<string, ArgumentType> {
   return found;
 }
 
+/** The names of the ICU tags (<b>…</b>) a message uses. Throws on invalid ICU. */
+export function tagsOf(message: string): Set<string> {
+  const found = new Set<string>();
+  const visit = (elements: MessageFormatElement[]): void => {
+    for (const el of elements) {
+      if (el.type === TYPE.tag) {
+        found.add(el.value);
+        visit(el.children);
+      } else if (el.type === TYPE.plural || el.type === TYPE.select) {
+        for (const option of Object.values(el.options)) visit(option.value);
+      }
+    }
+  };
+  visit(parse(message));
+  return found;
+}
+
+/** A plural, selectordinal or select argument and the branch names it has. */
+type Branching = { kind: "plural" | "selectordinal" | "select"; options: Set<string> };
+
+/** The branches of every plural, selectordinal and select argument. Throws on invalid ICU. */
+export function branchesOf(message: string): Record<string, Branching> {
+  const found: Record<string, Branching> = {};
+  const visit = (elements: MessageFormatElement[]): void => {
+    for (const el of elements) {
+      if (el.type === TYPE.plural || el.type === TYPE.select) {
+        const kind =
+          el.type === TYPE.select
+            ? "select"
+            : el.pluralType === "ordinal"
+              ? "selectordinal"
+              : "plural";
+        found[el.value] ??= { kind, options: new Set() };
+        for (const [name, option] of Object.entries(el.options)) {
+          found[el.value]?.options.add(name);
+          visit(option.value);
+        }
+      } else if (el.type === TYPE.tag) {
+        visit(el.children);
+      }
+    }
+  };
+  visit(parse(message));
+  return found;
+}
+
+/**
+ * A translation keeps every branch its reader needs: each plural form of its
+ * own language (CLDR, through Intl.PluralRules), every exact case (=0) of the
+ * English, and exactly the English select options (a gender or a state is a
+ * decision in code, never one a translation adds or drops). Pass the English
+ * as both arguments to check the source against English's own plural forms.
+ */
+export function branchProblems(en: string, text: string, locale: string): string[] {
+  const problems: string[] = [];
+  const source = branchesOf(en);
+  for (const [name, target] of Object.entries(branchesOf(text))) {
+    const original = source[name];
+    if (!original || original.kind !== target.kind) continue; // the argument check reports it
+    if (target.kind === "select") {
+      const missing = [...original.options].filter((o) => !target.options.has(o));
+      const extra = [...target.options].filter((o) => !original.options.has(o));
+      if (missing.length > 0 || extra.length > 0) {
+        problems.push(
+          `{${name}} does not have the select options of en (${[
+            missing.length > 0 ? `missing ${missing.join(", ")}` : "",
+            extra.length > 0 ? `extra ${extra.join(", ")}` : "",
+          ]
+            .filter(Boolean)
+            .join("; ")})`,
+        );
+      }
+      continue;
+    }
+    const type = target.kind === "plural" ? "cardinal" : "ordinal";
+    const needed = new Intl.PluralRules(locale, { type }).resolvedOptions().pluralCategories;
+    // `=1` answers for `one`: in en, fi and sv the one-form is the number 1 alone.
+    const missing = needed.filter(
+      (form) => !target.options.has(form) && !(form === "one" && target.options.has("=1")),
+    );
+    const exact = [...original.options].filter((o) => o.startsWith("=") && !target.options.has(o));
+    if (missing.length > 0) {
+      problems.push(`{${name}} lacks the ${locale} plural forms ${missing.join(", ")}`);
+    }
+    if (exact.length > 0)
+      problems.push(`{${name}} lacks the exact cases ${exact.join(", ")} of en`);
+  }
+  return problems;
+}
+
 // A preposition directly before a plain {value} is where English invites an
 // inflected noun in Finnish ("in {pond}" has no nominative translation).
 const PREPOSITION_BEFORE = /\b(in|at|to|from|of|on|into|with|for|by)\s+$/i;

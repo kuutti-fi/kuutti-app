@@ -1,5 +1,5 @@
-import { isMap, isScalar, parseDocument } from "yaml";
-import { argumentsOf, inflectionProblems } from "./icu.ts";
+import { isMap, parseDocument, Scalar, YAMLMap } from "yaml";
+import { argumentsOf, branchProblems, inflectionProblems, tagsOf } from "./icu.ts";
 import { isAdminKey, isLegalKey, type Messages, type TranslatedLocale } from "./schema.ts";
 
 /** One message as the translator sees it: the key, the English source and its description. */
@@ -28,6 +28,34 @@ export function missingTranslations(
 }
 
 const MARKUP = /<\/?[a-z][^>]*>/i;
+// Invisible or direction-changing characters, and line or paragraph separators.
+const INVISIBLE = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/u;
+// Contact details a translation must not add: a web address, an e-mail address,
+// a phone number. On a dating app they are how a scam starts.
+const DOMAIN = /(^|[^\p{L}\p{N}.@-])\p{L}[\p{L}\p{N}-]*\.[a-z]{2,}(?![\p{L}\p{N}])/iu;
+const PHONE = /\+?\d[\d \u00a0-]{6,}\d/;
+
+/**
+ * What a text must not carry that its English lacks: invisible characters,
+ * a link, markup, contact details. Checked on translator output, on a
+ * reviewer's sheet and on the file itself (#13, #55).
+ */
+export function untrustedTextProblem(en: string, text: string): string | undefined {
+  if (INVISIBLE.test(text)) return "contains control, bidirectional or line-separator characters";
+  if (text.includes("://") && !en.includes("://")) {
+    return "contains a link the English source does not have";
+  }
+  if (MARKUP.test(text) && !MARKUP.test(en)) {
+    return "contains markup the English source does not have";
+  }
+  if ((DOMAIN.test(text) && !DOMAIN.test(en)) || (text.includes("@") && !en.includes("@"))) {
+    return "contains a web or e-mail address the English source does not have";
+  }
+  if (PHONE.test(text) && !PHONE.test(en)) {
+    return "contains a phone number the English source does not have";
+  }
+  return undefined;
+}
 
 /** Why a returned translation cannot be written, or undefined when it can. */
 export function rejectionReason(
@@ -36,17 +64,9 @@ export function rejectionReason(
   locale: TranslatedLocale,
 ): string | undefined {
   if (text.trim().length === 0) return "empty";
-  // Machine output is data from outside: no invisible or direction-changing
-  // characters, and no link or markup that the English source does not have.
-  if (/[\p{Cc}\p{Cf}]/u.test(text)) {
-    return "contains control or bidirectional formatting characters";
-  }
-  if (text.includes("://") && !en.includes("://")) {
-    return "contains a link the English source does not have";
-  }
-  if (MARKUP.test(text) && !MARKUP.test(en)) {
-    return "contains markup the English source does not have";
-  }
+  // Machine output is data from outside, and so is a reviewer's sheet.
+  const untrusted = untrustedTextProblem(en, text);
+  if (untrusted) return untrusted;
   try {
     const source = argumentsOf(en);
     const target = argumentsOf(text);
@@ -54,7 +74,10 @@ export function rejectionReason(
       Object.keys(source).sort().join() === Object.keys(target).sort().join() &&
       Object.keys(source).every((name) => source[name] === target[name]);
     if (!same) return "does not keep the ICU arguments of the English source";
-    const [problem] = inflectionProblems(text, locale);
+    if ([...tagsOf(text)].sort().join() !== [...tagsOf(en)].sort().join()) {
+      return "does not keep the tags of the English source";
+    }
+    const [problem] = [...inflectionProblems(text, locale), ...branchProblems(en, text, locale)];
     return problem;
   } catch (error) {
     return `not valid ICU (${(error as Error).message})`;
@@ -62,6 +85,35 @@ export function rejectionReason(
 }
 
 export type ApplyResult = { yaml: string; written: string[]; rejected: Record<string, string> };
+
+// ICU braces, a colon or a hash would each change a plain YAML scalar's meaning:
+// such a text is written double-quoted, like the hand-written entries.
+const NEEDS_QUOTES = /[{}:#]/;
+
+/** Sets `locale`'s text of one entry, keeping the file's quoting style. */
+export function writeText(entry: YAMLMap, locale: TranslatedLocale, text: string): void {
+  const node = new Scalar(text.trim());
+  if (NEEDS_QUOTES.test(node.value)) node.type = "QUOTE_DOUBLE";
+  entry.set(locale, node);
+}
+
+/** Marks `locale`'s text as machine text awaiting a native review: `machine: { <locale>: true }`. */
+export function flagMachine(entry: YAMLMap, locale: TranslatedLocale): void {
+  const reviewed = entry.get("reviewed");
+  if (isMap(reviewed)) {
+    reviewed.delete(locale);
+    if (reviewed.items.length === 0) entry.delete("reviewed");
+  }
+  const machine = entry.get("machine");
+  if (isMap(machine)) {
+    machine.set(locale, true);
+    return;
+  }
+  const flags = new YAMLMap();
+  flags.flow = true;
+  flags.set(locale, true);
+  entry.set("machine", flags);
+}
 
 /**
  * Writes accepted translations into the YAML text with `machine: { <locale>: true }`,
@@ -91,28 +143,9 @@ export function applyTranslations(
     }
     const entry = document.get(item.key);
     if (!isMap(entry)) continue;
-    entry.set(locale, text.trim());
-    const machine = entry.get("machine");
-    if (isMap(machine)) {
-      machine.set(locale, true);
-    } else {
-      const flags = document.createNode({ [locale]: true });
-      flags.flow = true;
-      entry.set("machine", flags);
-    }
+    writeText(entry, locale, text);
+    flagMachine(entry, locale);
     written.push(item.key);
-  }
-
-  // A scalar the translator touched keeps its style; everything else is untouched.
-  for (const key of written) {
-    const value =
-      (document.get(key) as ReturnType<typeof document.get> & { get?: unknown }) ?? null;
-    if (isMap(value)) {
-      const node = value.get(locale, true);
-      if (isScalar(node) && typeof node.value === "string" && /[{}:#]/.test(node.value)) {
-        node.type = "QUOTE_DOUBLE";
-      }
-    }
   }
   return { yaml: document.toString({ lineWidth: 0 }), written, rejected };
 }

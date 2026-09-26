@@ -5,8 +5,16 @@
 #     description: what it is and where it shows, for translators and reviewers
 #     fi: Finnish (required: CI fails without it, except under admin.*)
 #     sv: Swedish (CI warns without it)
-#     machine: { fi: true, sv: true }   # set by `pnpm i18n:translate`, cleared by a
-#                                       # native reviewer; a release tag refuses fi: true
+#     machine: { fi: true, sv: true }
+#       text a machine or an agent wrote, or anyone other than a native reviewer;
+#       a release refuses it in a released language (RELEASED_LOCALES)
+#     reviewed: { fi: "3f9a2c1e5b7d9f01" }
+#       written by `pnpm i18n:review` when a native reviewer approves: a hash of en
+#       and fi, so an edit to either shows as unreviewed. Never written by hand.
+#     max_length: 20
+#       optional: characters the text may take where the room is fixed
+#
+# Every fi and sv text carries machine or reviewed. docs/i18n/translation-review-guide.md is the review.
 #
 # Never inflect a dynamic value: proper nouns and user values stand in nominative
 # positions only ("in {pond}" is banned; ponds carry their case forms in the
@@ -18,6 +26,7 @@ smoke.title:
   description: App name as the heading of the smoke screen. Never translated.
   fi: Kuutti
   sv: Kuutti
+  machine: { fi: true, sv: true }
 
 smoke.loading:
   en: Reaching the API…
@@ -38,6 +47,7 @@ smoke.api.title:
   description: Smoke screen, title of the card about the API the app talks to. Never translated.
   fi: API
   sv: API
+  machine: { fi: true, sv: true }
 
 smoke.status.commit:
   en: git commit {commit}
@@ -1019,6 +1029,7 @@ settings.selected:
   description: Marks the chosen option of a group in text, so the choice never depends on colour. {option} is the option's own label, in nominative.
   fi: ✓ {option}
   sv: ✓ {option}
+  machine: { fi: true, sv: true }
 
 settings.highContrast:
   en: High contrast
@@ -1932,6 +1943,7 @@ photos.notice.dismiss:
   description: Photos screen, the button that dismisses a notice.
   fi: OK
   sv: OK
+  machine: { fi: true, sv: true }
 
 photos.refused.local:
   en: This photo cannot be used.

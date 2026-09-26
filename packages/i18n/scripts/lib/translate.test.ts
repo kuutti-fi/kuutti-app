@@ -1,13 +1,19 @@
 import { describe, expect, it } from "vitest";
 import { checkMessages } from "./check.ts";
 import { parseMessages } from "./schema.ts";
-import { applyTranslations, missingTranslations, type Translator } from "./translate.ts";
+import {
+  applyTranslations,
+  missingTranslations,
+  rejectionReason,
+  type Translator,
+} from "./translate.ts";
 
 const SOURCE = `# A comment that must survive.
 demo.greeting:
   en: Hello
   description: Greeting on the first screen.
   sv: Hej
+  machine: { sv: true }
 
 demo.count:
   en: "{likes, plural, one {# like} other {# likes}}"
@@ -107,7 +113,7 @@ describe("i18n:translate", () => {
     });
     expect(result.written).toEqual([]);
     expect(Object.values(result.rejected)).toEqual([
-      "contains control or bidirectional formatting characters",
+      "contains control, bidirectional or line-separator characters",
       "contains a link the English source does not have",
       "contains markup the English source does not have",
     ]);
@@ -127,5 +133,26 @@ describe("i18n:translate", () => {
     ]);
     const release = checkMessages(after, { release: true }).errors;
     expect(release.filter((e) => e.includes("still machine-translated"))).toHaveLength(3);
+  });
+});
+
+describe("untrusted text (#55)", () => {
+  it("refuses contact details, line separators and tags the English does not have", () => {
+    const cases: [string, string, string][] = [
+      ["Contact us", "Ota yhteyttä: kuutti-tuki.fi", "a web or e-mail address"],
+      ["Hello", "Hei tuki@evil.fi", "a web or e-mail address"],
+      ["Call us", "Soita +358 40 1234567", "a phone number"],
+      ["Hello", "Hei maailma", "line-separator characters"],
+      ["<b>Hello</b>", "<a>Hei</a>", "does not keep the tags"],
+    ];
+    for (const [en, text, reason] of cases) {
+      expect(rejectionReason(en, text, "fi"), text).toContain(reason);
+    }
+    // What the English has, the translation may keep; a time or a count is no phone number.
+    expect(
+      rejectionReason("Write to hello@kuutti.app", "Kirjoita: hello@kuutti.app", "fi"),
+    ).toBeUndefined();
+    expect(rejectionReason("<b>Hello</b>", "<b>Hei</b>", "fi")).toBeUndefined();
+    expect(rejectionReason("Opens at 12.30", "Aukeaa klo 12.30", "fi")).toBeUndefined();
   });
 });

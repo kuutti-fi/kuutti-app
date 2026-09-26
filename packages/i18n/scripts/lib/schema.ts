@@ -9,14 +9,26 @@ const KEY_PATTERN = /^[a-z][A-Za-z0-9_]*(\.[A-Za-z0-9_]+)+$/;
 
 const MachineFlags = z.strictObject({ fi: z.boolean().optional(), sv: z.boolean().optional() });
 
+// reviewHash(en, text): quoted in the file, since hex digits alone can read as a number.
+const ReviewHash = z.string().regex(/^[0-9a-f]{16}$/, "a review hash is sixteen hex digits");
+const ReviewHashes = z.strictObject({ fi: ReviewHash.optional(), sv: ReviewHash.optional() });
+
 const Message = z.strictObject({
   en: z.string().min(1),
   description: z.string().min(1),
   fi: z.string().min(1).optional(),
   sv: z.string().min(1).optional(),
+  /** Written by a machine or an agent; not yet read by a native speaker. */
   machine: MachineFlags.optional(),
+  /** Approved by a native reviewer: the hash of en and this text at the time (#55). */
+  reviewed: ReviewHashes.optional(),
+  /** Characters the text may take where the room is fixed (a button in a row); no arguments. */
+  max_length: z.int().positive().optional(),
   /** legal.* only: the consent version this wording belongs to (TD-17). */
-  consent_version: z.string().min(1).optional(),
+  consent_version: z
+    .string()
+    .regex(/^[0-9A-Za-z._-]+$/, "a consent_version is letters, digits, dots and dashes")
+    .optional(),
 });
 export type Message = z.infer<typeof Message>;
 export type Messages = Record<string, Message>;
@@ -54,6 +66,8 @@ export function parseMessages(yamlText: string): Messages {
     }
     if (isLegalKey(key)) {
       if (message.machine) problems.push(`${key}: legal text is never machine-translated`);
+      // Its Finnish is the binding source, written by people, not a translation to approve.
+      if (message.reviewed) problems.push(`${key}: legal text takes no review hash`);
       if (!message.consent_version) problems.push(`${key}: legal text needs a consent_version`);
     } else if (message.consent_version) {
       problems.push(`${key}: consent_version belongs to legal.* keys only`);
@@ -61,6 +75,12 @@ export function parseMessages(yamlText: string): Messages {
     for (const locale of TRANSLATED_LOCALES) {
       if (message.machine?.[locale] && !message[locale]) {
         problems.push(`${key}: machine.${locale} is set but there is no ${locale} text`);
+      }
+      if (message.reviewed?.[locale] && !message[locale]) {
+        problems.push(`${key}: reviewed.${locale} is set but there is no ${locale} text`);
+      }
+      if (message.machine?.[locale] && message.reviewed?.[locale]) {
+        problems.push(`${key}: ${locale} is both machine and reviewed; a review replaces the flag`);
       }
     }
   }

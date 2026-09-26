@@ -5,6 +5,7 @@ import {
   formatNumber,
   formatPond,
   parseAcceptLanguage,
+  RELEASED_LOCALES,
   resolveLocale,
   typedT,
 } from "./index.ts";
@@ -69,6 +70,13 @@ describe("locale resolution", () => {
     expect(resolveLocale(["de-DE", "sv_SE", "fi"])).toBe("sv");
     expect(resolveLocale(["de-DE"])).toBe("en");
     expect(resolveLocale([])).toBe("en");
+  });
+
+  it("offers only the released languages where it is told to: Swedish waits for its reviewer", () => {
+    expect(RELEASED_LOCALES).toEqual(["en", "fi"]);
+    expect(resolveLocale(["sv-FI", "fi-FI"], RELEASED_LOCALES)).toBe("fi");
+    expect(resolveLocale(["sv-FI"], RELEASED_LOCALES)).toBe("en");
+    expect(resolveLocale(["sv-FI"])).toBe("sv");
   });
 
   it("reads Accept-Language by weight and drops q=0 and the wildcard", () => {
