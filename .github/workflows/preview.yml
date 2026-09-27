@@ -117,8 +117,11 @@ jobs:
         run: |
           # The pull request may have merged or closed while this run waited
           # for the image or for its reviewer; the sweep has been there by
-          # then and nothing would remove what this step put back.
-          if [ "$(.github/scripts/pr-open.sh)" != true ]; then
+          # then and nothing would remove what this step put back. Assigned
+          # first, tested after: inside the test a failure of the question
+          # would read as "not open" and leave the lane green.
+          open=$(.github/scripts/pr-open.sh)
+          if [ "$open" != true ]; then
             echo "::notice::#$PR_NUMBER is no longer open; nothing deployed"
             echo "deployed=false" >> "$GITHUB_OUTPUT"
             exit 0
