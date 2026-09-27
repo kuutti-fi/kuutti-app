@@ -59,6 +59,13 @@ export function SignInScreen({ code, error, until }: SignInParams) {
   const exchanged = useRef<string | null>(null);
   const { signIn } = session;
 
+  // A refusal can arrive while this screen is shown: "Try again" opens the
+  // browser from here, and the link comes back to the same screen with its
+  // answer. The first state alone would go on saying that the bank is open.
+  useEffect(() => {
+    if (error) setPhase({ kind: "error", code: error, until });
+  }, [error, until]);
+
   const status = session.status;
   useEffect(() => {
     if (!code || status === "loading" || exchanged.current === code) return;
@@ -86,6 +93,9 @@ export function SignInScreen({ code, error, until }: SignInParams) {
   const open = async () => {
     tap();
     setPhase({ kind: "opening" });
+    // What the last link said is put away, so that the next one is news even
+    // when it says the same: the same refusal twice is two refusals.
+    router.setParams({ code: undefined, error: undefined, until: undefined });
     try {
       await markLoginStarted();
       await Linking.openURL(`${apiBaseUrl()}/auth/start?platform=${Platform.OS}`);

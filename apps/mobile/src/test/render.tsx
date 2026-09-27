@@ -10,15 +10,20 @@ const METRICS = {
   insets: { top: 47, left: 0, right: 0, bottom: 34 },
 };
 
-/** Renders under the providers the root layout supplies: safe area, language, theme and session. */
-export function renderWithTheme(ui: React.ReactElement) {
-  return render(
+/** The providers the root layout supplies: safe area, language, theme and session. */
+export function underProviders(ui: React.ReactElement) {
+  return (
     <SafeAreaProvider initialMetrics={METRICS}>
       <LocaleProvider>
         <ThemeProvider>
           <SessionProvider>{ui}</SessionProvider>
         </ThemeProvider>
       </LocaleProvider>
-    </SafeAreaProvider>,
+    </SafeAreaProvider>
   );
+}
+
+/** Renders under those providers. For new props on the same screen: `rerender(underProviders(...))`. */
+export function renderWithTheme(ui: React.ReactElement) {
+  return render(underProviders(ui));
 }
