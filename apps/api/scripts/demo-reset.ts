@@ -20,6 +20,7 @@ import {
   describeTarget,
   PERSONA_HISTORIES,
 } from "@kuutti/db/demo";
+import { takeSnapshot } from "../src/jobs/waitlist-snapshot.ts";
 import { loadConfig } from "../src/lib/config.ts";
 import { createLogger } from "../src/lib/logger.ts";
 import { createMediaDeps } from "../src/media/index.ts";
@@ -82,6 +83,11 @@ try {
       console.log(JSON.stringify({ msg: "demo reset: history", ...given }));
     }
   }
+  // The ponds have other people in them now: the counter of #54 is counted
+  // anew, as after a write of the population (demo-population.ts says why).
+  await pool.query("DELETE FROM waitlist_snapshot");
+  const counted = await takeSnapshot({ db: pool, logger, now });
+  console.log(JSON.stringify({ msg: "demo reset: counter recounted", ...counted }));
 } catch (error) {
   if (error instanceof DemoCommandError || error instanceof DemoError) {
     console.error(`✖ ${error.message}`);
