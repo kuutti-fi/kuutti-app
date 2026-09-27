@@ -128,22 +128,23 @@ for e in staging prod; do gh api "$R/environments/$e/deployment-branch-policies"
 
 ### Ruleset switch (#8, last)
 
-Once the checks exist on `main`, the ruleset `23053522` gains a pull-request rule and required checks, and direct pushes end. Code-owner review stays off: the only code owner is the maintainer, and an author cannot approve their own pull request, so requiring it would block every merge.
+With the checks on `main`, the ruleset `23053522` carries a pull-request rule and the required checks, and direct pushes have ended. Code-owner review stays off: the only code owner is the maintainer, and an author cannot approve their own pull request, so requiring it would block every merge.
 
 ```sh
 gh api -X PUT repos/kuutti-fi/kuutti-app/rulesets/23053522 --input - <<'JSON'
-{"name":"Protect main","target":"branch","enforcement":"active","bypass_actors":[],
+{"name":"Protect main","target":"branch","enforcement":"active",
+ "bypass_actors":[{"actor_id":5,"actor_type":"RepositoryRole","bypass_mode":"always"}],
  "conditions":{"ref_name":{"include":["~DEFAULT_BRANCH"],"exclude":[]}},
  "rules":[
   {"type":"deletion"},{"type":"non_fast_forward"},{"type":"required_linear_history"},
-  {"type":"pull_request","parameters":{"required_approving_review_count":0,"dismiss_stale_reviews_on_push":false,"require_code_owner_review":false,"require_last_push_approval":false,"required_review_thread_resolution":true,"allowed_merge_methods":["squash","rebase"]}},
+  {"type":"pull_request","parameters":{"required_approving_review_count":1,"dismiss_stale_reviews_on_push":true,"require_code_owner_review":false,"require_last_push_approval":false,"require_extra_approval_for_unattributed_changes":true,"required_review_thread_resolution":false,"allowed_merge_methods":["squash"]}},
   {"type":"required_status_checks","parameters":{"strict_required_status_checks_policy":true,"required_status_checks":[
-   {"context":"DCO sign-off"},{"context":"TruffleHog"},{"context":"typecheck"},{"context":"lint"},{"context":"test-api-packages"},{"context":"test-mobile"},{"context":"scenarios"},{"context":"schema-drift"},{"context":"workflows"}]}}
+   {"context":"typecheck"},{"context":"lint"},{"context":"test-api-packages"},{"context":"test-mobile"},{"context":"i18n"},{"context":"licenses"},{"context":"audit"},{"context":"scenarios"},{"context":"schema-drift"},{"context":"compose"},{"context":"issue-link"},{"context":"workflows"},{"context":"DCO sign-off"},{"context":"TruffleHog"}]}}
  ]}
 JSON
 ```
 
-`i18n` (#13), `licenses` and `dependency review` (#16) join the list: add `{"context":"i18n"},{"context":"licenses"},{"context":"dependency review"}`. Then update `CLAUDE.md` (Git) and `CONTRIBUTING.md` through the first pull request.
+The rules above are the live ones as of 2026-09-26: fourteen checks, `i18n` (#13) and `licenses` (#16) among them; one approving review since the `contributors` team got write (2026-09-25), and one more for changes no person is attributed to, such as a pull request Copilot's coding agent wrote (`require_extra_approval_for_unattributed_changes`); approvals are dismissed when new commits arrive (the native review of #55 relies on that); squash merges only. `dependency review` runs on every pull request without being required. The ruleset on GitHub is the source of truth (`gh api repos/kuutti-fi/kuutti-app/rulesets/23053522`), and a PUT replaces all of it, `bypass_actors` included: the snippet carries the live value, repository role 5 (admin) bypassing always, which only an admin token can read back, so compare before a PUT. `required_review_thread_resolution` is off, although #8 item 7 asked for it: with Copilot reviewing every pull request, an unresolved bot thread would block every merge until someone clicked; turning it on is a one-line change here and in the live rule, the maintainer's call. A change to the ruleset updates this snippet, `CLAUDE.md` (Git) and `CONTRIBUTING.md` in the same pull request.
 
 ### Hardening settings (#16), maintainer only
 
