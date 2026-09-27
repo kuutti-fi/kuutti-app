@@ -178,22 +178,24 @@ jobs:
       # The alias is what the pull request linked to; the deployments behind
       # it stay listed in the EAS dashboard. The update branch is pruned so the
       # free tier's branch list does not grow with every pull request (TD-2).
-      # "Not found" is the normal answer for a pull request that had no web
-      # or native lane; any other failure fails the step and keeps the
-      # application for the next sweep.
+      # "Could not find" is the normal answer for a pull request that had no
+      # web or native lane (EAS words it several ways, ABSENT lists them); any
+      # other failure fails the step and keeps the application for the next
+      # sweep.
       - name: Remove the EAS Hosting alias and the EAS Update branch
         working-directory: apps/mobile
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
           NUMBERS: ${{ needs.select.outputs.numbers }}
+          ABSENT: "could not find|not found|does not exist|doesn't exist|no such|no alias|no branch"
         run: |
           for pr in $(jq -r '.[]' <<< "$NUMBERS"); do
             if ! out=$(pnpm exec eas deploy:alias:delete "pr-$pr" --non-interactive 2>&1); then
-              grep -qiE "not found|does not exist|no alias" <<< "$out" && echo "no EAS Hosting alias pr-$pr" || { echo "$out"; exit 1; }
+              grep -qiE "$ABSENT" <<< "$out" && echo "no EAS Hosting alias pr-$pr" || { echo "$out"; exit 1; }
             fi
             if jq -e '.expo.updates.url' app.json >/dev/null 2>&1; then
               if ! out=$(pnpm exec eas branch:delete "pr-$pr" --non-interactive 2>&1); then
-                grep -qiE "not found|does not exist|no branch" <<< "$out" && echo "no EAS Update branch pr-$pr" || { echo "$out"; exit 1; }
+                grep -qiE "$ABSENT" <<< "$out" && echo "no EAS Update branch pr-$pr" || { echo "$out"; exit 1; }
               fi
             fi
           done
