@@ -8,27 +8,28 @@
  *   pnpm demo:reset -- --api http://localhost:3000
  *
  * Needs the local environment running (`pnpm env:up`): the histories log in
- * at the mock bank and talk to the API. Goes ahead only in development and
- * test and only against a database server that is not a deployed one
- * (packages/db/src/seed/command.ts).
+ * at the mock bank and talk to the API. Everything it touches is on this
+ * computer, and it looks before it acts: development or test, an API and a
+ * bank on a loopback address, configuration from this process alone (never
+ * from a parameter store), a database server that is not a deployed one, and
+ * an object store that is the local stand-in or none.
  */
 import { createPool } from "@kuutti/db";
 import {
   assertDemoTarget,
-  DEMO_ENVIRONMENTS,
   DemoCommandError,
   describeTarget,
   PERSONA_HISTORIES,
 } from "@kuutti/db/demo";
 import { takeSnapshot } from "../src/jobs/waitlist-snapshot.ts";
-import { loadConfig } from "../src/lib/config.ts";
+import { parseConfig } from "../src/lib/config.ts";
 import { createLogger } from "../src/lib/logger.ts";
 import { createMediaDeps } from "../src/media/index.ts";
-import { DemoError } from "./demo/bank.ts";
+import { DemoError, onThisComputer } from "./demo/bank.ts";
 import { giveHistory } from "./demo/histories.ts";
 import { resetPersonas } from "./demo/reset.ts";
 
-function fail(message: string, code = 1): never {
+function fail(message: string, code = 2): never {
   console.error(`✖ ${message}`);
   process.exit(code);
 }
@@ -37,30 +38,49 @@ function fail(message: string, code = 1): never {
 const args = process.argv.slice(2).filter((arg, i) => !(arg === "--" && i === 0));
 let api = "http://localhost:3000";
 let bare = false;
+const seen = new Set<string>();
 for (let i = 0; i < args.length; i += 1) {
   const arg = args[i] as string;
+  const flag = arg.startsWith("--api=") ? "--api" : arg;
+  if (seen.has(flag)) fail(`${flag} is given twice`);
+  seen.add(flag);
   if (arg === "--bare") bare = true;
   else if (arg === "--api") {
     i += 1;
-    api = args[i] ?? fail("--api takes the address of the API", 2);
+    api = args[i] ?? fail("--api takes the address of the API");
   } else if (arg.startsWith("--api=")) api = arg.slice("--api=".length);
-  else fail(`unknown argument ${arg}: --bare and --api are all there is`, 2);
+  else fail(`unknown argument ${arg}: --bare and --api are all there is`);
 }
-const apiUrl = URL.canParse(api) ? new URL(api) : fail(`--api is no address: ${api}`, 2);
-// The API the histories talk to is the one on this computer, like the mock bank.
-if (!["localhost", "127.0.0.1", "[::1]"].includes(apiUrl.hostname)) {
-  fail(`refusing: the personas get their histories from a local API, not from ${apiUrl.host}`, 2);
+const apiUrl = URL.canParse(api) ? new URL(api) : fail(`--api is no address: ${api}`);
+if (!onThisComputer(apiUrl)) {
+  fail(`refusing: the personas get their histories from a local API, not from ${apiUrl.host}`);
 }
 
 const env = process.env.APP_ENV ?? "development";
 if (env !== "development" && env !== "test") {
   fail(
-    `refusing: APP_ENV is "${env}", and the personas are reset in development and test only (of ${DEMO_ENVIRONMENTS.join(", ")}, a preview has no mock bank)`,
-    2,
+    `refusing: APP_ENV is "${env}", and the personas are reset in development and test only: nothing else has a mock bank`,
   );
 }
 
-const config = await loadConfig();
+// From this process's environment and nothing else: `loadConfig` would read a
+// parameter store when a prefix is set, and a deployed environment's
+// configuration has no business here.
+const config = parseConfig({ ...process.env, SSM_PARAMETER_PREFIX: undefined });
+const issuer = config.OIDC_ISSUER && URL.canParse(config.OIDC_ISSUER) ? config.OIDC_ISSUER : null;
+if (!issuer || !onThisComputer(new URL(issuer))) {
+  fail(
+    `refusing: the bank of this configuration is ${issuer ? new URL(issuer).host : "not set"}, not the mock bank on this computer`,
+  );
+}
+// Erasure deletes a photo's objects. The local stand-in's, or nobody's: a
+// bucket behind a distribution is a deployed one.
+const media = createMediaDeps(config);
+const store = media.setup.mode === "presigned" ? media.deps : undefined;
+if (media.setup.mode === "cloudfront") {
+  fail("refusing: the object store of this configuration is a deployed one");
+}
+
 const logger = await createLogger({ level: "warn", pretty: false });
 const pool = createPool({
   connectionString: config.databaseUrl,
@@ -69,16 +89,25 @@ const pool = createPool({
 });
 try {
   const target = await describeTarget(pool);
-  console.log(JSON.stringify({ msg: "demo reset: target", env, api: apiUrl.origin, ...target }));
+  console.log(
+    JSON.stringify({
+      msg: "demo reset: target",
+      env,
+      api: apiUrl.origin,
+      bank: new URL(issuer).origin,
+      objects: media.setup.mode,
+      ...target,
+    }),
+  );
   assertDemoTarget(target, env);
 
-  const media = createMediaDeps(config).deps;
   const now = () => new Date();
-  const reset = await resetPersonas({ db: pool, logger, now, ...(media ? { media } : {}) });
+  const reset = await resetPersonas({ db: pool, logger, now, ...(store ? { media: store } : {}) });
   console.log(JSON.stringify({ msg: "demo reset: personas forgotten", ...reset }));
 
   if (!bare) {
     for (const history of PERSONA_HISTORIES) {
+      if (reset.spared.includes(history.key)) continue;
       const given = await giveHistory(history, { api: apiUrl.origin, fetch, now, db: pool });
       console.log(JSON.stringify({ msg: "demo reset: history", ...given }));
     }
@@ -88,6 +117,12 @@ try {
   await pool.query("DELETE FROM waitlist_snapshot");
   const counted = await takeSnapshot({ db: pool, logger, now });
   console.log(JSON.stringify({ msg: "demo reset: counter recounted", ...counted }));
+
+  if (reset.spared.length > 0) {
+    throw new DemoError(
+      `left alone, because they hold a staff row on this machine: ${reset.spared.join(", ")}. Take the role away (pnpm --filter @kuutti/db moderator) and reset again; a persona that has written into the audit log stays until the database is made anew`,
+    );
+  }
 } catch (error) {
   if (error instanceof DemoCommandError || error instanceof DemoError) {
     console.error(`✖ ${error.message}`);

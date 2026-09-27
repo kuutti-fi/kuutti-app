@@ -15,7 +15,32 @@ export type BankContext = {
   api: string;
   fetch: Fetch;
   now: () => Date;
+  /** How to wait for the rate limit; a test does not wait. */
+  sleep?: (ms: number) => Promise<void>;
 };
+
+const LOOPBACK = new Set(["localhost", "127.0.0.1", "[::1]"]);
+
+/** Whether the address is on this computer: the only place a persona's claims are sent to. */
+export const onThisComputer = (url: URL): boolean => LOOPBACK.has(url.hostname);
+
+/** The longest the walk waits for the rate limit's window, which is a minute. */
+const RETRY_AFTER_MAX_SECONDS = 65;
+
+/**
+ * One request, and once more after the wait the API asks for when it answers
+ * 429: the histories are some seventy requests against a limit of 120 a
+ * minute, and a second reset within the minute would otherwise stop half way.
+ */
+async function patient(context: BankContext, input: URL, init?: RequestInit): Promise<Response> {
+  const first = await context.fetch(input, init);
+  if (first.status !== 429) return first;
+  const asked = Number(first.headers.get("retry-after"));
+  const seconds = Number.isFinite(asked) && asked > 0 ? asked : RETRY_AFTER_MAX_SECONDS;
+  const sleep = context.sleep ?? ((ms: number) => new Promise((done) => setTimeout(done, ms)));
+  await sleep(Math.min(seconds, RETRY_AFTER_MAX_SECONDS) * 1000);
+  return context.fetch(input, init);
+}
 
 export type Login =
   | { kind: "session"; outcome: "created" | "resumed"; accessToken: string }
@@ -41,8 +66,8 @@ export async function loginAs(
   context: BankContext,
   locale: "fi" | "sv" | "en" = "fi",
 ): Promise<Login> {
-  const { api, fetch } = context;
-  const start = await fetch(new URL(`/auth/start?platform=ios&locale=${locale}`, api), {
+  const { api } = context;
+  const start = await patient(context, new URL(`/auth/start?platform=ios&locale=${locale}`, api), {
     redirect: "manual",
   });
   if (start.status === 503) {
@@ -51,8 +76,16 @@ export async function loginAs(
     );
   }
   const bank = locationOf(start, "/auth/start");
+  // The claims are artificial, and still they go to the mock bank on this
+  // computer and nowhere else: an API configured for a real broker would
+  // send this walk to somebody who never asked for it.
+  if (!onThisComputer(bank)) {
+    throw new DemoError(
+      `the API's bank is ${bank.host}, not the mock bank on this computer: nothing was sent`,
+    );
+  }
 
-  const posted = await fetch(bank, {
+  const posted = await context.fetch(bank, {
     method: "POST",
     redirect: "manual",
     headers: { "content-type": "application/x-www-form-urlencoded" },
@@ -62,10 +95,13 @@ export async function loginAs(
     }).toString(),
   });
   const back = locationOf(posted, `the bank, as ${persona.key}`);
+  if (back.pathname !== "/auth/callback") {
+    throw new DemoError(`the bank sent back to ${back.pathname}, not to /auth/callback`);
+  }
 
   // The redirect URI is the API's own and may name a host this process does
-  // not reach it by: the path and the query are what matter.
-  const callback = await fetch(new URL(`${back.pathname}${back.search}`, api), {
+  // not reach it by: the query is what matters.
+  const callback = await patient(context, new URL(`/auth/callback${back.search}`, api), {
     redirect: "manual",
   });
   const link = locationOf(callback, "/auth/callback");
@@ -74,7 +110,7 @@ export async function loginAs(
   const code = link.searchParams.get("code");
   if (!code) throw new DemoError(`/auth/callback: no code and no error in ${link.protocol}`);
 
-  const exchanged = await fetch(new URL("/auth/exchange", api), {
+  const exchanged = await patient(context, new URL("/auth/exchange", api), {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ code }),
@@ -92,7 +128,7 @@ export async function call(
   path: string,
   body?: unknown,
 ): Promise<unknown> {
-  const response = await context.fetch(new URL(path, context.api), {
+  const response = await patient(context, new URL(path, context.api), {
     method,
     headers: {
       authorization: `Bearer ${accessToken}`,

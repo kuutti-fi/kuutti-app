@@ -1,6 +1,11 @@
-import type { Queryable } from "@kuutti/db";
-import { OLDER_TERMS_VERSION, type PersonaHistory, personaOf } from "@kuutti/db/demo";
-import { ConsentsResponse, PondList, SessionResponse } from "@kuutti/schema";
+import { type Queryable, transaction } from "@kuutti/db";
+import {
+  MOCK_BANK_AMR,
+  OLDER_TERMS_VERSION,
+  type PersonaHistory,
+  personaOf,
+} from "@kuutti/db/demo";
+import { ConsentsResponse, OnboardingStatus, PondList, SessionResponse } from "@kuutti/schema";
 import { type BankContext, call, DemoError, loginAs } from "./bank.ts";
 
 /**
@@ -56,30 +61,62 @@ export async function giveHistory(
     await as("PUT", "/account/pond", { pondId: pond.id });
   }
   if (history.profile) await as("PUT", "/profile", history.profile);
+  if (history.onboarding) {
+    // The app reads its onboarding after the last answer, and that reading is
+    // what makes the account active (ADR-010): the persona's app has done it.
+    const status = OnboardingStatus.parse(await as("GET", "/onboarding"));
+    if (status.state !== "active") {
+      throw new DemoError(`${history.key} did not become active: ${status.missing.join(", ")}`);
+    }
+  }
 
+  // What no route does. Each statement names the account the API said this
+  // session is of and, beside it, the persona at the mock bank: whatever the
+  // API answers, no other account is touched. And each must have met its
+  // row: an API that serves another database than this one is said, not
+  // passed over.
   const at = context.now();
+  const ofPersona = `account_id IN (SELECT a.id FROM account a JOIN identity i ON i.id = a.identity_id
+     WHERE a.id = $1 AND i.broker_subject = $2 AND $3 = ANY(i.amr))`;
+  const who = [accountId, history.key, MOCK_BANK_AMR];
+  const met = (what: string, rows: number | null) => {
+    if (rows !== 1) {
+      throw new DemoError(
+        `${history.key}: ${what} met ${rows ?? 0} rows, not one: does the API serve the database of DATABASE_URL?`,
+      );
+    }
+  };
   switch (history.afterwards) {
-    case "older_terms":
+    case "older_terms": {
       // The wording moved on after she agreed: her consent names a version
       // that is no longer the one in force, and the app asks again.
-      await context.db.query(
-        "UPDATE consent SET version = $2 WHERE account_id = $1 AND kind = 'terms'",
-        [accountId, OLDER_TERMS_VERSION],
+      const changed = await context.db.query(
+        `UPDATE consent SET version = $4 WHERE kind = 'terms' AND ${ofPersona}`,
+        [...who, OLDER_TERMS_VERSION],
       );
+      met("the older wording", changed.rowCount);
       break;
+    }
     case "banned":
       // What a moderator's decision will write (M4): the sanction is on the
       // identity, so a new login finds it; the account and its sessions end.
-      await context.db.query(
-        `UPDATE identity SET standing = 'banned', standing_changed_at = $2
-         WHERE id = (SELECT identity_id FROM account WHERE id = $1)`,
-        [accountId, at],
-      );
-      await context.db.query(
-        "UPDATE account SET state = 'banned', state_changed_at = $2 WHERE id = $1",
-        [accountId, at],
-      );
-      await context.db.query("DELETE FROM session WHERE account_id = $1", [accountId]);
+      await transaction(context.db, async (tx) => {
+        const banned = await tx.query(
+          `UPDATE identity SET standing = 'banned', standing_changed_at = $4
+           WHERE broker_subject = $2 AND $3 = ANY(amr)
+             AND id = (SELECT identity_id FROM account WHERE id = $1)`,
+          [...who, at],
+        );
+        met("the ban", banned.rowCount);
+        const ended = await tx.query(
+          `UPDATE account SET state = 'banned', state_changed_at = $4
+           WHERE id = $1 AND identity_id IN
+             (SELECT id FROM identity WHERE broker_subject = $2 AND $3 = ANY(amr))`,
+          [...who, at],
+        );
+        met("the account's end", ended.rowCount);
+        await tx.query(`DELETE FROM session WHERE ${ofPersona}`, who);
+      });
       break;
     case "deleted":
       await as("POST", "/account/delete", { confirm: true });

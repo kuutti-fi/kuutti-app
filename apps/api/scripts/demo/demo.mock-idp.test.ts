@@ -13,7 +13,11 @@ import {
   ProfileUpdate,
 } from "@kuutti/schema";
 import { createApp } from "../../src/app.ts";
-import { brokerOptionsFromConfig, OidcBroker } from "../../src/identity/index.ts";
+import {
+  brokerOptionsFromConfig,
+  OidcBroker,
+  REREGISTER_COOLDOWN_DAYS,
+} from "../../src/identity/index.ts";
 import {
   captureLogger,
   describe,
@@ -22,7 +26,7 @@ import {
   test,
   testConfig,
 } from "../../src/test/harness.ts";
-import { type BankContext, call, type Fetch, loginAs } from "./bank.ts";
+import { type BankContext, call, DemoError, type Fetch, loginAs } from "./bank.ts";
 import { giveHistory } from "./histories.ts";
 import { resetPersonas } from "./reset.ts";
 
@@ -31,10 +35,15 @@ import { resetPersonas } from "./reset.ts";
 // transaction that is rolled back. Runs where the mock is up
 // (`docker compose up -d`, the CI compose job) and is skipped elsewhere, like
 // oidc-broker.mock-idp.test.ts.
+//
+// The clock is the real one, on purpose. The API under test reads the time
+// itself, so a fixed instant for the bank's claims would part from it as the
+// days pass: a person born "this month" is of another age next month. What
+// is expected is said relative to now instead, and holds on any day.
 
 const ISSUER = process.env.MOCK_IDP_ISSUER ?? "http://127.0.0.1:8080/ftn";
 const API = "http://localhost:3000";
-const NOW = new Date("2026-09-27T12:00:00Z");
+const DAY_MS = 24 * 60 * 60 * 1000;
 const reachable = await fetch(`${ISSUER}/.well-known/openid-configuration`, {
   signal: AbortSignal.timeout(1500),
 })
@@ -46,6 +55,10 @@ const persona = (key: string) => {
   if (!found) throw new Error(`no persona ${key}`);
   return found;
 };
+
+/** Whether the day is the last of its month, in UTC, as the age rule counts. */
+const lastDayOfMonth = (at: Date) =>
+  at.getUTCDate() === new Date(Date.UTC(at.getUTCFullYear(), at.getUTCMonth() + 1, 0)).getUTCDate();
 
 async function world(ctx: TestContext) {
   const { logger, lines } = await captureLogger();
@@ -73,7 +86,7 @@ async function world(ctx: TestContext) {
       ? Promise.resolve(app.request(`${url.pathname}${url.search}`, init))
       : fetch(url, init);
   };
-  const bank: BankContext = { api: API, fetch: route, now: () => NOW };
+  const bank: BankContext = { api: API, fetch: route, now: () => new Date() };
   return { app, bank, logger, lines, context: { ...bank, db: ctx.client } };
 }
 
@@ -103,6 +116,81 @@ describe("the histories are what a person's own answers would be", () => {
   });
 });
 
+describe("the walk to the bank and back", () => {
+  const answer = (status: number, headers: Record<string, string> = {}) =>
+    new Response(null, { status, headers });
+
+  test("sends a persona's claims to a bank on this computer and to no other", async () => {
+    const asked: string[] = [];
+    const context: BankContext = {
+      api: API,
+      now: () => new Date(),
+      fetch: async (input) => {
+        asked.push(String(input));
+        return answer(302, {
+          location: "https://tunnistus-pp.telia.fi/uas/oauth2/authorization?x",
+        });
+      },
+    };
+    await expect(loginAs(persona("aino"), context)).rejects.toThrow(
+      /not the mock bank on this computer: nothing was sent/,
+    );
+    // The API was asked where the bank is, and nobody else was asked anything.
+    expect(asked).toEqual([`${API}/auth/start?platform=ios&locale=fi`]);
+  });
+
+  test("follows the bank back to the callback and to nowhere else", async () => {
+    const asked: string[] = [];
+    const context: BankContext = {
+      api: API,
+      now: () => new Date(),
+      fetch: async (input) => {
+        asked.push(String(input));
+        return asked.length === 1
+          ? answer(302, { location: "http://127.0.0.1:8080/ftn/authorize?state=s" })
+          : answer(302, { location: `${API}/account/export?x=1` });
+      },
+    };
+    await expect(loginAs(persona("aino"), context)).rejects.toThrow(/not to \/auth\/callback/);
+    expect(asked).toHaveLength(2);
+  });
+
+  test("waits as long as the rate limit asks and tries once more, not twice", async () => {
+    const waited: number[] = [];
+    let calls = 0;
+    const context: BankContext = {
+      api: API,
+      now: () => new Date(),
+      sleep: async (ms) => {
+        waited.push(ms);
+      },
+      fetch: async () => {
+        calls += 1;
+        return calls === 1
+          ? answer(429, { "retry-after": "7" })
+          : new Response(JSON.stringify({ ok: true }), { status: 200 });
+      },
+    };
+    expect(await call(context, "t".repeat(43), "GET", "/profile")).toEqual({ ok: true });
+    expect(waited).toEqual([7000]);
+
+    calls = -10; // limited again and again: the second answer is the answer
+    const limited: BankContext = {
+      ...context,
+      fetch: async () =>
+        new Response(
+          JSON.stringify({ error: { code: "rate_limited", message: "x", requestId: "r" } }),
+          { status: 429, headers: { "retry-after": "900" } },
+        ),
+    };
+    await expect(call(limited, "t".repeat(43), "GET", "/profile")).rejects.toThrow(
+      /429 rate_limited/,
+    );
+    // Never longer than the limit's own window, whatever the header says.
+    expect(waited).toEqual([7000, 65_000]);
+  });
+});
+
 describe.skipIf(!reachable)("the personas, through the mock bank", () => {
   test("a newcomer logs in with one posted form and is a fresh account", async ({ ctx }) => {
     const { bank } = await world(ctx);
@@ -117,7 +205,9 @@ describe.skipIf(!reachable)("the personas, through the mock bank", () => {
     expect(rows).toEqual([{ birth_year: 1997, birth_month: 3 }]);
   });
 
-  test("the ages are let in and refused by the product's own rule", async ({ ctx }) => {
+  test("the ages are let in and refused by the product's own rule, on whatever day this runs", async ({
+    ctx,
+  }) => {
     const { bank } = await world(ctx);
     expect(await loginAs(persona("eetu"), bank)).toMatchObject({ kind: "session" });
     expect(await loginAs(persona("helmi"), bank)).toMatchObject({ kind: "session" });
@@ -126,15 +216,26 @@ describe.skipIf(!reachable)("the personas, through the mock bank", () => {
       error: "auth_under_18",
       until: null,
     });
-    // NOW is the 27th of a month of thirty days: she is 17 until its last day.
-    expect(await loginAs(persona("venla"), bank)).toMatchObject({ error: "auth_under_18" });
+    // She turns 18 this month: refused on every day of it but the last, when
+    // the rule counts her birthday. Asked before and after, for a run across
+    // midnight.
+    const before = lastDayOfMonth(new Date());
+    const venla = await loginAs(persona("venla"), bank);
+    const after = lastDayOfMonth(new Date());
+    if (before === after) {
+      expect(venla).toMatchObject(
+        before ? { kind: "session" } : { kind: "refused", error: "auth_under_18" },
+      );
+    }
   });
 
   test("the six histories leave each persona where the mock bank's page says", async ({ ctx }) => {
     const { bank, context, lines } = await world(ctx);
+    const began = Date.now();
     for (const history of PERSONA_HISTORIES) {
       expect(await giveHistory(history, context)).toMatchObject({ key: history.key });
     }
+    const ended = Date.now();
 
     const as = async (key: string) => {
       const login = await loginAs(persona(key), bank);
@@ -145,6 +246,22 @@ describe.skipIf(!reachable)("the personas, through the mock bank", () => {
       const profile = ProfileResponse.parse(await call(bank, login.accessToken, "GET", "/profile"));
       return { login, onboarding, profile };
     };
+    const stateOf = async (key: string) =>
+      (
+        await ctx.client.query<{ state: string }>(
+          `SELECT a.state FROM account a JOIN identity i ON i.id = a.identity_id
+           WHERE i.broker_subject = $1`,
+          [key],
+        )
+      ).rows.map((r) => r.state);
+
+    // Active before anybody looked: the history itself made them so.
+    expect(await stateOf("sanna")).toEqual(["active"]);
+    expect(await stateOf("noa")).toEqual(["active"]);
+    expect(await stateOf("kerttu")).toEqual(["active"]);
+    expect(await stateOf("onni")).toEqual(["registered"]);
+    expect(await stateOf("tapio")).toEqual(["banned"]);
+    expect(await stateOf("ilona")).toEqual(["deleted"]);
 
     const sanna = await as("sanna");
     expect(sanna.login.outcome).toBe("resumed");
@@ -163,8 +280,9 @@ describe.skipIf(!reachable)("the personas, through the mock bank", () => {
     ]);
     expect((await as("noa")).onboarding.gender).toBe("non_binary");
 
-    // The wording moved on: the app asks for the terms again, and only for them.
-    expect((await as("kerttu")).onboarding.missing).toEqual(["terms"]);
+    // The wording moved on: an active account that is asked for the terms again, and only for them.
+    const kerttu = await as("kerttu");
+    expect(kerttu.onboarding).toMatchObject({ state: "active", missing: ["terms"] });
     const { rows: older } = await ctx.client.query<{ version: string }>(
       `SELECT c.version FROM consent c JOIN account a ON a.id = c.account_id
        JOIN identity i ON i.id = a.identity_id WHERE i.broker_subject = 'kerttu' AND c.kind = 'terms'`,
@@ -178,7 +296,10 @@ describe.skipIf(!reachable)("the personas, through the mock bank", () => {
     });
     const ilona = await loginAs(persona("ilona"), bank);
     expect(ilona).toMatchObject({ kind: "refused", error: "auth_cooldown" });
-    expect(ilona.kind === "refused" && ilona.until).toMatch(/^2026-10-2\d/);
+    // The waiting time, counted from when she deleted her account.
+    const until = Date.parse((ilona.kind === "refused" && ilona.until) || "");
+    expect(until).toBeGreaterThanOrEqual(began + REREGISTER_COOLDOWN_DAYS * DAY_MS - 1000);
+    expect(until).toBeLessThanOrEqual(ended + REREGISTER_COOLDOWN_DAYS * DAY_MS + 1000);
 
     // Nothing of a persona's bank claims is in a log line: no code, no name.
     // The codes themselves, not a pattern: a request id can look like one.
@@ -186,14 +307,28 @@ describe.skipIf(!reachable)("the personas, through the mock bank", () => {
     expect(lines().length).toBeGreaterThan(20);
     for (const p of DEMO_PERSONAS) {
       expect(logged).not.toContain(p.family);
-      expect(logged).not.toContain(personaHetu(p, NOW));
+      for (const at of [began, ended]) expect(logged).not.toContain(personaHetu(p, new Date(at)));
     }
+  });
+
+  test("a history says so when the API serves another database than the command's", async ({
+    ctx,
+  }) => {
+    const { context } = await world(ctx);
+    const kerttu = PERSONA_HISTORIES.find((h) => h.key === "kerttu");
+    if (!kerttu) throw new Error("no history of kerttu");
+    // The statements go where nothing of the persona is: they meet no row.
+    const elsewhere = { query: async () => ({ rows: [], rowCount: 0 }) };
+    await expect(
+      giveHistory(kerttu, { ...context, db: elsewhere as unknown as typeof context.db }),
+    ).rejects.toThrow(DemoError);
   });
 
   test("the reset forgets every persona through the erasure path, and nobody else", async ({
     ctx,
   }) => {
     const { bank, context, logger } = await world(ctx);
+    const now = () => new Date();
     for (const history of PERSONA_HISTORIES) await giveHistory(history, context);
     await loginAs(persona("aino"), bank);
     // Somebody who is no persona, at the same bank.
@@ -210,10 +345,10 @@ describe.skipIf(!reachable)("the personas, through the mock bank", () => {
     const personas = `broker_subject = ANY(ARRAY[${DEMO_PERSONAS.map((p) => `'${p.key}'`).join(",")}])`;
     expect(await count(`SELECT count(*) AS n FROM identity WHERE ${personas}`)).toBe(8);
 
-    const result = await resetPersonas({ db: ctx.client, logger, now: () => NOW });
+    const result = await resetPersonas({ db: ctx.client, logger, now });
     // Seven identities of the mock bank; six accounts were live (Ilona's was a tombstone
-    // already, Tapio's was banned and is taken like any other).
-    expect(result).toMatchObject({ identities: 7, erased: 6 });
+    // already, Tapio's was banned and is taken as it is).
+    expect(result).toEqual({ identities: 7, erased: 6, objects: 0, spared: [] });
     expect(await count(`SELECT count(*) AS n FROM identity WHERE ${personas}`)).toBe(1);
     expect(
       await count(
@@ -231,9 +366,35 @@ describe.skipIf(!reachable)("the personas, through the mock bank", () => {
         outcome: "created",
       });
     }
-    expect(await resetPersonas({ db: ctx.client, logger, now: () => NOW })).toMatchObject({
+    expect(await resetPersonas({ db: ctx.client, logger, now })).toMatchObject({
       identities: 4,
       erased: 4,
     });
+  });
+
+  test("a persona that was made a moderator is left alone, whole, and the others are reset", async ({
+    ctx,
+  }) => {
+    const { bank, logger } = await world(ctx);
+    const now = () => new Date();
+    await loginAs(persona("aino"), bank);
+    await loginAs(persona("mikael"), bank);
+    // As the moderator's command line grants a role: to the identity that just logged in.
+    await ctx.client.query(
+      `INSERT INTO moderator_roles (identity_id, role, granted_by)
+       SELECT id, 'moderator', 'test' FROM identity WHERE broker_subject = 'aino'`,
+    );
+
+    const result = await resetPersonas({ db: ctx.client, logger, now });
+    expect(result).toEqual({ identities: 1, erased: 1, objects: 0, spared: ["aino"] });
+    // Not erased and then stuck: her account is as it was, and she is who she was.
+    expect(await loginAs(persona("aino"), bank)).toMatchObject({ outcome: "resumed" });
+    expect(await loginAs(persona("mikael"), bank)).toMatchObject({ outcome: "created" });
+    // And again, as often as it is run.
+    expect(await resetPersonas({ db: ctx.client, logger, now })).toMatchObject({
+      erased: 1,
+      spared: ["aino"],
+    });
+    expect(await loginAs(persona("aino"), bank)).toMatchObject({ outcome: "resumed" });
   });
 });

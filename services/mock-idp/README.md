@@ -14,9 +14,9 @@ One tap logs a persona in. Nothing in the API or the app knows about them: the b
 |---|---|---|
 | Aino Virtanen | 14/03/1997 | the walkthrough: registers, onboards, fills in a profile, uploads photos |
 | Mikael Lindqvist | 02/08/1992 | a second newcomer, for the walkthrough in Swedish |
-| Sanna Korhonen | 23/11/1989 | onboarded, with a complete profile |
+| Sanna Korhonen | 23/11/1989 | onboarded, with a profile that lacks only its photos until the photo loader has run |
 | Onni Mäkelä | 30/05/1995 | registered and never onboarded |
-| Noa Salmi | 09/01/1999 | two photos only: the profile says what is missing |
+| Noa Salmi | 09/01/1999 | onboarded, with a profile; two photos only once the photo loader has run, so the profile says what is missing |
 | Kerttu Åkerlund | 17/06/1985 | accepted an older wording of the terms: the app asks again |
 | Tapio Heikkinen | 05/02/1978 | a banned identity: the login is refused |
 | Ilona Öhman | 27/09/1993 | deleted her account: refused until the waiting time is over |
@@ -35,7 +35,14 @@ pnpm demo:reset
 
 Returns all twelve to where they begin, in a couple of seconds, with the local environment running (`pnpm env:up`). First every persona is forgotten: each live account goes through the erasure path, the function behind "delete my account", and then what erasure keeps of a person (the tombstone, the consents, the identity with its waiting time) is deleted too, which is right for a persona and never done for a person. Then the six histories are given anew: the command logs each persona in at this mock bank and sends the answers of onboarding and the profile through the API's own routes, as the app does. What no route does is done in the database afterwards: Kerttu's consent is given the version of an older wording, and Tapio's identity is banned. Ilona deletes her account herself.
 
-`pnpm demo:reset -- --bare` forgets everybody and gives no history. The command talks to a local API only, goes ahead in development and test only, and refuses a database server that is a deployed one, whatever the environment is called. The histories are data in `packages/db/src/seed/histories.ts`.
+`pnpm demo:reset -- --bare` forgets everybody and gives no history. The histories are data in `packages/db/src/seed/histories.ts`.
+
+Everything the command touches is on this computer, and it looks before it acts: development or test; an API and a bank on a loopback address (a persona's claims are posted to the mock bank and to nobody else); configuration from its own environment, never from a parameter store; a database server that is not a deployed one, whatever the environment is called; an object store that is the local stand-in or none.
+
+Two things to know:
+
+- A second reset within a minute of the first takes up to a minute: the histories are some seventy requests against the API's limit of 120 a minute, and the command waits as long as the API asks and goes on.
+- A persona that holds a staff row is left alone, whole, and named at the end. That happens when a persona was made a moderator on this machine (the moderator's command line grants the role to the identity that just logged in). Take the role away and reset again; a persona that has written into the audit log stays until the database is made anew, because that log is never deleted from.
 
 Their personal identity codes are artificial: the individual number is in 900 to 999, which the population register does not give to a person. The page computes a code when its button is pressed, and the generator refuses a persona with any other number.
 

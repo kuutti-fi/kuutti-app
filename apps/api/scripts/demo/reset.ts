@@ -20,20 +20,37 @@ import type { MediaDeps } from "../../src/media/index.ts";
  * persona's name and the bank is the mock one. The command that calls this
  * has asked the server what it is first (`assertDemoTarget`): none of this
  * ever runs against a deployed database.
+ *
+ * A persona that holds a staff row is left alone, whole: somebody made it a
+ * moderator on this machine (the moderator's command line grants the role to
+ * the identity that just logged in, which locally is a persona's button), and
+ * what it then wrote into the audit log can never be deleted. Erasing it and
+ * failing on the deletion afterwards would leave a persona no later reset
+ * could repair, so the question is asked before anybody is erased.
  */
 export type ResetDeps = { db: Queryable; logger: Logger; now: () => Date; media?: MediaDeps };
 
-export type ResetResult = { identities: number; erased: number; objects: number };
-
-const ERASABLE = new Set(["registered", "active", "paused", "shadow_banned"]);
+export type ResetResult = {
+  identities: number;
+  erased: number;
+  objects: number;
+  /** The personas left alone because they hold a staff row, by name. */
+  spared: string[];
+};
 
 export async function resetPersonas(deps: ResetDeps): Promise<ResetResult> {
-  const { rows: identities } = await deps.db.query<{ id: string }>(
-    "SELECT id FROM identity WHERE broker_subject = ANY($1) AND $2 = ANY(amr)",
+  const { rows: identities } = await deps.db.query<{ id: string; key: string; staff: boolean }>(
+    `SELECT i.id, i.broker_subject AS key,
+            (EXISTS (SELECT 1 FROM moderator_roles m WHERE m.identity_id = i.id)
+             OR EXISTS (SELECT 1 FROM admin_session s WHERE s.identity_id = i.id)
+             OR EXISTS (SELECT 1 FROM audit_log a WHERE a.actor_identity_id = i.id)
+             OR EXISTS (SELECT 1 FROM photo_review r WHERE r.decided_by = i.id)) AS staff
+     FROM identity i WHERE i.broker_subject = ANY($1) AND $2 = ANY(i.amr)`,
     [DEMO_PERSONAS.map((p) => p.key), MOCK_BANK_AMR],
   );
-  const ids = identities.map((r) => r.id);
-  if (ids.length === 0) return { identities: 0, erased: 0, objects: 0 };
+  const spared = [...new Set(identities.filter((r) => r.staff).map((r) => r.key))].sort();
+  const ids = identities.filter((r) => !r.staff).map((r) => r.id);
+  if (ids.length === 0) return { identities: 0, erased: 0, objects: 0, spared };
 
   const { rows: accounts } = await deps.db.query<{ id: string; state: string }>(
     "SELECT id, state FROM account WHERE identity_id = ANY($1) AND state <> 'deleted'",
@@ -42,15 +59,11 @@ export async function resetPersonas(deps: ResetDeps): Promise<ResetResult> {
   let erased = 0;
   let objects = 0;
   for (const account of accounts) {
-    // A sanctioned account is not one a person could delete; the erasure path
-    // takes it like any other once it is an ordinary account again.
-    if (!ERASABLE.has(account.state)) {
-      await deps.db.query("UPDATE account SET state = 'active' WHERE id = $1", [account.id]);
-    }
+    // Whatever its state: the erasure path takes a banned account as it is.
     const summary: ErasureSummary = await eraseAccount(deps, account.id);
     erased += 1;
     objects += summary.objects;
   }
   await transaction(deps.db, (tx) => deleteIdentities(tx, ids));
-  return { identities: ids.length, erased, objects };
+  return { identities: ids.length, erased, objects, spared };
 }
