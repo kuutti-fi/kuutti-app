@@ -115,12 +115,20 @@ jobs:
           WEB_ORIGIN: ${{ steps.names.outputs.web_origin }}
           SHORT_SHA: ${{ steps.names.outputs.short_sha }}
         run: |
+          # The pull request may have merged or closed while this run waited
+          # for the image or for its reviewer; the sweep has been there by
+          # then and nothing would remove what this step put back.
+          if [ "$(.github/scripts/pr-open.sh)" != true ]; then
+            echo "::notice::#$PR_NUMBER is no longer open; nothing deployed"
+            echo "deployed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
           previews=$(.github/scripts/dokploy-preview.sh list)
           mine=$(jq --arg pr "$PR_NUMBER" '[.[] | select(.pr == $pr)] | length' <<< "$previews")
           others=$(jq -r --arg pr "$PR_NUMBER" '[.[] | select(.pr != $pr) | "#" + .pr] | join(", ")' <<< "$previews")
           count=$(jq --arg pr "$PR_NUMBER" '[.[] | select(.pr != $pr)] | length' <<< "$previews")
           if [ "$mine" = 0 ] && [ "$count" -ge "$PREVIEW_LIMIT" ]; then
-            NOTICE="No preview: the box holds its $PREVIEW_LIMIT previews ($others). Close one of those pull requests, or wait for the nightly sweep to retire previews older than 7 days, then push again." \
+            NOTICE="No preview: the box holds its $PREVIEW_LIMIT previews ($others). Close one of those pull requests, or wait for the sweep to retire previews older than 7 days, then push again." \
               .github/scripts/preview-comment.sh
             echo "::notice::preview limit reached ($others); nothing deployed"
             echo "deployed=false" >> "$GITHUB_OUTPUT"
@@ -199,8 +207,21 @@ jobs:
           EXPO_PUBLIC_API_URL: ${{ needs.api.outputs.api_url }}
         run: pnpm exec expo export --platform web
 
+      # This lane waits for the api lane and for its own reviewer, so it asks
+      # again: an alias made after the merge is one no sweep would find, the
+      # Dokploy application being the sweep's work list.
+      - name: Is the pull request still open?
+        id: open
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          open=$(.github/scripts/pr-open.sh)
+          echo "open=$open" >> "$GITHUB_OUTPUT"
+          [ "$open" = true ] || echo "::notice::#$PR_NUMBER is no longer open; nothing deployed"
+
       - name: Deploy to EAS Hosting as pr-${{ github.event.pull_request.number }}
         id: deploy
+        if: steps.open.outputs.open == 'true'
         working-directory: apps/mobile
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
@@ -214,6 +235,7 @@ jobs:
           echo "$url"
 
       - name: The page is served and its bundle points at the preview API
+        if: steps.open.outputs.open == 'true'
         env:
           URL: ${{ steps.deploy.outputs.url }}
           API_URL: ${{ needs.api.outputs.api_url }}
@@ -237,6 +259,7 @@ jobs:
           echo "::error::no bundle of $URL mentions $API_URL"; exit 1
 
       - name: Comment
+        if: steps.open.outputs.open == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           SHORT_SHA: ${{ needs.api.outputs.short_sha }}
@@ -347,9 +370,19 @@ jobs:
           pnpm exec expo export --output-dir dist --source-maps --dump-assetmap \
             --platform ios --platform android
 
+      # The last lane waits longest; the same question before it publishes.
+      - name: Is the pull request still open?
+        id: open
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          open=$(.github/scripts/pr-open.sh)
+          echo "open=$open" >> "$GITHUB_OUTPUT"
+          [ "$open" = true ] || echo "::notice::#$PR_NUMBER is no longer open; nothing published"
+
       - name: Publish the EAS Update on branch pr-${{ github.event.pull_request.number }}
         id: update
-        if: steps.configured.outputs.configured == 'true' && steps.decide.outputs.needed == 'true'
+        if: steps.open.outputs.open == 'true' && steps.configured.outputs.configured == 'true' && steps.decide.outputs.needed == 'true'
         working-directory: apps/mobile
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
@@ -371,6 +404,7 @@ jobs:
           jq -r '.[] | "\(.platform) \(.id) runtime \(.runtimeVersion)"' <<< "$out"
 
       - name: Comment
+        if: steps.open.outputs.open == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           SHORT_SHA: ${{ needs.api.outputs.short_sha }}
