@@ -8,6 +8,11 @@
  *   pnpm demo:population -- --remove          removes them and writes nobody
  *   pnpm demo:population -- --dry-run         counts per pond, nothing written, no connection
  *
+ * After a write or a removal the public counter of #54 is counted anew over
+ * what is in the database now. By itself it would not move: it counts once a
+ * day and moves in steps, which is right among people and would leave a demo
+ * showing yesterday's ponds. What may be said of a pond is decided as ever.
+ *
  * It goes ahead only in development, test and preview, understands every
  * argument or refuses, and asks the server it is connected to what it is
  * before it writes or removes anything: staging and production are refused
@@ -29,6 +34,8 @@ import {
   writePopulation,
 } from "@kuutti/db/demo";
 import { CURRENT_CONSENT_VERSIONS } from "../src/identity/index.ts";
+import { takeSnapshot } from "../src/jobs/waitlist-snapshot.ts";
+import { createLogger } from "../src/lib/logger.ts";
 
 function fail(message: string, code = 1): never {
   console.error(`✖ ${message}`);
@@ -76,6 +83,12 @@ try {
     const result = await writePopulation(pool, people, CURRENT_CONSENT_VERSIONS);
     console.log(JSON.stringify({ msg: "demo population", env, size, seed, ...result, notShown }));
   }
+  // The figures the counter stood on are of the ponds as they were: gone, and
+  // counted anew. Only here, where the target has been asked what it is.
+  await pool.query("DELETE FROM waitlist_snapshot");
+  const logger = await createLogger({ level: "silent", pretty: false });
+  const counted = await takeSnapshot({ db: pool, logger, now: () => new Date() });
+  console.log(JSON.stringify({ msg: "demo population: counter recounted", ...counted }));
 } catch (error) {
   if (error instanceof DemoCommandError) {
     console.error(`✖ ${error.message}`);

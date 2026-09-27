@@ -45,8 +45,12 @@ describe("the random number generator", () => {
     };
     expect(draw(73)).toEqual(draw(73));
     expect(draw(73)).not.toEqual(draw(74));
-    // Pinned: a change of the generator is a change of every demo.
-    expect(createRandom(73).int(1, 1_000_000)).toBe(createRandom(73).int(1, 1_000_000));
+    // Pinned to the numbers themselves: a change of the generator is a change
+    // of every demo, and must fail here.
+    expect(draw(73).slice(0, 3)).toEqual([
+      0.7474775793962181, 0.8875488217454404, 0.9900041129440069,
+    ]);
+    expect(createRandom(73).int(1, 1_000_000)).toBe(747478);
     for (const x of draw(1)) {
       expect(x).toBeGreaterThanOrEqual(0);
       expect(x).toBeLessThan(1);
@@ -178,10 +182,21 @@ describe("the synthetic population", () => {
       expect(person.registeredAt.getTime()).toBeLessThanOrEqual(DEMO_EPOCH.getTime());
       for (const consent of person.consents) {
         expect(consent.givenAt.getTime()).toBeGreaterThan(person.registeredAt.getTime());
+        expect(consent.givenAt.getTime(), person.label).toBeLessThanOrEqual(DEMO_EPOCH.getTime());
       }
       if (person.preferences) {
         expect(person.preferences.ageWindow.min).toBeLessThanOrEqual(age);
         expect(person.preferences.ageWindow.max).toBeGreaterThanOrEqual(age);
+      }
+    }
+    // Whatever the seed: a hundred of them, the one a review found (57) among them.
+    for (let seed = 0; seed < 100; seed += 1) {
+      for (const person of generatePopulation({ seed, size: 120 })) {
+        const latest = Math.max(
+          person.registeredAt.getTime(),
+          ...person.consents.map((c) => c.givenAt.getTime()),
+        );
+        expect(latest, `seed ${seed}, ${person.label}`).toBeLessThanOrEqual(DEMO_EPOCH.getTime());
       }
     }
     // The epoch is in the past, so nothing in the database lies in the future.

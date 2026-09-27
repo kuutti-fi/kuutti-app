@@ -69,6 +69,11 @@ describe("the command's arguments", () => {
       ["--seed", ""],
       ["--remove=yes"],
       ["--remove", "--dry-run"],
+      ["--env", "production", "--env", "development"],
+      ["--env=development", "--env", "development"],
+      ["--size", "300", "--size=5000"],
+      ["--seed", "1", "--seed", "1"],
+      ["--dry-run", "--dry-run"],
       ["--dry-run", "--", "--remove"],
       ["--size", "300", "extra"],
     ]) {

@@ -10,6 +10,8 @@ pnpm demo:population
 
 Writes three hundred people into the database of the local environment, replacing the synthetic population that was there. The ponds come from the seed, which `pnpm env:up` has run.
 
+After a write or a removal the public counter (#54) is counted anew over what is in the database now, so `GET /waitlist` and the card in the app show the ponds of the population at once. Left to itself the counter would not move: it counts once a day and moves in steps of ten people, which is right among people and would leave a demo showing yesterday's ponds. What may be said of a pond is decided as ever; the app keeps an answer for up to an hour.
+
 | option | what it does |
 |---|---|
 | `-- --size 5000` | as many people as asked, 1 to 5,000. From 235 people up the population shows everything it is there for; a smaller one is written too, and the command says what it does not show (`notShown`) |
@@ -23,7 +25,7 @@ Writes three hundred people into the database of the local environment, replacin
 Three hundred accounts that look bank-verified, among real people, would enter the public counter, count toward the gate and appear on people's cards. So:
 
 - it goes ahead only when the environment is `development`, `test` or `preview`, by `--env` and by `APP_ENV`, both when both are given;
-- it refuses an argument it does not know, so a mistyped `--dryrun` is not a write;
+- it refuses an argument it does not know, so a mistyped `--dryrun` is not a write, and an argument given twice, so `--env production --env development` does not talk its own first word away;
 - after connecting and before writing or removing anything it prints where it is connected (database, user, host, port; never a password) and asks the server what it is. A managed server (RDS) is refused unless the database is a pull request's own and the environment is `preview`. Staging and production are reached through a tunnel on 127.0.0.1 under the same database name as the local one, so neither the host nor the name tells them apart; the server does.
 
 ## Who lives where, and why
@@ -44,7 +46,7 @@ Everybody with a pond has a gender, because the app asks for the gender before t
 | what | how |
 |---|---|
 | age at the epoch | 18 to 22: 14 %, 23 to 27: 30 %, 28 to 32: 24 %, 33 to 39: 16 %, 40 to 49: 10 %, 50 to 64: 5 %, 65 to 80: 1 %. Stored as year and month of birth, moved so that the product's own age rule (TD-14) gives the age drawn |
-| registered | up to 60 days before the epoch; never after it |
+| registered | up to 60 days before the epoch, and at least ten minutes before it, so that the consents, given within nine minutes of registering, are before the epoch too |
 | language | Finnish 70 %, Swedish 8 %, English 22 %: the language the consents were shown in and the profile is written in |
 | seeks | by own gender. Women: men 78 %, women 8 %, several 14 %. Men: women 82 %, men 7 %, several 11 %. Non-binary people: all three 50 %, two of them 40 %, non-binary only 10 % |
 | age window | from 2 to 8 years under the person's age (never under 18) to 2 to 10 years over it (never over 99) |
