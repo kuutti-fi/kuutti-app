@@ -5,6 +5,7 @@ import {
   type Locale,
   type MessageKey,
   parseAcceptLanguage,
+  RELEASED_LOCALES,
   resolveLocale,
   type TFunction,
   typedT,
@@ -24,15 +25,26 @@ const fallbackT = typedT(i18n, DEFAULT_LOCALE);
 const RequestLocale = z.enum(LOCALES);
 
 /**
+ * The catalogues an environment serves (#55, TD-17): production only the
+ * released languages, so text that is still machine text is never served
+ * there; staging, previews and local runs all of them, so a reviewer reads
+ * Swedish before it is released.
+ */
+export const servedLocales = (appEnv: string): readonly Locale[] =>
+  appEnv === "production" ? RELEASED_LOCALES : LOCALES;
+
+/**
  * Resolves the request's locale and hands handlers `c.get("t")`. M1 reads
  * Accept-Language; from M2 an authenticated request uses the account's stored
  * locale instead (TD-17), which is also what push and receipts will use.
- * Responses vary by the header, and say which language they carry.
+ * Responses vary by the header, and say which language they carry. `offered`
+ * narrows the catalogues: production passes RELEASED_LOCALES, so a language
+ * whose text is still machine text is never served there (#55, TD-17).
  */
-export function requestLocale(): MiddlewareHandler<AppEnv> {
+export function requestLocale(offered: readonly Locale[] = LOCALES): MiddlewareHandler<AppEnv> {
   return async (c, next) => {
     const locale = RequestLocale.parse(
-      resolveLocale(parseAcceptLanguage(c.req.header("accept-language"))),
+      resolveLocale(parseAcceptLanguage(c.req.header("accept-language")), offered),
     );
     c.set("locale", locale);
     c.set("t", typedT(i18n, locale));

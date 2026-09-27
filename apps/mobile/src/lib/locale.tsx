@@ -1,8 +1,16 @@
 // First, before anything formats a message: what Hermes lacks of Intl.
 import "./intl-polyfill";
-import { type AnyLocale, LOCALES, type Locale, PSEUDO_LOCALE, resolveLocale } from "@kuutti/i18n";
+import {
+  type AnyLocale,
+  LOCALES,
+  type Locale,
+  PSEUDO_LOCALE,
+  RELEASED_LOCALES,
+  resolveLocale,
+} from "@kuutti/i18n";
 import { createReactI18n, I18nProvider, useT } from "@kuutti/i18n/react";
 import { useLocales } from "expo-localization";
+import * as Updates from "expo-updates";
 import * as React from "react";
 import { readPreference, writePreference } from "./preferences";
 
@@ -14,8 +22,19 @@ const pseudo: Readonly<Record<string, string>> | undefined = __DEV__
   ? (require("@kuutti/i18n/pseudo") as typeof import("@kuutti/i18n/pseudo")).enXA
   : undefined;
 
-/** What the language picker offers: the three catalogues, and en-XA in dev builds. */
-export const OFFERED_LOCALES: readonly AnyLocale[] = pseudo ? [...LOCALES, PSEUDO_LOCALE] : LOCALES;
+/**
+ * The catalogues this build serves: a production build only the released
+ * languages, so text that is still machine text is never shown there; every
+ * other channel all of them, so a reviewer reads Swedish on staging before it
+ * is released (#55, TD-17).
+ */
+export const SERVED_LOCALES: readonly Locale[] =
+  Updates.channel === "production" ? RELEASED_LOCALES : LOCALES;
+
+/** What the language picker offers: the served catalogues, and en-XA in dev builds. */
+export const OFFERED_LOCALES: readonly AnyLocale[] = pseudo
+  ? [...SERVED_LOCALES, PSEUDO_LOCALE]
+  : SERVED_LOCALES;
 
 /**
  * The flag shown next to each language in the picker. A language is not a
@@ -48,7 +67,10 @@ const LocaleSettingsContext = React.createContext<LocaleSettings | null>(null);
  * to English per key). Changing either re-renders every useT().
  */
 export function LocaleProvider({ children }: { children: React.ReactNode }) {
-  const deviceLocale = resolveLocale(useLocales().map((locale) => locale.languageTag));
+  const deviceLocale = resolveLocale(
+    useLocales().map((locale) => locale.languageTag),
+    SERVED_LOCALES,
+  );
   const [preference, setPreferenceState] = React.useState<LocalePreference>("system");
   const [i18n] = React.useState(() => createReactI18n({ locale: deviceLocale, pseudo }));
 

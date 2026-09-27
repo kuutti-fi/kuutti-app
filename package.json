@@ -26,6 +26,7 @@
     "i18n:build": "pnpm --filter @kuutti/i18n run build",
     "i18n:check": "pnpm --filter @kuutti/i18n run check",
     "i18n:translate": "pnpm --filter @kuutti/i18n translate",
+    "i18n:review": "pnpm --filter @kuutti/i18n run review",
     "openapi": "pnpm --filter @kuutti/api openapi",
     "check:schema-words": "node scripts/check-schema-words.ts",
     "check:licenses": "node scripts/check-licenses.ts"

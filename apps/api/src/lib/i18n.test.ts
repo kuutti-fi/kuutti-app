@@ -1,8 +1,11 @@
 import { ErrorResponse } from "@kuutti/schema";
+import { Hono } from "hono";
 import { describe, expect } from "vitest";
 import { createApp } from "../app.ts";
 import { captureLogger, test, testConfig } from "../test/harness.ts";
+import type { AppEnv } from "./env.ts";
 import { AppError } from "./errors.ts";
+import { requestLocale, servedLocales } from "./i18n.ts";
 
 describe("localised responses", () => {
   test("an API error response for a request with Accept-Language: fi carries the Finnish message", async ({
@@ -32,6 +35,27 @@ describe("localised responses", () => {
       sv: "Hittades inte.",
       de: "Not found.",
     });
+  });
+
+  test("production serves the released languages only: Swedish falls to the next preference, or English", async ({
+    ctx,
+  }) => {
+    expect(servedLocales("production")).toEqual(["en", "fi"]);
+    expect(servedLocales("staging")).toEqual(["en", "fi", "sv"]);
+    expect(servedLocales("preview")).toEqual(["en", "fi", "sv"]);
+    const production = new Hono<AppEnv>();
+    production.use("*", requestLocale(servedLocales("production")));
+    production.get("/x", (c) => c.text("ok"));
+    const language = async (header: string) =>
+      (await production.request("/x", { headers: { "accept-language": header } })).headers.get(
+        "content-language",
+      );
+    expect(await language("sv")).toBe("en");
+    expect(await language("sv-FI,fi;q=0.8")).toBe("fi");
+    expect(await language("fi")).toBe("fi");
+    // Staging and previews keep all three, so a reviewer can read Swedish there.
+    const res = await ctx.app.request("/nope", { headers: { "accept-language": "sv" } });
+    expect(res.headers.get("content-language")).toBe("sv");
   });
 
   test("no header: English", async ({ ctx }) => {

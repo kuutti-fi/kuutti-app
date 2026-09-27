@@ -20,5 +20,6 @@ export {
   type Locale,
   PSEUDO_LOCALE,
   parseAcceptLanguage,
+  RELEASED_LOCALES,
   resolveLocale,
 } from "./locales.ts";
