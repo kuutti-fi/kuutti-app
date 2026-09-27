@@ -3,11 +3,11 @@ import { Linking } from "react-native";
 import { apiBaseUrl } from "@/lib/api";
 import { clearSession, currentSession, markLoginStarted, saveSession } from "@/lib/session";
 import { a11yProblems, type HostNode, pressables } from "@/test/a11y";
-import { renderWithTheme } from "@/test/render";
+import { renderWithTheme, underProviders } from "@/test/render";
 import { SignInScreen } from "./SignInScreen";
 
 const { __router: router } = jest.requireMock("expo-router") as {
-  __router: { push: jest.Mock; replace: jest.Mock };
+  __router: { push: jest.Mock; replace: jest.Mock; setParams: jest.Mock };
 };
 
 const CODE = "c".repeat(43);
@@ -29,6 +29,7 @@ beforeEach(async () => {
   globalThis.fetch = fetchMock as unknown as typeof fetch;
   fetchMock.mockReset();
   router.replace.mockReset();
+  router.setParams.mockReset();
   await clearSession();
 });
 
@@ -102,6 +103,37 @@ describe("SignInScreen", () => {
       await screen.findByText("Kuutti is for adults. You are welcome once you are 18."),
     ).toBeTruthy();
     expect(screen.getByRole("button", { name: "Try again" })).toBeTruthy();
+  });
+
+  it("shows a refusal that arrives while the screen is shown, after another try", async () => {
+    jest.spyOn(Linking, "openURL").mockResolvedValue(true);
+    const view = await renderWithTheme(<SignInScreen error="auth_under_18" />);
+    expect(
+      await screen.findByText("Kuutti is for adults. You are welcome once you are 18."),
+    ).toBeTruthy();
+
+    // Another try: the bank opens, and what the last link said is put away.
+    await fireEvent.press(screen.getByRole("button", { name: "Try again" }));
+    expect(await screen.findByText(/Your bank opens in the browser/)).toBeTruthy();
+    expect(router.setParams).toHaveBeenCalledWith({
+      code: undefined,
+      error: undefined,
+      until: undefined,
+    });
+    await view.rerender(underProviders(<SignInScreen />));
+    expect(screen.getByText(/Your bank opens in the browser/)).toBeTruthy();
+
+    // The link comes back to the same screen with another refusal.
+    await view.rerender(underProviders(<SignInScreen error="auth_banned" />));
+    expect(await screen.findByText("This person may not use Kuutti.")).toBeTruthy();
+    expect(screen.queryByText(/Your bank opens in the browser/)).toBeNull();
+
+    // And with the same one again, after one more try.
+    await fireEvent.press(screen.getByRole("button", { name: "Try again" }));
+    await view.rerender(underProviders(<SignInScreen />));
+    expect(await screen.findByText(/Your bank opens in the browser/)).toBeTruthy();
+    await view.rerender(underProviders(<SignInScreen error="auth_banned" />));
+    expect(await screen.findByText("This person may not use Kuutti.")).toBeTruthy();
   });
 
   it("shows the cooldown with its date in the app's locale", async () => {
