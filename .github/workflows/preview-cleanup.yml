@@ -1,23 +1,32 @@
 name: Preview cleanup
 
-# Removes a pull request's previews (#9, TD-19): the Dokploy application on
-# the staging box, the EAS Hosting alias, the EAS Update branch, and the
-# database kuutti_pr_<n>, which only the box can reach. The database is
-# dropped through one Run Command document (modules/compute) that the plan
-# role may send to the staging box and nothing else. Runs when a pull request
-# closes, nightly for pull requests that closed without it and for previews
-# older than 7 days, and by hand (from main) for a pull request number.
+# Removes previews nobody needs any more (#9, TD-2, TD-19, ADR-012): the Dokploy
+# application on the staging box, the EAS Hosting alias, the EAS Update branch,
+# and the database kuutti_pr_<n>, which only the box can reach. The database is
+# dropped through one Run Command document (modules/compute) that the plan role
+# may send to the staging box and nothing else.
+#
+# It runs unattended from main: a sweep every ten minutes removes the previews
+# of every pull request that is closed or merged and retires previews older
+# than seven days, and a dispatch (from main) removes one pull request's. It
+# does NOT run on the pull request's close event: that event runs the pull
+# request's own copy of this file, which would put the tokens in a
+# contributor's hands without a reviewer, and the reviewer is exactly what
+# left three previews of merged pull requests on the box until it ran out of
+# memory (2026-09-27, ADR-012). pull_request_target is banned in this
+# repository for the same class of reason (check-workflow-permissions.py).
+# The GitHub environment "preview-cleanup" holds the same Dokploy and EAS
+# tokens as "preview" and has no required reviewer: nothing here runs code
+# from a pull request.
 
 on:
-  pull_request:
-    types: [closed]
   schedule:
-    - cron: "30 3 * * *"
+    - cron: "*/10 * * * *"
   workflow_dispatch:
     inputs:
       pr:
-        description: Pull request number whose previews to remove
-        required: true
+        description: Pull request number whose previews to remove (empty for a sweep)
+        required: false
         type: string
 
 permissions:
@@ -28,26 +37,20 @@ defaults:
   run:
     shell: bash
 
+# One cleanup at a time; a sweep that finds a run in progress waits.
 concurrency:
-  group: preview-cleanup-${{ github.event.pull_request.number || github.event.inputs.pr || 'sweep' }}
+  group: preview-cleanup
   cancel-in-progress: false
-
 
 jobs:
   # Which pull requests lose their previews, then everything that needs the
-  # preview environment's tokens: Dokploy and EAS.
+  # cleanup environment's tokens: Dokploy and EAS.
   previews:
     name: remove previews
-    # A dispatch counts only from main: the plan role trusts main and pull
-    # requests, and a run that removed the application but could not drop the
-    # database would leave an orphan the sweep never sees.
-    if: >-
-      vars.PREVIEWS_ENABLED == 'true'
-      && (github.event_name != 'workflow_dispatch' || github.ref == 'refs/heads/main')
-      && (github.event_name != 'pull_request'
-          || (github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]'))
+    # Only from main: the plan role trusts main, and this file must be main's.
+    if: vars.PREVIEWS_ENABLED == 'true' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04-arm
-    environment: preview
+    environment: preview-cleanup
     permissions:
       contents: read
       pull-requests: write
@@ -57,8 +60,9 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: ./.github/actions/pnpm
 
+      # gh, curl and jq are on the runner; pnpm is set up below only when
+      # there is something to remove, so an empty sweep costs seconds.
       - name: Pull requests to clean
         id: select
         env:
@@ -67,42 +71,38 @@ jobs:
           DOKPLOY_TOKEN: ${{ secrets.DOKPLOY_TOKEN }}
           DOKPLOY_ENVIRONMENT_ID: ${{ vars.DOKPLOY_ENVIRONMENT_ID }}
           PREVIEW_API_DOMAIN: ${{ vars.PREVIEW_API_DOMAIN }}
-          EVENT: ${{ github.event_name }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
           INPUT_PR: ${{ github.event.inputs.pr }}
         run: |
-          case "$EVENT" in
-            pull_request) numbers=$(jq -cn --arg pr "$PR_NUMBER" '[$pr]') ;;
-            workflow_dispatch)
-              [[ "$INPUT_PR" =~ ^[0-9]{1,7}$ ]] || { echo "::error::not a pull request number: $INPUT_PR"; exit 1; }
-              numbers=$(jq -cn --arg pr "$INPUT_PR" '[$pr]') ;;
-            schedule)
-              numbers='[]'
-              now=$(date -u +%s)
-              for row in $(.github/scripts/dokploy-preview.sh list | jq -c '.[]'); do
-                pr=$(jq -r .pr <<< "$row")
-                created=$(jq -r .createdAt <<< "$row")
-                age=$(( (now - $(date -u -d "$created" +%s)) / 86400 ))
-                # A pull request that does not exist is closed; any other
-                # failure of gh (rate limit, outage) must not remove an open
-                # preview, so it is skipped with a warning.
-                if state=$(gh pr view "$pr" --json state --jq .state 2>"$RUNNER_TEMP/pr-view.err"); then :
-                elif grep -q "Could not resolve to a PullRequest" "$RUNNER_TEMP/pr-view.err"; then state=CLOSED
-                else echo "::warning::could not read the state of #$pr: $(cat "$RUNNER_TEMP/pr-view.err")"; continue; fi
-                if [ "$state" = CLOSED ] || [ "$state" = MERGED ]; then
-                  echo "#$pr is $state: removing its preview"
-                  NOTICE="Previews removed: the pull request is $state." \
-                    PR_NUMBER="$pr" SHORT_SHA="sweep" .github/scripts/preview-comment.sh || true
-                elif [ "$age" -ge 7 ]; then
-                  echo "#$pr preview is $age days old: retiring it"
-                  NOTICE="Preview retired after $age days to free the box; push again to recreate it." \
-                    PR_NUMBER="$pr" SHORT_SHA="sweep" .github/scripts/preview-comment.sh
-                else
-                  continue
-                fi
-                numbers=$(jq -c --arg pr "$pr" '. + [$pr]' <<< "$numbers")
-              done ;;
-          esac
+          if [ -n "$INPUT_PR" ]; then
+            [[ "$INPUT_PR" =~ ^[0-9]{1,7}$ ]] || { echo "::error::not a pull request number: $INPUT_PR"; exit 1; }
+            numbers=$(jq -cn --arg pr "$INPUT_PR" '[$pr]')
+          else
+            numbers='[]'
+            now=$(date -u +%s)
+            for row in $(.github/scripts/dokploy-preview.sh list | jq -c '.[]'); do
+              pr=$(jq -r .pr <<< "$row")
+              created=$(jq -r .createdAt <<< "$row")
+              age=$(( (now - $(date -u -d "$created" +%s)) / 86400 ))
+              # A pull request that does not exist is closed; any other
+              # failure of gh (rate limit, outage) must not remove an open
+              # preview, so it is skipped with a warning.
+              if state=$(gh pr view "$pr" --json state --jq .state 2>"$RUNNER_TEMP/pr-view.err"); then :
+              elif grep -q "Could not resolve to a PullRequest" "$RUNNER_TEMP/pr-view.err"; then state=CLOSED
+              else echo "::warning::could not read the state of #$pr: $(cat "$RUNNER_TEMP/pr-view.err")"; continue; fi
+              if [ "$state" = CLOSED ] || [ "$state" = MERGED ]; then
+                echo "#$pr is $state: removing its preview"
+                NOTICE="Previews removed: the pull request is $state." \
+                  PR_NUMBER="$pr" SHORT_SHA="sweep" .github/scripts/preview-comment.sh || true
+              elif [ "$age" -ge 7 ]; then
+                echo "#$pr preview is $age days old: retiring it"
+                NOTICE="Preview retired after $age days to free the box; push again to recreate it." \
+                  PR_NUMBER="$pr" SHORT_SHA="sweep" .github/scripts/preview-comment.sh || true
+              else
+                continue
+              fi
+              numbers=$(jq -c --arg pr "$pr" '. + [$pr]' <<< "$numbers")
+            done
+          fi
           echo "numbers=$numbers" >> "$GITHUB_OUTPUT"
           echo "cleaning: $numbers"
 
@@ -118,6 +118,9 @@ jobs:
           for pr in $(jq -r '.[]' <<< "$NUMBERS"); do
             .github/scripts/dokploy-preview.sh delete "$pr"
           done
+
+      - uses: ./.github/actions/pnpm
+        if: steps.select.outputs.numbers != '[]'
 
       # The alias is what the pull request linked to; the deployments behind
       # it stay listed in the EAS dashboard. The update branch is pruned so the
@@ -138,20 +141,9 @@ jobs:
             fi
           done
 
-      - name: Comment on the closed pull request
-        if: github.event_name == 'pull_request'
-        # A failed comment must not skip the databases job below.
-        continue-on-error: true
-        env:
-          GH_TOKEN: ${{ github.token }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-          SHORT_SHA: closed
-          NOTICE: "Previews removed: the pull request closed."
-        run: .github/scripts/preview-comment.sh
-
   # The database lives on the private RDS instance; only the box reaches it.
-  # No GitHub environment here: the plan role trusts pull requests and main,
-  # and a job with an environment presents a different OIDC subject.
+  # No GitHub environment here: the plan role trusts main, and a job with an
+  # environment presents a different OIDC subject.
   databases:
     name: drop kuutti_pr_<n>
     needs: previews

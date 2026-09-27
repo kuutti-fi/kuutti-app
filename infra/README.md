@@ -244,7 +244,7 @@ The same in `infra/envs/prod`. Applies run through CI (#8): plans on every pull 
 | `eas-build.yml` | `main` (fingerprint changed), `v*` tags, by hand | none (GitHub environment `staging` or `prod`) | native builds on EAS: `development` and `preview` when the fingerprint of `main` differs from the last development build's, `production` on a tag; links on the pinned builds issue (`apps/mobile/README.md`) |
 | `build.yml` | every push and pull request | none | builds the API image on arm64 and smoke-tests it; on `main` pushes `ghcr.io/kuutti-fi/kuutti-api:<sha>` and `:main`, on a pull request from this repository `:pr-<n>-<sha7>` for its preview, on a tag retags that same image as `:vX.Y.Z`, then calls `deploy.yml` (Dokploy, `/health`, then the EAS Update to the environment's channel, #10) and, for tags, `release.yml` |
 | `preview.yml` | pull requests from this repository | none (GitHub environment `preview`) | the three previews of #9: the pull request's image as Dokploy application `api-pr-<n>` on the staging box with database `kuutti_pr_<n>`, the web export on EAS Hosting as alias `pr-<n>`, an EAS Update on branch `pr-<n>` when native code changed; one sticky comment |
-| `preview-cleanup.yml` | pull request closed, nightly, by hand from `main` | `kuutti-ci-plan` | removes the Dokploy application, the EAS alias and branch, and drops `kuutti_pr_<n>` through the `kuutti-staging-preview-database` Run Command document; the nightly run also retires previews older than 7 days |
+| `preview-cleanup.yml` | every ten minutes and by hand, from `main` only (GitHub environment `preview-cleanup`, no reviewer; ADR-012) | `kuutti-ci-plan` | removes the Dokploy application, the EAS alias and branch, and drops `kuutti_pr_<n>` through the `kuutti-staging-preview-database` Run Command document; the nightly run also retires previews older than 7 days |
 
 OpenTofu and the OIDC exchange are installed by `.github/scripts/install-tofu.sh` and `aws-oidc.sh`; no third-party action touches credentials. The bootstrap is neither planned nor applied by CI: its inputs are in the maintainer's tfvars, and its plan is the maintainer's drift check.
 
@@ -359,7 +359,7 @@ TD-4 budgets 50 EUR a month. One environment is roughly 30 EUR (instance, databa
 
 ### Previews (#9)
 
-Every pull request from this repository gets three previews, deployed by `preview.yml` and removed by `preview-cleanup.yml` (TD-2, TD-19):
+Every pull request from this repository gets three previews, deployed by `preview.yml` and removed by `preview-cleanup.yml` (TD-2, TD-19). Removal is unattended (ADR-012): a sweep from `main` every ten minutes removes the previews of closed and merged pull requests and retires previews older than seven days, under the environment `preview-cleanup`, which holds the same tokens as `preview` and has no required reviewer, since nothing in it runs a pull request's code. The 2026-09-27 outage, three previews of merged pull requests left on the box until it ran out of memory, is why.
 
 | lane | what | where |
 |---|---|---|
