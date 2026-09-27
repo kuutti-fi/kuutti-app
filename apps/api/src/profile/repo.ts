@@ -59,6 +59,9 @@ function storedPrompts(raw: unknown): { prompts: ProfileDocument["prompts"]; dro
   return { prompts, dropped };
 }
 
+/** How many prompts of a stored document still count: the ones the registry still knows (#54 reads many rows at once). */
+export const answeredPromptsOf = (raw: unknown): number => storedPrompts(raw).prompts.length;
+
 const profileFrom = (r: Row): ProfileRow => {
   const fields = storedFields(r.fields);
   const prompts = storedPrompts(r.prompts);

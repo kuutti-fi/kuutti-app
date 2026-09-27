@@ -2,3 +2,10 @@
 
 export { findPondOfAccount, listPonds } from "./repo.ts";
 export { pondRoutes } from "./routes.ts";
+export {
+  readStandingFigures,
+  readWaitlist,
+  readWaitlistK,
+  type StandingFigures,
+  WAITLIST_K_KEY,
+} from "./waitlist.ts";

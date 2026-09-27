@@ -22,7 +22,8 @@ const DAYS = [
   new Date(Date.UTC(2026, 0, 31, 23, 59)),
   new Date(Date.UTC(2028, 1, 29)), // a leap day
   new Date(Date.UTC(2027, 11, 31, 23, 59)),
-  new Date(Date.UTC(2099, 11, 1)), // born in 2000: the century sign of the eighteen-year-olds changes
+  new Date(Date.UTC(2099, 11, 1)), // the 99-year-old is born in 2000: her sign turns from - to A
+  new Date(Date.UTC(2018, 5, 15)), // the 18-year-olds are born in 2000 and the 17-year-old in 2001
   new Date(Date.UTC(2026, 2, 31)),
 ];
 
@@ -143,6 +144,65 @@ describe("the login page of the mock bank", () => {
       );
       expect(fromPage, at.toISOString()).toEqual(DEMO_PERSONAS.map((p) => personaClaims(p, at)));
     }
+  });
+
+  it("posts the persona of the button that was pressed, and nothing when none was", () => {
+    const script = /<script>([\s\S]*?)<\/script>/.exec(page)?.[1] ?? "";
+    const form = {
+      elements: { username: { value: "testi" }, claims: { value: "{}" } },
+      submitted: 0,
+      submit() {
+        this.submitted += 1;
+      },
+    };
+    const listeners: Record<string, (event: unknown) => void> = {};
+    const asked: string[] = [];
+    const context = createContext({
+      document: {
+        addEventListener: (type: string, listener: (event: unknown) => void) => {
+          listeners[type] = listener;
+        },
+        getElementById: (id: string) => {
+          asked.push(id);
+          return id === "login" ? form : null;
+        },
+      },
+    });
+    runInContext(script, context);
+    const click = listeners.click;
+    if (!click) throw new Error("the page listens to no click");
+
+    // A press somewhere else on the page: nothing is posted.
+    click({ target: { closest: () => null } });
+    expect(form.submitted).toBe(0);
+    expect(form.elements.username.value).toBe("testi");
+
+    // The markup's own buttons, one after the other, found the way the page finds them.
+    const selectors: string[] = [];
+    for (const p of DEMO_PERSONAS) {
+      expect(page).toContain(`<button type="button" data-persona="${p.key}">`);
+      const before = Date.now();
+      click({
+        target: {
+          closest: (selector: string) => {
+            selectors.push(selector);
+            return { dataset: { persona: p.key } };
+          },
+        },
+      });
+      const after = Date.now();
+      expect(form.elements.username.value).toBe(p.key);
+      const posted = JSON.parse(form.elements.claims.value) as Record<string, unknown>;
+      // The page reads its own clock; the claims are those of the moment of the press.
+      expect([before, after].map((at) => personaClaims(p, new Date(at)))).toContainEqual(posted);
+    }
+    expect(form.submitted).toBe(DEMO_PERSONAS.length);
+    expect(new Set(selectors)).toEqual(new Set(["button[data-persona]"]));
+    expect(new Set(asked)).toEqual(new Set(["login"]));
+    // And the form the script looks for is the form of the page.
+    expect(page).toContain('<form method="post" id="login">');
+    expect(page).toContain('id="username" name="username"');
+    expect(page).toContain('id="claims" name="claims"');
   });
 
   it("escapes what it is given, in the markup, in an attribute and in the script", () => {

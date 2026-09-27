@@ -1783,6 +1783,45 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/waitlist": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The waitlist counter
+         * @description Per pond: bank-verified people waiting, their split by self-declared gender, and how many are finishing their profile. A number is published only where at least k people stand behind it (k is in the answer), the split only when every cell is at least k, and a pond's numbers move only once at least k people have come or gone since they were last said. Counted once a day. No session needed.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Every pond with what may be said of it. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["WaitlistResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/ponds": {
         parameters: {
             query?: never;
@@ -2497,6 +2536,23 @@ export interface components {
             /** @enum {string} */
             locale: "fi" | "sv" | "en";
         };
+        WaitlistResponse: {
+            k: number;
+            ponds: components["schemas"]["WaitlistPond"][];
+        };
+        WaitlistPond: {
+            pond: components["schemas"]["PondSummary"];
+            /** Format: date */
+            day: string | null;
+            verified: number | null;
+            split: components["schemas"]["WaitlistSplit"];
+            finishing: number | null;
+        };
+        WaitlistSplit: {
+            woman: number;
+            man: number;
+            nonBinary: number;
+        } | null;
         PondList: {
             ponds: components["schemas"]["PondSummary"][];
         };

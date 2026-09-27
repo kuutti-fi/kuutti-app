@@ -55,6 +55,7 @@ describe("seed", () => {
           photo_moderation_face_threshold: 90,
           exposure_cards_per_day: 60,
           photo_fetches_per_day: { thumb: 600, card: 300, full: 60 },
+          waitlist_k: 10,
         });
         expect(byKey).toEqual(MATCHING_CONFIG_V1);
       } finally {
