@@ -1,25 +1,31 @@
 /**
- * Writes the synthetic population of #73 (ADR-014) into a local or preview
- * database, replacing the one that was there.
+ * Writes the synthetic population of #73 (ADR-014) into a local database or a
+ * pull request's own, replacing the one that was there.
  *
  *   pnpm demo:population                      three hundred people, the usual seed
  *   pnpm demo:population -- --size 5000       as many as the round builder must carry
  *   pnpm demo:population -- --seed 7          other people, the same ponds
  *   pnpm demo:population -- --remove          removes them and writes nobody
- *   pnpm demo:population -- --dry-run         counts per pond, nothing written
+ *   pnpm demo:population -- --dry-run         counts per pond, nothing written, no connection
  *
- * Refuses production before it opens a connection, as the seed does. The
- * ponds come from the seed (`pnpm --filter @kuutti/db seed`), which runs first.
- * It lives with the API because the consents name the version of the wording
- * in force, which the API knows from the message catalogue.
+ * It goes ahead only in development, test and preview, understands every
+ * argument or refuses, and asks the server it is connected to what it is
+ * before it writes or removes anything: staging and production are refused
+ * whatever the environment is called (packages/db/src/seed/command.ts).
+ * The ponds come from the seed (`pnpm --filter @kuutti/db seed`), which runs
+ * first. It lives with the API because the consents name the version of the
+ * wording in force, which the API knows from the message catalogue.
  */
-import { createPool } from "@kuutti/db";
+import { createPool, MATCHING_CONFIG_V1 } from "@kuutti/db";
 import {
-  DEMO_SEED,
-  DEMO_SIZE,
+  assertDemoTarget,
+  DemoCommandError,
+  describeTarget,
   generatePopulation,
+  parseDemoCommand,
+  plannedPonds,
   removePopulation,
-  summarise,
+  uncrossed,
   writePopulation,
 } from "@kuutti/db/demo";
 import { CURRENT_CONSENT_VERSIONS } from "../src/identity/index.ts";
@@ -29,40 +35,28 @@ function fail(message: string, code = 1): never {
   process.exit(code);
 }
 
-const args = process.argv.slice(2);
-const valueAfter = (flag: string): string | undefined => {
-  const at = args.indexOf(flag);
-  return at >= 0 ? args[at + 1] : undefined;
-};
-const numberOf = (flag: string, fallback: number): number => {
-  const raw = valueAfter(flag);
-  if (raw === undefined) return fallback;
-  if (!/^\d+$/.test(raw)) fail(`${flag} takes a whole number, not ${raw}`);
-  return Number(raw);
-};
-
-const env = valueAfter("--env") ?? process.env.APP_ENV ?? "development";
-if (env === "production") {
-  fail(
-    "refusing to write synthetic people into production: previews and local databases only (TD-19)",
-    2,
-  );
-}
-const size = numberOf("--size", DEMO_SIZE);
-const seed = numberOf("--seed", DEMO_SEED);
-
-const people = (() => {
+const command = (() => {
   try {
-    return generatePopulation({ size, seed });
+    return parseDemoCommand(process.argv.slice(2), process.env.APP_ENV);
   } catch (error) {
-    return fail(error instanceof Error ? error.message : String(error));
+    if (error instanceof DemoCommandError) return fail(error.message, 2);
+    throw error;
   }
 })();
-const ponds = summarise(people);
+const { env, size, seed, action } = command;
 
-if (args.includes("--dry-run")) {
+const ponds = plannedPonds(size);
+// What this size does not show, against the first version of the config: a
+// small population is allowed, it is only said what it is too small for.
+const notShown = uncrossed(ponds, {
+  gateK: MATCHING_CONFIG_V1.gate_k,
+  majorityShareMax: MATCHING_CONFIG_V1.majority_share_max,
+  counterK: MATCHING_CONFIG_V1.waitlist_k,
+});
+
+if (action === "dry-run") {
   console.log(
-    JSON.stringify({ msg: "demo population (dry run)", env, size, seed, ponds }, null, 2),
+    JSON.stringify({ msg: "demo population (dry run)", env, size, seed, ponds, notShown }, null, 2),
   );
   process.exit(0);
 }
@@ -70,16 +64,26 @@ if (args.includes("--dry-run")) {
 const url = process.env.DATABASE_URL ?? fail("DATABASE_URL is not set");
 const pool = createPool({ connectionString: url, max: 1, applicationName: "kuutti-demo" });
 try {
-  if (args.includes("--remove")) {
-    const removed = await removePopulation(pool);
-    console.log(JSON.stringify({ msg: "demo population removed", env, removed }));
+  const target = await describeTarget(pool);
+  // Where the rows go, before any goes: never the password, which is not asked for.
+  console.log(JSON.stringify({ msg: "demo population: target", env, ...target }));
+  assertDemoTarget(target, env);
+  if (action === "remove") {
+    const result = await removePopulation(pool);
+    console.log(JSON.stringify({ msg: "demo population removed", env, ...result }));
   } else {
+    const people = generatePopulation({ size, seed });
     const result = await writePopulation(pool, people, CURRENT_CONSENT_VERSIONS);
-    console.log(JSON.stringify({ msg: "demo population", env, size, seed, ...result }));
+    console.log(JSON.stringify({ msg: "demo population", env, size, seed, ...result, notShown }));
   }
 } catch (error) {
-  console.error(error);
-  process.exitCode = 1;
+  if (error instanceof DemoCommandError) {
+    console.error(`✖ ${error.message}`);
+    process.exitCode = 2;
+  } else {
+    console.error(error);
+    process.exitCode = 1;
+  }
 } finally {
   await pool.end();
 }

@@ -31,8 +31,11 @@ import { BIOS, CAMPUSES, type Language, NAMES, PROMPT_ANSWERS } from "./words.ts
  * Pure: no clock, no database. Every date derives from the epoch.
  */
 
-/** Every timestamp of the population derives from this instant. */
-export const DEMO_EPOCH = new Date("2026-10-01T09:00:00Z");
+/**
+ * Every timestamp of the population derives from this instant, and none lies
+ * after it. It is in the past, so nobody registered or agreed in the future.
+ */
+export const DEMO_EPOCH = new Date("2026-09-01T09:00:00Z");
 export const DEMO_SEED = 73;
 export const DEMO_SIZE = 300;
 export const DEMO_SIZE_MAX = 5000;
@@ -100,8 +103,14 @@ const SEEKS: Readonly<Record<Gender, Readonly<Record<string, number>>>> = {
   },
 };
 
+/**
+ * Terms and privacy only. No research consent: the product writes that
+ * consent and its research_id mapping together, synthetic people emit no
+ * events, and events of people who never were would muddy the first real
+ * numbers (#73, out of scope).
+ */
 export type SyntheticConsent = {
-  kind: "terms" | "privacy" | "research";
+  kind: "terms" | "privacy";
   localeShown: Language;
   givenAt: Date;
 };
@@ -250,13 +259,6 @@ function onboarded(
     { kind: "terms", localeShown: language, givenAt: agreedAt },
     { kind: "privacy", localeShown: language, givenAt: agreedAt },
   ];
-  if (random.chance(0.35)) {
-    consents.push({
-      kind: "research",
-      localeShown: language,
-      givenAt: new Date(agreedAt.getTime() + 60_000),
-    });
-  }
   return {
     label,
     state: "active",
@@ -310,6 +312,56 @@ export function generatePopulation(options: PopulationOptions = {}): SyntheticPe
 }
 
 export type PondSummary = Record<Gender, number> & { people: number; largestShare: number };
+
+/** The same counts as `summarise(generatePopulation({ size }))`, without drawing anybody. */
+export function plannedPonds(size: number): Record<string, PondSummary> {
+  const sizes = planSizes(size);
+  const ponds: Record<string, PondSummary> = {};
+  for (const plan of POND_PLANS) {
+    const people = sizes.ponds[plan.slug] ?? 0;
+    if (people === 0) continue;
+    const counts = apportion(people, plan.genders);
+    ponds[plan.slug] = {
+      ...counts,
+      people,
+      largestShare: Math.max(counts.woman, counts.man, counts.non_binary) / people,
+    };
+  }
+  return ponds;
+}
+
+export type Thresholds = { gateK: number; majorityShareMax: number; counterK: number };
+
+/**
+ * What a population of this size does not show, in words; empty when it shows
+ * everything it is there for. The shares cross the thresholds by construction
+ * only when the ponds are large enough, which they are from 235 people up.
+ */
+export function uncrossed(ponds: Record<string, PondSummary>, t: Thresholds): string[] {
+  const missing: string[] = [];
+  const cells = (pond: PondSummary | undefined) =>
+    pond ? [pond.woman, pond.man, pond.non_binary] : [];
+  const small = ponds.paakaupunkiseutu;
+  if (!small || small.people >= t.gateK || small.people < t.counterK) {
+    missing.push("no pond under the gate that the counter still says a total of");
+  } else if (cells(small).every((n) => n >= t.counterK)) {
+    missing.push("the small pond's split is not hidden");
+  }
+  const launch = ponds.otaniemi;
+  if (!launch || launch.people < t.gateK) missing.push("the launch pond is under the gate");
+  if (launch && launch.largestShare > t.majorityShareMax) {
+    missing.push("the launch pond is over the majority share");
+  }
+  if (!cells(launch).every((n) => n >= t.counterK) || cells(launch).length === 0) {
+    missing.push("the launch pond has a cell under the counter's k, so no pond shows a split");
+  }
+  const skewed = ponds.espoo;
+  if (!skewed || skewed.people < t.gateK) missing.push("the skewed pond is under the gate");
+  if (!skewed || skewed.largestShare <= t.majorityShareMax) {
+    missing.push("no pond is over the majority share");
+  }
+  return missing;
+}
 
 /** People per pond and gender: what the thresholds are checked against. */
 export function summarise(people: readonly SyntheticPerson[]): Record<string, PondSummary> {

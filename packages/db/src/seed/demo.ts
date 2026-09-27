@@ -5,6 +5,16 @@
 
 export { renderBankPage } from "./bank-page.ts";
 export {
+  assertDemoTarget,
+  DEMO_ENVIRONMENTS,
+  type DemoCommand,
+  DemoCommandError,
+  type DemoEnvironment,
+  type DemoTarget,
+  describeTarget,
+  parseDemoCommand,
+} from "./command.ts";
+export {
   assertArtificial,
   DEMO_PERSONAS,
   type DemoPersona,
@@ -27,16 +37,20 @@ export {
   POND_PLANS,
   type PondPlan,
   type PopulationOptions,
+  plannedPonds,
   planSizes,
   type SyntheticPerson,
   type SyntheticProfile,
   summarise,
+  type Thresholds,
+  uncrossed,
 } from "./population.ts";
 export { everyText } from "./words.ts";
 export {
   type ConsentVersions,
   DEMO_SUBJECT_PREFIX,
   demoHetuHmac,
+  type RemoveResult,
   removePopulation,
   type WriteResult,
   writePopulation,

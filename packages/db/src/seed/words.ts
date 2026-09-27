@@ -80,7 +80,11 @@ export const NAMES = {
   ],
 } as const;
 
-/** Campus or guild, in the person's words. */
+/**
+ * Campus or field, in the person's words. Places and fields of study only: no
+ * guild, club or company is named, so no organisation that exists is given
+ * members who do not.
+ */
 export const CAMPUSES = [
   "Otaniemi",
   "Kumpula",
@@ -90,10 +94,10 @@ export const CAMPUSES = [
   "Arabia",
   "Leppävaara",
   "Myllypuro",
-  "Tietokilta",
-  "Fyysikkokilta",
-  "Koneinsinöörikilta",
-  "Teknologföreningen",
+  "Tietotekniikka",
+  "Teknillinen fysiikka",
+  "Konetekniikka",
+  "Arkkitehtuuri",
 ] as const;
 
 /** Bios. The first of each language are long enough to count for completeness, the last ones are not. */

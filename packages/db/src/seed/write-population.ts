@@ -11,8 +11,12 @@ import { DEMO_LABEL_PREFIX, type SyntheticPerson } from "./population.ts";
  *
  * A synthetic identity cannot be confused with a person. Its `hetu_hmac` is a
  * hash of its label, as the seed's own identities are, so no bank login maps
- * to it; and `broker_subject` carries the mark the removal finds it by, which
- * no broker would ever send.
+ * to it; and `broker_subject` carries a mark. The removal needs both: the
+ * mark alone is the ID token's `sub`, which a login stores as the broker sent
+ * it, so a subject that happens to begin with the mark must never be enough
+ * to delete somebody. An identity that a login made cannot carry the hash of
+ * its own label, and has the time of its authentication, which a synthetic
+ * one has not.
  *
  * Raw parameterised SQL over the Queryable seam, as the API's repositories
  * use: a test hands in a rolled-back transaction. No statement takes input
@@ -26,9 +30,12 @@ export const DEMO_SUBJECT_PREFIX = "kuutti-demo:";
 export const demoHetuHmac = (label: string): string =>
   createHash("sha256").update(`kuutti demo identity: ${label}`).digest("hex");
 
-export type ConsentVersions = Readonly<Record<"terms" | "privacy" | "research", string>>;
+export type ConsentVersions = Readonly<Record<"terms" | "privacy", string>>;
 
-export type WriteResult = { removed: number; written: number; ponds: Record<string, number> };
+/** `spared`: identities that carry the mark and are not synthetic; never touched. */
+export type RemoveResult = { removed: number; spared: number };
+
+export type WriteResult = RemoveResult & { written: number; ponds: Record<string, number> };
 
 /** The tables that hold rows of an account, in an order in which they can be emptied. */
 const ACCOUNT_TABLES = [
@@ -43,15 +50,24 @@ const ACCOUNT_TABLES = [
   "auth_request",
 ] as const;
 
-/** Removes every synthetic identity with everything of its accounts. Returns how many there were. */
-export async function removePopulation(db: Queryable): Promise<number> {
+/** Removes every synthetic identity with everything of its accounts. */
+export async function removePopulation(db: Queryable): Promise<RemoveResult> {
   return transaction(db, async (tx) => {
-    const { rows } = await tx.query<{ id: string }>(
-      "SELECT id FROM identity WHERE broker_subject LIKE $1",
-      [`${DEMO_SUBJECT_PREFIX}%`],
+    // Synthetic is who carries the mark, the hash of the label behind the
+    // mark, and no time of authentication. The hash is computed by the server
+    // from the row's own subject, the way demoHetuHmac computes it.
+    const { rows } = await tx.query<{ id: string; synthetic: boolean }>(
+      `SELECT id,
+              (authenticated_at IS NULL
+               AND hetu_hmac = encode(sha256(convert_to(
+                     'kuutti demo identity: ' || substr(broker_subject, length($2) + 1), 'UTF8')), 'hex')
+              ) AS synthetic
+       FROM identity WHERE broker_subject LIKE $1`,
+      [`${DEMO_SUBJECT_PREFIX}%`, DEMO_SUBJECT_PREFIX],
     );
-    const identities = rows.map((r) => r.id);
-    if (identities.length === 0) return 0;
+    const identities = rows.filter((r) => r.synthetic).map((r) => r.id);
+    const spared = rows.length - identities.length;
+    if (identities.length === 0) return { removed: 0, spared };
     const accounts = (
       await tx.query<{ id: string }>("SELECT id FROM account WHERE identity_id = ANY($1)", [
         identities,
@@ -62,7 +78,7 @@ export async function removePopulation(db: Queryable): Promise<number> {
     }
     await tx.query("DELETE FROM account WHERE id = ANY($1)", [accounts]);
     await tx.query("DELETE FROM identity WHERE id = ANY($1)", [identities]);
-    return identities.length;
+    return { removed: identities.length, spared };
   });
 }
 
@@ -77,7 +93,7 @@ export async function writePopulation(
     }
   }
   return transaction(db, async (tx) => {
-    const removed = await removePopulation(tx);
+    const { removed, spared } = await removePopulation(tx);
     const pondIds = new Map(
       (await tx.query<{ id: string; slug: string }>("SELECT id, slug FROM ponds")).rows.map((r) => [
         r.slug,
@@ -155,6 +171,6 @@ export async function writePopulation(
         );
       }
     }
-    return { removed, written: people.length, ponds };
+    return { removed, spared, written: people.length, ponds };
   });
 }

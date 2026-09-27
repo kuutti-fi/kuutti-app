@@ -70,6 +70,9 @@
             "noRestrictedImports": {
               "level": "error",
               "options": {
+                "paths": {
+                  "@kuutti/db/demo": "The demo tools (personas, synthetic population) stay out of the apps: the API's image and the clients' bundles carry nothing of them (ADR-014). Command lines under scripts/ and tests may import them."
+                },
                 "patterns": [
                   {
                     "group": [

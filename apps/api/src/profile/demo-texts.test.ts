@@ -1,3 +1,4 @@
+// biome-ignore lint/style/noRestrictedImports: a test of the demo's words against the slice's own rule; nothing of it is bundled
 import { everyText, generatePopulation } from "@kuutti/db/demo";
 import { describe, expect, it } from "vitest";
 import { contactDetailsIn } from "./text.ts";

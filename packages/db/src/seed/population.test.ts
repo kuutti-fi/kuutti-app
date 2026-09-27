@@ -11,8 +11,10 @@ import {
   DEMO_EPOCH,
   DEMO_SIZE_MAX,
   generatePopulation,
+  plannedPonds,
   planSizes,
   summarise,
+  uncrossed,
 } from "./population.ts";
 import { createRandom } from "./rng.ts";
 import {
@@ -26,7 +28,14 @@ import {
 // valid against the contracts, and across the thresholds on purpose.
 
 const MIGRATIONS = resolve(import.meta.dirname, "../..", "drizzle");
-const VERSIONS = { terms: "test-terms-1", privacy: "test-privacy-1", research: "test-research-1" };
+const VERSIONS = { terms: "test-terms-1", privacy: "test-privacy-1" };
+const THRESHOLDS = {
+  gateK: MATCHING_CONFIG_V1.gate_k,
+  majorityShareMax: MATCHING_CONFIG_V1.majority_share_max,
+  counterK: MATCHING_CONFIG_V1.waitlist_k,
+};
+/** From this many people up, the population shows everything it is there for. */
+const SHOWS_EVERYTHING_FROM = 235;
 
 describe("the random number generator", () => {
   it("gives the same numbers for the same seed, and others for another", () => {
@@ -96,21 +105,41 @@ describe("the synthetic population", () => {
 
   it("crosses the thresholds it is there to cross", () => {
     const ponds = summarise(people);
-    const { gate_k: gate, majority_share_max: majority } = MATCHING_CONFIG_V1;
+    const { gate_k: gate, majority_share_max: majority, waitlist_k: counterK } = MATCHING_CONFIG_V1;
     // Under the gate, and nine women: the counter says a total and no split.
     expect(ponds.paakaupunkiseutu).toMatchObject({ people: 24, woman: 9, man: 13, non_binary: 2 });
     expect(ponds.paakaupunkiseutu?.people).toBeLessThan(gate);
     // Over the majority share.
     expect(ponds.espoo?.people).toBeGreaterThanOrEqual(gate);
     expect(ponds.espoo?.largestShare).toBeGreaterThan(majority);
-    expect(ponds.espoo?.non_binary).toBeLessThan(10);
+    expect(ponds.espoo?.non_binary).toBeLessThan(counterK);
     // The launch pond: over the gate, under the share, every cell at ten or more.
     expect(ponds.otaniemi?.people).toBeGreaterThanOrEqual(gate);
     expect(ponds.otaniemi?.largestShare).toBeLessThanOrEqual(majority);
     for (const gender of Gender.options) {
-      expect(ponds.otaniemi?.[gender]).toBeGreaterThanOrEqual(10);
+      expect(ponds.otaniemi?.[gender]).toBeGreaterThanOrEqual(counterK);
     }
     expect(people.filter((p) => p.pond === null)).toHaveLength(24);
+    expect(uncrossed(ponds, THRESHOLDS)).toEqual([]);
+  });
+
+  it("shows everything from 235 people up, and says what a smaller one does not", () => {
+    for (const size of [1, 26, 100, 300, 1234]) {
+      expect(summarise(generatePopulation({ size })), String(size)).toEqual(plannedPonds(size));
+    }
+    // Every size there is: the plan is arithmetic, nobody is drawn.
+    const tooSmall: number[] = [];
+    for (let size = 1; size <= DEMO_SIZE_MAX; size += 1) {
+      if (uncrossed(plannedPonds(size), THRESHOLDS).length > 0) tooSmall.push(size);
+    }
+    expect(Math.max(...tooSmall)).toBe(SHOWS_EVERYTHING_FROM - 1);
+    expect(tooSmall).toHaveLength(SHOWS_EVERYTHING_FROM - 1);
+    expect(uncrossed(plannedPonds(100), THRESHOLDS)).toContain(
+      "the launch pond has a cell under the counter's k, so no pond shows a split",
+    );
+    // The small pond is 24 people from a population of 26.
+    expect(plannedPonds(26).paakaupunkiseutu?.people).toBe(24);
+    expect(plannedPonds(25).paakaupunkiseutu?.people).toBe(23);
   });
 
   it("passes the contracts a person's own answers pass", () => {
@@ -128,7 +157,8 @@ describe("the synthetic population", () => {
       expect(person.state).toBe("active");
       expect(Gender.safeParse(person.gender).success, person.label).toBe(true);
       expect(PreferencesUpdate.safeParse(person.preferences).success, person.label).toBe(true);
-      expect(person.consents.map((c) => c.kind).slice(0, 2)).toEqual(["terms", "privacy"]);
+      // No research consent: the product writes it with its mapping row, and nobody here takes part.
+      expect(person.consents.map((c) => c.kind)).toEqual(["terms", "privacy"]);
       if (person.profile) {
         const parsed = ProfileUpdate.safeParse({ ...person.profile, specialCategoryConsent: null });
         expect(parsed.success, `${person.label}: ${JSON.stringify(parsed.error?.issues)}`).toBe(
@@ -146,11 +176,16 @@ describe("the synthetic population", () => {
       expect(age, person.label).toBeGreaterThanOrEqual(18);
       expect(age, person.label).toBeLessThanOrEqual(80);
       expect(person.registeredAt.getTime()).toBeLessThanOrEqual(DEMO_EPOCH.getTime());
+      for (const consent of person.consents) {
+        expect(consent.givenAt.getTime()).toBeGreaterThan(person.registeredAt.getTime());
+      }
       if (person.preferences) {
         expect(person.preferences.ageWindow.min).toBeLessThanOrEqual(age);
         expect(person.preferences.ageWindow.max).toBeGreaterThanOrEqual(age);
       }
     }
+    // The epoch is in the past, so nothing in the database lies in the future.
+    expect(DEMO_EPOCH.getTime()).toBeLessThan(Date.UTC(2026, 8, 27));
     const moved = generatePopulation({ epoch: new Date("2031-03-15T09:00:00Z") });
     expect(Math.min(...moved.map((p) => p.birthYear))).toBeGreaterThan(
       Math.min(...people.map((p) => p.birthYear)),
@@ -190,6 +225,7 @@ describe("writing the population", () => {
         const people = generatePopulation();
         expect(await writePopulation(pool, people, VERSIONS)).toEqual({
           removed: 0,
+          spared: 0,
           written: 300,
           ponds: { paakaupunkiseutu: 24, otaniemi: 156, espoo: 96 },
         });
@@ -203,6 +239,17 @@ describe("writing the population", () => {
         expect(
           await count("SELECT count(*) AS n FROM consent WHERE version = 'test-terms-1'"),
         ).toBe(276);
+        expect(await count("SELECT count(*) AS n FROM consent WHERE kind = 'research'")).toBe(0);
+        expect(await count("SELECT count(*) AS n FROM research_subject")).toBe(0);
+        // Nothing of a bank login is on a synthetic identity.
+        expect(
+          await count(
+            `SELECT count(*) AS n FROM identity WHERE broker_subject LIKE $1
+             AND (authenticated_at IS NOT NULL OR acr IS NOT NULL OR amr IS NOT NULL
+                  OR broker_session_index IS NOT NULL OR broker_token_id IS NOT NULL)`,
+            [`${DEMO_SUBJECT_PREFIX}%`],
+          ),
+        ).toBe(0);
         const espoo = await pool.query<{ gender: string; n: string }>(
           `SELECT a.gender, count(*) AS n FROM account a JOIN ponds p ON p.id = a.pond_id
            WHERE p.slug = 'espoo' GROUP BY a.gender ORDER BY a.gender`,
@@ -221,15 +268,81 @@ describe("writing the population", () => {
 
         // Again, smaller: what is there is what the generator says.
         const again = await writePopulation(pool, generatePopulation({ size: 100 }), VERSIONS);
-        expect(again).toMatchObject({ removed: 300, written: 100 });
+        expect(again).toMatchObject({ removed: 300, spared: 0, written: 100 });
         expect(await marked()).toBe(100);
         expect(await count("SELECT count(*) AS n FROM identity")).toBe(others + 100);
 
-        expect(await removePopulation(pool)).toBe(100);
+        expect(await removePopulation(pool)).toEqual({ removed: 100, spared: 0 });
         expect(await marked()).toBe(0);
         expect(await count("SELECT count(*) AS n FROM identity")).toBe(others);
         expect(await count("SELECT count(*) AS n FROM profile")).toBe(1);
-        expect(await removePopulation(pool)).toBe(0);
+        expect(await removePopulation(pool)).toEqual({ removed: 0, spared: 0 });
+      } finally {
+        await pool.end();
+      }
+    });
+  });
+
+  it("never removes somebody a login made, whatever the broker called them", async () => {
+    await withTemporaryDatabase(async (url) => {
+      const pool = createPool({ connectionString: url, max: 2 });
+      try {
+        await migrate(pool, MIGRATIONS);
+        await seed(pool);
+        // As a login makes an identity: a hash of its own, and what the broker said.
+        const made = async (subject: string, hash: string, authenticated: Date | null) => {
+          const identity = await pool.query<{ id: string }>(
+            `INSERT INTO identity (hetu_hmac, broker_subject, acr, amr, authenticated_at)
+             VALUES ($1, $2, 'http://ftn.ficora.fi/2017/loatest2', ARRAY['bank'], $3) RETURNING id`,
+            [hash, subject, authenticated],
+          );
+          const account = await pool.query<{ id: string }>(
+            `INSERT INTO account (identity_id, state, birth_year, birth_month)
+             VALUES ($1, 'active', 1990, 6) RETURNING id`,
+            [identity.rows[0]?.id],
+          );
+          await pool.query(
+            "INSERT INTO profile (account_id, display_name) VALUES ($1, 'Somebody')",
+            [account.rows[0]?.id],
+          );
+          return identity.rows[0]?.id;
+        };
+        const at = new Date("2026-09-20T10:00:00Z");
+        // A subject that begins with the mark, and one that is a synthetic label to the letter.
+        const first = await made(`${DEMO_SUBJECT_PREFIX}not-synthetic`, "a".repeat(64), at);
+        const second = await made(`${DEMO_SUBJECT_PREFIX}demo-0001`, "b".repeat(64), at);
+        // Even the right hash is not enough next to the time of an authentication.
+        const third = await made(`${DEMO_SUBJECT_PREFIX}demo-0002`, demoHetuHmac("demo-0002"), at);
+
+        const untouched = async () =>
+          (
+            await pool.query<{ id: string }>(
+              `SELECT i.id FROM identity i JOIN account a ON a.identity_id = i.id
+               JOIN profile p ON p.account_id = a.id WHERE i.id = ANY($1)`,
+              [[first, second, third]],
+            )
+          ).rows.length;
+
+        expect(await removePopulation(pool)).toEqual({ removed: 0, spared: 3 });
+        expect(await untouched()).toBe(3);
+        // A row that holds a synthetic hash and is not synthetic stands in the
+        // writer's way: it fails whole and writes nobody, rather than decide.
+        await expect(
+          writePopulation(pool, generatePopulation({ size: 40 }), VERSIONS),
+        ).rejects.toThrow(/identity_hetu_hmac_unique/);
+        expect(await untouched()).toBe(3);
+
+        // The other two, which is what a login can make, are passed by.
+        await pool.query(
+          "DELETE FROM profile WHERE account_id IN (SELECT id FROM account WHERE identity_id = $1)",
+          [third],
+        );
+        await pool.query("DELETE FROM account WHERE identity_id = $1", [third]);
+        await pool.query("DELETE FROM identity WHERE id = $1", [third]);
+        const written = await writePopulation(pool, generatePopulation({ size: 40 }), VERSIONS);
+        expect(written).toMatchObject({ removed: 0, spared: 2, written: 40 });
+        expect(await removePopulation(pool)).toEqual({ removed: 40, spared: 2 });
+        expect(await untouched()).toBe(2);
       } finally {
         await pool.end();
       }
