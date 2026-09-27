@@ -55,6 +55,8 @@ const UNLIMITED_PATHS = new Set(["/health", "/openapi.json"]);
 export const PUBLIC_ROUTES = new Set([
   "GET /health",
   "GET /openapi.json",
+  // Aggregates per pond, once a day, nothing below k (#54, ADR-013).
+  "GET /waitlist",
   "GET /auth/start",
   "GET /auth/callback",
   "POST /auth/exchange",

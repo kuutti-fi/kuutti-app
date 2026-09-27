@@ -113,6 +113,20 @@
       "when": 1790451620018,
       "tag": "0015_research_events",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1790523461124,
+      "tag": "0016_waitlist_snapshot",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1790523461626,
+      "tag": "0017_waitlist_k",
+      "breakpoints": true
     }
   ]
 }

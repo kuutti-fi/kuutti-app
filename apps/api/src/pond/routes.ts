@@ -1,11 +1,12 @@
 import { createRoute, OpenAPIHono } from "@hono/zod-openapi";
-import { ErrorResponse, PondChoice, PondList } from "@kuutti/schema";
+import { ErrorResponse, PondChoice, PondList, WaitlistResponse } from "@kuutti/schema";
 import type { MiddlewareHandler } from "hono";
 import type { Deps } from "../app.ts";
 import { callerOf } from "../lib/auth-middleware.ts";
 import type { AppEnv } from "../lib/env.ts";
 import { AppError } from "../lib/errors.ts";
 import * as repo from "./repo.ts";
+import { readWaitlist } from "./waitlist.ts";
 
 const errorContent = (description: string) => ({
   description,
@@ -42,11 +43,37 @@ const chooseRoute = createRoute({
   },
 });
 
+// The one public route that carries figures (#54, ADR-013): aggregates per
+// pond, nothing below k, moving in steps of at least k people, no id but the
+// pond's. The waitlist site reads it from its allowlisted origin
+// (rules/api.md); the app reads it for the person's own pond.
+const waitlistRoute = createRoute({
+  method: "get",
+  path: "/waitlist",
+  summary: "The waitlist counter",
+  description:
+    "Per pond: bank-verified people waiting, their split by self-declared gender, and how many are finishing their profile. A number is published only where at least k people stand behind it (k is in the answer), the split only when every cell is at least k, and a pond's numbers move only once at least k people have come or gone since they were last said. Counted once a day. No session needed.",
+  responses: {
+    200: { description: "Every pond with what may be said of it.", ...json(WaitlistResponse) },
+  },
+});
+
+/** The figures move at most once a day; an hour is short enough for the day's turn. */
+export const WAITLIST_CACHE_CONTROL = "public, max-age=3600";
+
 export function pondRoutes(deps: Deps, requireSession: MiddlewareHandler<AppEnv>) {
   const app = new OpenAPIHono<AppEnv>();
   for (const path of new Set([listRoute, chooseRoute].map((r) => r.getRoutingPath()))) {
     app.use(path, requireSession);
   }
+
+  app.openapi(waitlistRoute, async (c) => {
+    // The read first, the header after it: a failure must not be answered as
+    // something a cache may keep for an hour.
+    const waitlist = await readWaitlist(deps.db);
+    c.header("Cache-Control", WAITLIST_CACHE_CONTROL);
+    return c.json(waitlist, 200);
+  });
 
   app.openapi(listRoute, async (c) => {
     return c.json({ ponds: await repo.listPonds(deps.db) }, 200);

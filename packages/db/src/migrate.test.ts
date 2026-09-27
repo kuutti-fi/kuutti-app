@@ -96,6 +96,7 @@ describe("migrate", () => {
           "profile",
           "research_subject",
           "session",
+          "waitlist_snapshot",
         ]);
       } finally {
         await pool.end();

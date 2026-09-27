@@ -1,0 +1,67 @@
+# ADR-013: The waitlist counter: who counts, what is said, and when it moves
+
+- Status: accepted
+- Date: 2026-09-27
+- Follows: TD-1 (every account is bank-verified), TD-7 (erasure), TD-10 and TD-13 (ponds; matching opens per person at a pool of `gate_k`), TD-17 (no inflected pond name), CLAUDE.md rules 6 and 8 and Product constraints, `.claude/rules/schema.md` (gender counts are suppressed below k = 10), `.claude/rules/api.md` (CORS: the waitlist site), `.claude/rules/layout.md`, ADR-009 §4 (completeness), ADR-010; issue #54
+
+## Context
+
+The first people in a pond wait: matching opens for a person when enough others are there. The honest answer to "is anyone here?" is a number, and because every account is bank-verified the number means what it says. It is also the one figure the public site may show. But the counter is public, and a count by gender gives people away in three ways:
+
+- **by being small**: a cell of three is three people, and a total minus two published cells is the third;
+- **by being uniform**: a pond of twelve women and nobody else says of each of its members what she declared, and "no non-binary people here" says of each what they did not;
+- **by moving**: a total that goes from 25 to 26 with the women from 13 to 14 says what the one person who came that day declared. At 5,000 people over many ponds, one arrival in a pond in a day is the ordinary case, so taking the figures once a day does not make a day's arrivals a crowd.
+
+The first version of this decision (a split published when every non-zero cell is at least k, exact figures every day, a row per pond and day kept for ever) stopped only the first; the security review of the change measured the other two with the function itself, and a second review of the rework measured what is left, which the section "What stays possible" names. #54 had one line of body; this ADR fixes who is counted, what may be said, and when what is said may move.
+
+## Decision
+
+1. **The waitlist is the people themselves.** No e-mail list, no web form, no browser flow (rule 8). A person is on it by being a verified account with a pond; "eID-gated" is the app's own bank login.
+2. **Who counts.** Accounts in state `registered`, `active` or `shadow_banned`, whose identity's standing is `ok`, with a pond chosen. Not `paused`, not suspended, not banned, not deleted. A shadow-banned account counts exactly like an active one, in the total and in `finishing`: left out, its owner could find the ban out by moving between two ponds, or taking a photo away, and watching whether the figures ever follow.
+3. **Three figures per pond.** `verified`: everyone who counts. The split: those of them with a declared gender, by `woman`, `man`, `non_binary`; a person who has not declared one is in the total only. `finishing`: those whose account is not active or whose profile is not complete by `completeness()` (ADR-009 §4). The rule is applied in TypeScript to per-account facts, with `preferencesFrom` and `answeredPromptsOf` reading stored values exactly as the single-account readers do; it is never restated in SQL, so the counter and the profile screen cannot disagree.
+4. **What may be said: `publishCounts(counts, k)`**, pure, in `packages/schema/src/waitlist.ts`:
+   - below k verified people a pond publishes nothing, not the total and not a part of it;
+   - the split only when **every** cell is at least k. A zero is not published: it is the uniform pond of the context;
+   - and only when the people without a declared gender are none or at least k, since the total minus the three cells is a fourth cell;
+   - `finishing` only when it and the rest of the pond are each none or at least k. It is no declaration, so a zero may be said;
+   - counts that cannot be (negative, a part larger than the whole) publish nothing.
+   Every pond is listed, a small or empty one with nulls, so the list does not say which ponds are small by leaving them out.
+5. **k has a floor of 10 in code.** `matching_config.waitlist_k` (10) may raise the threshold, never lower it: `waitlistK()` holds the configured value to `WAITLIST_K_MIN` and rounds a fraction up, the side that says less; `publishCounts` publishes nothing for a k below the floor, and the response contract cannot carry a number under it. A value that is no number is an error, answered as one and never as something a cache may keep. The floor is a rule (rules/schema.md), not a tunable: one configuration row must not be able to publish cells of one.
+6. **When what is said may move: `moveFigures(standing, today, k)`**, pure, in the same file. The accounts are counted once a day (the nightly job `waitlist-snapshot`, 04:00 Helsinki, with the others), but a pond's figures follow the count only in steps:
+   - figures below the floor cannot have been said under any k, so the day's count replaces them at once. The floor and not the k in force: figures said under k = 10 stand while k is raised, so that lowering it again says what was said before and not the pond a person later;
+   - every figure of a pond moves together, and only when the total has moved by at least k since they were taken. Whatever the difference between the old figures and the new says, it says of at least k people;
+   - `finishing` has no trigger of its own. With one, a move of `finishing` on one night and a move of the total on the next published two states a day and one person apart.
+   One count runs at a time, under an advisory lock taken before anything is read: two containers overlap during a deploy, and two counts that read the same standing row would each find the pond moved and write totals one person apart. And one count a Finnish calendar day, whichever process asks: every API process arms the nightly job, so a count first looks, under the lock, at the newest `taken_at` (every row carries the time of the last count, moved or not) and does nothing when that is today.
+   So one arrival or one departure changes nothing that is said, a cell cannot be seen crossing k by one person, and a split cannot be seen disappearing because one person came. The published `day` of a pond is the Finnish calendar day its figures last moved; a pond with no number has no day.
+7. **No history.** `waitlist_snapshot` holds one row per pond: the figures the counter stands on. Figures that are replaced are gone. A series of daily exact counts would say, next to a tombstone's `deleted_at`, which pond and which cell lost one that day, which is what erasure removed (TD-7). How a pond grew can be read later from what was published, if somebody keeps it; the database does not. The table is never emptied or restored by hand in a deployed environment: the first count after that is exact and may lie less than k people from what was last said.
+8. **No roll-up.** A parent pond publishes its own members only. Summing children into parents would let a suppressed child be computed from its siblings and the parent.
+9. **One public route.** `GET /waitlist` answers without a session, `Cache-Control: public, max-age=3600` on a success and on nothing else, under the ordinary rate limit, and is the only route on the public list that carries figures. It reads one small table and the pond list; nothing in it reads a person's row, and its body carries no account, no time of day and nothing from a profile. Browser origins are answered from the allowlist only, as everywhere (the waitlist site's origin is configuration, `CORS_ALLOWED_ORIGINS`), and every answer says `Vary: Origin`. CloudFront does not cache the API today; a caching policy for this path, if one is ever set, needs `Origin` in its cache key.
+10. **Where the code lives.** The public read is the pond slice's (`apps/api/src/pond/waitlist.ts`). The counting reads across accounts, profiles, photos, preferences and ponds, so it is a job (`apps/api/src/jobs/waitlist-snapshot.ts`) that imports the slices' public surfaces; putting it in the pond slice would have made pond and profile import each other (rules/layout.md). A database with no figures gets its first at boot; a failure there is logged and the API starts.
+11. **In the app**, a card on the home screen shows the person's own pond from the same route: the pond's name on a line of its own in the nominative, the figures in words, a line saying that the numbers change only when at least k people have joined or left, and below k a sentence without a number.
+
+## What stays possible, and what it costs
+
+What follows needs a split that is published before and after a step, so a pond of at least thirty with every cell at least ten; all of it is rare, and none of it is closed by anything short of publishing no split, or only coarse bands.
+
+- **A uniform step.** If everybody who came between two published states of a pond declared the same, somebody who knows that a person came in between knows what that person declared. A step of nine women, one man and no non-binary person says, in the same way, that nobody who came declared non-binary: the zero cell that `publishCounts` refuses in a state comes back in a difference. The figures are net, so departures in between make it a likelihood and not a certainty.
+- **People who know each other's declarations.** Nine people who join after a step and know what they declared can subtract themselves from the next one: what is left is the tenth arrival. Pond and gender can be chosen again freely, so ten people acting together can also bring a step about on a night of their choosing. Bank identification makes them nine real people and not nine accounts of one, which is what it costs; it is the limit of hiding a person among k.
+- **When.** A step, and the `day` of a pond, say that somebody came or went on or before that day. That is about membership and its timing, never about a declaration; the `day` saves a reader the daily polling and adds nothing to it.
+- **The row and an erased person, for somebody who holds the database.** The standing figures still count a person erased since they were taken, until the pond's next step: the row, the live accounts and the tombstone's `deleted_at` together give back the pond and the gender erasure removed. For a pond below the floor that is one night; for a published pond it lasts until the pond has moved by k, which in a quiet pond is months. Taking the person out of the row at erasure would close it and would show the departure to everybody, so the two aims pull against each other while the figures are exact. Backups hold the account as it was before erasure for as long as they are kept, which bounds what the row adds. The maintainer's call under TD-7.
+- **A raised k delays a pond.** Under a k above the floor, a pond standing between 10 and k - 1 says its first number at its standing total plus k, not at k: the price of not judging "never said" by tonight's k. The card therefore names k as a condition ("only when at least k people are here"), not as the moment the numbers appear.
+- **The people finishing are as stale as the total.** In a pond where nobody comes or goes, the number finishing stands while people finish.
+- **The split is rare.** With three cells and k = 10 it shows only in a pond with at least ten non-binary people, which most ponds will not be for a long time. That is what "at k ≥ 10" costs when it is held to every cell. The ways to show a split in ordinary ponds are all weaker: publish women and men only and round every number so the rest cannot be subtracted, or publish shares in coarse bands. Neither is built; the choice is the maintainer's.
+- **The numbers are stale by design**, by up to k - 1 people, and a shrinking pond keeps its last figure until it has lost k. The card says so.
+
+## Consequences
+
+- One table (`waitlist_snapshot`, one row per pond, migration 0016, generated), one `matching_config` row (`waitlist_k`, migration 0017, custom, with the seed carrying the same row), one nightly job, one boot step, one public route. The custom migration's SQL, a versioned data row the schema DSL cannot express (rule 10):
+
+  ```sql
+  INSERT INTO "matching_config" ("version", "key", "value", "created_by") VALUES
+    (1, 'waitlist_k', '10'::jsonb, 'migration:0017')
+  ON CONFLICT ("key", "version") DO NOTHING;
+  ```
+- The job's log line says the day, how many ponds there are and how many moved: no figure of any pond.
+- The site of #53 reads `GET /waitlist` from its allowlisted origin; nothing else about it is decided here.
+- The per-person gate ("matching opens for you when…") is M4's: it depends on the person's own hard filters, and this counter deliberately says nothing about it.
+- Open, and the maintainer's: k above the floor; whether `verified` should count only complete profiles; whether the split should be shown in ordinary ponds in a coarser form (above); whether `paused` accounts count; the hour of the count.

@@ -14,6 +14,7 @@ import {
   teliaKeyIds,
 } from "./identity/index.ts";
 import { type NightlyJob, scheduleNightly } from "./jobs/nightly.ts";
+import { ensureFirstSnapshot, waitlistJob } from "./jobs/waitlist-snapshot.ts";
 import { type Config, ConfigError, loadConfig } from "./lib/config.ts";
 import { createLogger } from "./lib/logger.ts";
 import { ensurePreviewDatabase } from "./lib/preview-database.ts";
@@ -179,6 +180,8 @@ async function main(): Promise<void> {
     { name: "sweep-admin-sessions", run: () => sweepAdminSessions({ db: pool, now }) },
     // Next month's events partition ready, months past retention dropped (#50).
     researchEventsJob({ db: pool, now }),
+    // The day's waitlist figures (#54): taken once a day, served all day.
+    waitlistJob({ db: pool, logger, now }),
   ];
   // Photos the automatic check missed get one more look (#49); none without a moderator.
   const mediaDeps = media.deps;
@@ -189,6 +192,11 @@ async function main(): Promise<void> {
       run: () => sweepPendingPhotos({ db: pool, logger, now, moderator, store: mediaDeps.store }),
     });
   }
+  // A database with no figures yet gets its first ones now, so the public route has a day to serve.
+  // Logged, never thrown, like a nightly job: the counter is not worth a boot, and the night tries again.
+  await ensureFirstSnapshot({ db: pool, logger, now }).catch((err: unknown) =>
+    logger.error({ job: "waitlist-snapshot", err }, "first waitlist snapshot failed"),
+  );
   scheduleNightly(jobs, logger);
 
   const server = serve({ fetch: app.fetch, port: config.PORT, hostname: "0.0.0.0" }, (address) => {
