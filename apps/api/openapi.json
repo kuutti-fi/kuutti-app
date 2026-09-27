@@ -1908,6 +1908,85 @@
         ],
         "additionalProperties": false
       },
+      "WaitlistResponse": {
+        "type": "object",
+        "properties": {
+          "k": {
+            "type": "integer",
+            "minimum": 10
+          },
+          "ponds": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WaitlistPond"
+            },
+            "maxItems": 500
+          }
+        },
+        "required": [
+          "k",
+          "ponds"
+        ],
+        "additionalProperties": false
+      },
+      "WaitlistPond": {
+        "type": "object",
+        "properties": {
+          "pond": {
+            "$ref": "#/components/schemas/PondSummary"
+          },
+          "day": {
+            "type": "string",
+            "nullable": true,
+            "format": "date"
+          },
+          "verified": {
+            "type": "integer",
+            "nullable": true,
+            "minimum": 10
+          },
+          "split": {
+            "$ref": "#/components/schemas/WaitlistSplit"
+          },
+          "finishing": {
+            "type": "integer",
+            "nullable": true,
+            "minimum": 0
+          }
+        },
+        "required": [
+          "pond",
+          "day",
+          "verified",
+          "split",
+          "finishing"
+        ],
+        "additionalProperties": false
+      },
+      "WaitlistSplit": {
+        "type": "object",
+        "nullable": true,
+        "properties": {
+          "woman": {
+            "type": "integer",
+            "minimum": 10
+          },
+          "man": {
+            "type": "integer",
+            "minimum": 10
+          },
+          "nonBinary": {
+            "type": "integer",
+            "minimum": 10
+          }
+        },
+        "required": [
+          "woman",
+          "man",
+          "nonBinary"
+        ],
+        "additionalProperties": false
+      },
       "PondList": {
         "type": "object",
         "properties": {
@@ -3479,6 +3558,24 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/waitlist": {
+      "get": {
+        "summary": "The waitlist counter",
+        "description": "Per pond: bank-verified people waiting, their split by self-declared gender, and how many are finishing their profile. A number is published only where at least k people stand behind it (k is in the answer), the split only when every cell is at least k, and a pond's numbers move only once at least k people have come or gone since they were last said. Counted once a day. No session needed.",
+        "responses": {
+          "200": {
+            "description": "Every pond with what may be said of it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WaitlistResponse"
                 }
               }
             }

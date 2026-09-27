@@ -45,6 +45,9 @@ export const MATCHING_CONFIG_V1 = {
   // it. The day is the Finnish calendar day.
   exposure_cards_per_day: 60,
   photo_fetches_per_day: { thumb: 600, card: 300, full: 60 },
+  // #54 (ADR-013, rules/schema.md): the public waitlist counter says a number
+  // only where at least this many people stand behind it.
+  waitlist_k: 10,
 } as const;
 
 /**

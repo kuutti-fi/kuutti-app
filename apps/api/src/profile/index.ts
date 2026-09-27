@@ -10,5 +10,6 @@ export {
   type PreferenceReader,
 } from "./card.ts";
 export { type CompletenessSnapshot, completeness } from "./completeness.ts";
+export { answeredPromptsOf } from "./repo.ts";
 export { profileRoutes } from "./routes.ts";
 export { eraseProfileOfAccount, exportProfile } from "./service.ts";

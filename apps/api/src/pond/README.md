@@ -1,3 +1,3 @@
 # pond
 
-Ponds, the admission gate, the public counter. TD-10, TD-13.
+Ponds, the admission gate, the public counter. TD-10, TD-13. #54 (ADR-013): `GET /waitlist` is public and serves, for every pond, the figures it stands on through `publishCounts` of `packages/schema` (nothing below k, with a floor of 10 under `matching_config.waitlist_k`; the split only when every cell is at least k and the people without a declared gender are none or at least k; the people finishing only when they and the rest are none or at least k). `waitlist.ts` is the read. The counting is the nightly job `jobs/waitlist-snapshot.ts`, which reads across slices so that none depends on another for it, and moves a pond's figures only once at least k people have come or gone (`moveFigures`). `waitlist_snapshot` holds one row per pond and no history.

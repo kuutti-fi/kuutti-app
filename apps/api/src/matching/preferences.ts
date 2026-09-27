@@ -20,6 +20,21 @@ const AGE_WINDOW = "age_window";
 
 type Row = { field: string; value: unknown };
 
+/**
+ * The two hard rows' stored values as the contract reads them: a value that no
+ * longer parses reads as unset. Pure, so a reader of many accounts at once
+ * (the waitlist counter, #54) decides exactly as the reader of one.
+ */
+export function preferencesFrom(values: {
+  seeks: unknown;
+  ageWindow: unknown;
+}): PreferencesResponse {
+  return {
+    seeks: z.array(Gender).min(1).safeParse(values.seeks).data ?? null,
+    ageWindow: AgeWindow.safeParse(values.ageWindow).data ?? null,
+  };
+}
+
 /** The two hard rows as the person set them; a row that no longer parses reads as unset. */
 export async function readPreferences(
   db: Queryable,
@@ -31,10 +46,7 @@ export async function readPreferences(
     [accountId, SEEKS, AGE_WINDOW],
   );
   const byField = new Map(rows.map((r) => [r.field, r.value]));
-  return {
-    seeks: z.array(Gender).min(1).safeParse(byField.get(SEEKS)).data ?? null,
-    ageWindow: AgeWindow.safeParse(byField.get(AGE_WINDOW)).data ?? null,
-  };
+  return preferencesFrom({ seeks: byField.get(SEEKS), ageWindow: byField.get(AGE_WINDOW) });
 }
 
 /** Both rows, written or replaced together; a tombstone takes none (#51). */
