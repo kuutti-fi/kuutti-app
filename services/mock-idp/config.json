@@ -1,19 +1,11 @@
 {
   "interactiveLogin": true,
+  "loginPagePath": "/config/login.html",
   "tokenCallbacks": [
     {
       "issuerId": "ftn",
       "tokenExpiry": 3600,
-      "requestMappings": [
-        {
-          "requestParam": "scope",
-          "match": "*",
-          "claims": {
-            "acr": "http://ftn.ficora.fi/2017/loatest2",
-            "amr": ["https://tunnistus-pp.telia.fi/uas/saml2/names/ac/oidc.mock.1"]
-          }
-        }
-      ]
+      "requestMappings": []
     }
   ]
 }

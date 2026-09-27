@@ -65,7 +65,7 @@ Checks that everything is right:
 
 - `curl -s localhost:3000/health` shows `"db":"ok"` and `"migrations":"current"`.
 - http://localhost:8081 shows the API version and commit.
-- `node services/mock-idp/verify.ts` runs a bank login against the mock IdP and prints the claims.
+- `node services/mock-idp/verify.ts` runs a bank login against the mock IdP, as every persona and as somebody else. The mock bank's login page has a button per persona (`services/mock-idp/README.md`): sign in from the app in the simulator or emulator, tap a name, and you are that person (a phone cannot reach a mock bank that listens on the computer's loopback address).
 
 On a phone, install the dev client build (see `apps/mobile/README.md`), open it, and connect to Metro on this machine; the API URL is derived from the Metro host. The real Telia test bed exists only on staging.
 
