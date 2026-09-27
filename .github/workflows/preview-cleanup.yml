@@ -18,8 +18,9 @@ name: Preview cleanup
 # The GitHub environment "preview-cleanup" holds the same Dokploy and EAS
 # tokens as "preview" and has no required reviewer: nothing here runs code
 # from a pull request. Order: select, drop the database, remove the EAS
-# alias and branch, and only then the Dokploy application, which is the
-# sweep's work list: a failure anywhere leaves it, and the next sweep retries.
+# alias and branch, remove the Dokploy application (the sweep's work list).
+# A failed database drop leaves the application for the next sweep; a failed
+# EAS removal does not, it fails the run by name.
 
 on:
   schedule:
@@ -157,10 +158,11 @@ jobs:
           done
           exit "$failed"
 
-  # Everything else, with the Dokploy application last: while it exists the
-  # sweep still lists the pull request, so any failure above or here is
-  # retried ten minutes later instead of leaving an alias, a branch or a
-  # database behind that nothing would find again.
+  # Everything else. The database is dropped before this job runs, and the
+  # Dokploy application, the sweep's work list, goes only after it: a failed
+  # drop is retried by the next sweep. The EAS alias and branch are removed on
+  # the way; a failure there never keeps a container on the box, it fails the
+  # run and names what is left.
   remove:
     name: remove previews
     needs: [select, databases]
@@ -178,27 +180,33 @@ jobs:
       # The alias is what the pull request linked to; the deployments behind
       # it stay listed in the EAS dashboard. The update branch is pruned so the
       # free tier's branch list does not grow with every pull request (TD-2).
-      # "Could not find" is the normal answer for a pull request that had no
-      # web or native lane (EAS words it several ways, ABSENT lists them); any
-      # other failure fails the step and keeps the application for the next
-      # sweep.
+      # A pull request without a web or native lane has neither, and EAS says
+      # so in several wordings (ABSENT). Any other failure is remembered and
+      # fails the job at its end, after the Dokploy application is gone: a
+      # leftover alias at Expo costs nothing, a leftover container on the box
+      # costs the box (2026-09-27, ADR-012).
       - name: Remove the EAS Hosting alias and the EAS Update branch
+        id: eas
         working-directory: apps/mobile
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
           NUMBERS: ${{ needs.select.outputs.numbers }}
-          ABSENT: "could not find|not found|does not exist|doesn't exist|no such|no alias|no branch"
+          ABSENT: "could not find|not found|does not exist|doesn't exist|no such|no ([a-z]+ )*(alias|branch)"
         run: |
+          left=""
+          remove() { # remove <what> <name> <command...>
+            local what="$1" name="$2"; shift 2
+            if out=$("$@" 2>&1); then echo "removed $what $name"
+            elif grep -qiE "$ABSENT" <<< "$out"; then echo "no $what $name"
+            else echo "$out"; echo "::error::$what $name could not be removed; by hand: $*"; left="$left $what:$name"; fi
+          }
           for pr in $(jq -r '.[]' <<< "$NUMBERS"); do
-            if ! out=$(pnpm exec eas deploy:alias:delete "pr-$pr" --non-interactive 2>&1); then
-              grep -qiE "$ABSENT" <<< "$out" && echo "no EAS Hosting alias pr-$pr" || { echo "$out"; exit 1; }
-            fi
+            remove "EAS Hosting alias" "pr-$pr" pnpm exec eas deploy:alias:delete "pr-$pr" --non-interactive
             if jq -e '.expo.updates.url' app.json >/dev/null 2>&1; then
-              if ! out=$(pnpm exec eas branch:delete "pr-$pr" --non-interactive 2>&1); then
-                grep -qiE "$ABSENT" <<< "$out" && echo "no EAS Update branch pr-$pr" || { echo "$out"; exit 1; }
-              fi
+              remove "EAS Update branch" "pr-$pr" pnpm exec eas branch:delete "pr-$pr" --non-interactive
             fi
           done
+          echo "left=$left" >> "$GITHUB_OUTPUT"
 
       - name: Remove the Dokploy applications
         env:
@@ -211,3 +219,11 @@ jobs:
           for pr in $(jq -r '.[]' <<< "$NUMBERS"); do
             .github/scripts/dokploy-preview.sh delete "$pr"
           done
+
+      - name: Anything left at EAS fails the run, by name
+        if: steps.eas.outputs.left != ''
+        env:
+          LEFT: ${{ steps.eas.outputs.left }}
+        run: |
+          echo "::error::left at EAS:$LEFT"
+          exit 1
