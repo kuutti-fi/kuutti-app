@@ -18,6 +18,7 @@ import {
 // figures move.
 
 const DAY_1 = new Date("2026-10-05T01:00:00Z"); // 04:00 in Helsinki
+const LATER_ON_DAY_1 = new Date("2026-10-05T20:59:00Z"); // 23:59 in Helsinki
 const DAY_2 = new Date("2026-10-06T01:00:00Z");
 const DAY_3 = new Date("2026-10-07T01:00:00Z");
 
@@ -105,6 +106,44 @@ describe("the figures", () => {
     await people(ctx.client, pond, 1, { gender: "man" });
     await taken(ctx, DAY_3);
     expect(await listed(ctx, pond)).toMatchObject({ day: "2026-10-07", verified: 35 });
+  });
+
+  test("The accounts are counted at most once a day", async ({ ctx }) => {
+    const pond = await pondNamed(ctx.client, "test-waitlist-once");
+    await people(ctx.client, pond, 25, { gender: "woman" });
+    expect(await taken(ctx, DAY_1)).toMatchObject({ counted: true });
+    const said = await listed(ctx, pond);
+    expect(said).toMatchObject({ day: "2026-10-05", verified: 25 });
+
+    await people(ctx.client, pond, 10, { gender: "man" });
+    const again = await deps(ctx, LATER_ON_DAY_1);
+    expect(await takeSnapshot(again.deps)).toEqual({
+      day: "2026-10-05",
+      ponds: 0,
+      moved: 0,
+      counted: false,
+    });
+    expect(await listed(ctx, pond)).toEqual(said);
+    expect(again.lines().map((l) => l.msg)).toContain("waitlist snapshot: counted today already");
+
+    expect(await taken(ctx, DAY_2)).toMatchObject({ counted: true });
+    expect(await listed(ctx, pond)).toMatchObject({ day: "2026-10-06", verified: 35 });
+  });
+
+  test("a pond that did not move is marked as counted too, its figures and their day as they were", async ({
+    ctx,
+  }) => {
+    const pond = await pondNamed(ctx.client, "test-waitlist-mark");
+    await people(ctx.client, pond, 25, { gender: "woman" });
+    await taken(ctx, DAY_1);
+    await people(ctx.client, pond, 3, { gender: "woman" });
+    await taken(ctx, DAY_2);
+    const { rows } = await ctx.client.query<{ day: string; verified: number; taken_at: Date }>(
+      `SELECT to_char(day, 'YYYY-MM-DD') AS day, verified, taken_at
+       FROM waitlist_snapshot WHERE pond_id = $1`,
+      [pond],
+    );
+    expect(rows).toEqual([{ day: "2026-10-05", verified: 25, taken_at: DAY_2 }]);
   });
 
   test("The figures do not move between two counts", async ({ ctx }) => {
@@ -240,7 +279,8 @@ describe("two counts at once", () => {
         await takeSnapshot({ db: pool, logger, now: () => DAY_1 });
         await people(pool, pond, 10, { gender: "woman" });
 
-        // The first count, by hand: it holds the lock and has written 55.
+        // The first count of the day, by hand: it holds the lock, has written
+        // 55 and has marked every row as counted.
         const first = await pool.connect();
         let second: Promise<unknown>;
         try {
@@ -250,6 +290,7 @@ describe("two counts at once", () => {
             "UPDATE waitlist_snapshot SET verified = 55, woman = 55, finishing = 55, day = $2 WHERE pond_id = $1",
             [pond, "2026-10-06"],
           );
+          await first.query("UPDATE waitlist_snapshot SET taken_at = $1", [DAY_2]);
           second = takeSnapshot({ db: pool, logger, now: () => DAY_2 });
           const waited = await Promise.race([second.then(() => "ran"), sleep(300, "waited")]);
           expect(waited).toBe("waited");
@@ -259,12 +300,14 @@ describe("two counts at once", () => {
         } finally {
           first.release();
         }
-        expect(await second).toMatchObject({ moved: 0 });
+        // The day has had its count: the second process counts nothing.
+        expect(await second).toMatchObject({ moved: 0, counted: false });
         const { rows } = await pool.query<{ verified: number }>(
           "SELECT verified FROM waitlist_snapshot WHERE pond_id = $1",
           [pond],
         );
-        // Without the lock the second count would have compared 56 with 45 and written 56.
+        // Without the lock the second count would have seen neither the 55 nor
+        // the mark, compared 56 with 45, and written 56.
         expect(rows).toEqual([{ verified: 55 }]);
       } finally {
         await pool.end();

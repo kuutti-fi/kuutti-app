@@ -8,7 +8,8 @@ import { ponds } from "./ponds.ts";
  * public is decided when they are read (`publishCounts` in packages/schema),
  * so a change of k needs no rewrite. A row is replaced only when its pond has
  * moved by at least k (`moveFigures`), and `day` is the Finnish calendar day
- * that happened.
+ * that happened. `taken_at` is when the pond was last counted, moved or not:
+ * the newest one marks the day that has had its count.
  *
  * One row per pond and no history, on purpose: a series of daily exact counts
  * would say, next to a tombstone's `deleted_at`, which pond and which cell

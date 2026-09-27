@@ -102,13 +102,19 @@ export async function countPonds(db: Queryable): Promise<Map<string, WaitlistCou
   return ponds;
 }
 
-export type SnapshotResult = { day: string; ponds: number; moved: number };
+/** `counted` is false when the day had its count already and this run did nothing. */
+export type SnapshotResult = { day: string; ponds: number; moved: number; counted: boolean };
 
 /**
  * Counts every pond and moves the figures of those that have moved far enough.
  * Every pond has a row, a pond nobody chose one of zeros, so the list never
  * says which ponds are small by leaving them out. One row per pond: the
  * figures that are replaced are gone, and no series of daily counts is kept.
+ *
+ * At most one count a Finnish calendar day, whichever process asks: every API
+ * process arms the nightly job, and two that overlap during a deploy take the
+ * lock one after the other. Every row's `taken_at` is the last count, so the
+ * newest of them says which day was counted last.
  */
 export async function takeSnapshot(deps: WaitlistDeps): Promise<SnapshotResult> {
   const at = deps.now();
@@ -116,6 +122,13 @@ export async function takeSnapshot(deps: WaitlistDeps): Promise<SnapshotResult> 
   const result = await transaction(deps.db, async (tx) => {
     // Before anything is read: what this count compares with must be what the last one left.
     await tx.query("SELECT pg_advisory_xact_lock($1)", [WAITLIST_LOCK_KEY]);
+    const last = await tx.query<{ at: Date | null }>(
+      "SELECT max(taken_at) AS at FROM waitlist_snapshot",
+    );
+    const lastAt = last.rows[0]?.at ?? null;
+    if (lastAt !== null && finnishDay(lastAt) === day) {
+      return { day, ponds: 0, moved: 0, counted: false };
+    }
     const k = await readWaitlistK(tx);
     const counts = await countPonds(tx);
     const standing = await readStandingFigures(tx);
@@ -136,10 +149,15 @@ export async function takeSnapshot(deps: WaitlistDeps): Promise<SnapshotResult> 
         [pond.id, day, next.verified, next.woman, next.man, next.nonBinary, next.finishing, at],
       );
     }
-    return { day, ponds: ponds.length, moved };
+    // The ponds that did not move were counted too: the mark of the day's count is on every row.
+    await tx.query("UPDATE waitlist_snapshot SET taken_at = $1", [at]);
+    return { day, ponds: ponds.length, moved, counted: true };
   });
   // How many ponds there are and how many moved, never who, where or how many people.
-  deps.logger.info(result, "waitlist snapshot");
+  deps.logger.info(
+    result,
+    result.counted ? "waitlist snapshot" : "waitlist snapshot: counted today already",
+  );
   return result;
 }
 

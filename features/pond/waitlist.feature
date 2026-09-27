@@ -48,6 +48,13 @@ Feature: The waitlist counter
     When one more joins and the figures are taken on the day after
     Then the total is thirty-five and the day is that day
 
+  Scenario: The accounts are counted at most once a day
+    Given a pond whose published total is twenty-five, counted today
+    When ten more people join and another process counts on the same day
+    Then nothing is counted and the waitlist says what it said
+    When the figures are taken on the next day
+    Then the total is thirty-five
+
   Scenario: The figures do not move between two counts
     Given the figures of one day
     When fifteen more people join the pond that day
