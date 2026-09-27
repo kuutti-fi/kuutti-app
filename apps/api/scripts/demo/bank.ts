@@ -1,5 +1,5 @@
 import { type DemoPersona, personaClaims } from "@kuutti/db/demo";
-import { AuthExchangeResponse, ErrorResponse } from "@kuutti/schema";
+import { AuthExchangeResponse, ErrorResponse, HealthResponse } from "@kuutti/schema";
 
 /**
  * A persona's way through the bank and back, as a browser and the app walk it
@@ -23,6 +23,21 @@ const LOOPBACK = new Set(["localhost", "127.0.0.1", "[::1]"]);
 
 /** Whether the address is on this computer: the only place a persona's claims are sent to. */
 export const onThisComputer = (url: URL): boolean => LOOPBACK.has(url.hostname);
+
+/**
+ * Whether the address is this computer's own: a loopback one, or one of the
+ * addresses of its network interfaces, which the caller reads. The object
+ * store is named by the computer's address on the network when a phone has
+ * to load photos from it (env.example), and that is this computer still.
+ * Another machine on the same network is not, and neither is a name that
+ * would have to be looked up: what a name resolves to can change between the
+ * question and the deletion.
+ */
+export function ofThisComputer(url: URL, addresses: readonly string[]): boolean {
+  if (onThisComputer(url)) return true;
+  // An IPv6 address stands in brackets in a URL and without them on an interface.
+  return addresses.includes(url.hostname.replace(/^\[|\]$/g, ""));
+}
 
 /** The longest the walk waits for the rate limit's window, which is a minute. */
 const RETRY_AFTER_MAX_SECONDS = 65;
@@ -61,15 +76,15 @@ function locationOf(response: Response, what: string): URL {
   return new URL(location);
 }
 
-export async function loginAs(
-  persona: DemoPersona,
-  context: BankContext,
-  locale: "fi" | "sv" | "en" = "fi",
-): Promise<Login> {
-  const { api } = context;
-  const start = await patient(context, new URL(`/auth/start?platform=ios&locale=${locale}`, api), {
-    redirect: "manual",
-  });
+type Locale = "fi" | "sv" | "en";
+
+/** Where the API sends a login: the bank's page, which must be on this computer. */
+async function bankOf(context: BankContext, locale: Locale): Promise<URL> {
+  const start = await patient(
+    context,
+    new URL(`/auth/start?platform=ios&locale=${locale}`, context.api),
+    { redirect: "manual" },
+  );
   if (start.status === 503) {
     throw new DemoError(
       "the API has no bank identification: is the mock bank running, and are OIDC_ISSUER, OIDC_CLIENT_ID, OIDC_REDIRECT_URI and HETU_HMAC_KEY set for it?",
@@ -84,6 +99,43 @@ export async function loginAs(
       `the API's bank is ${bank.host}, not the mock bank on this computer: nothing was sent`,
     );
   }
+  return bank;
+}
+
+/**
+ * Asks the API what it is, before anybody is erased for a history that
+ * could then not be given: something answers, it answers as Kuutti's API
+ * does, its database is there with its migrations, and the bank it sends a
+ * login to is on this computer. One login is begun for the question and
+ * never finished; the API forgets it as it forgets any.
+ */
+export async function lookAtApi(context: BankContext): Promise<{ commit: string; bank: string }> {
+  const health = await context.fetch(new URL("/health", context.api)).catch(() => null);
+  if (!health) {
+    throw new DemoError(
+      `nothing answers at ${context.api}: the histories need the local environment (pnpm env:up)`,
+    );
+  }
+  const answer = HealthResponse.safeParse(await health.json().catch(() => null));
+  if (!answer.success) {
+    throw new DemoError(`what answers at ${context.api} is not Kuutti's API`);
+  }
+  if (health.status !== 200 || answer.data.status !== "ok") {
+    throw new DemoError(
+      `the API at ${context.api} is not ready: database ${answer.data.db}, migrations ${answer.data.migrations}`,
+    );
+  }
+  const bank = await bankOf(context, "fi");
+  return { commit: answer.data.commit, bank: bank.origin };
+}
+
+export async function loginAs(
+  persona: DemoPersona,
+  context: BankContext,
+  locale: Locale = "fi",
+): Promise<Login> {
+  const { api } = context;
+  const bank = await bankOf(context, locale);
 
   const posted = await context.fetch(bank, {
     method: "POST",

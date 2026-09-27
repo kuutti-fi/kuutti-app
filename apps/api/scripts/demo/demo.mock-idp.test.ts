@@ -26,7 +26,15 @@ import {
   test,
   testConfig,
 } from "../../src/test/harness.ts";
-import { type BankContext, call, DemoError, type Fetch, loginAs } from "./bank.ts";
+import {
+  type BankContext,
+  call,
+  DemoError,
+  type Fetch,
+  loginAs,
+  lookAtApi,
+  ofThisComputer,
+} from "./bank.ts";
 import { giveHistory } from "./histories.ts";
 import { resetPersonas } from "./reset.ts";
 
@@ -189,9 +197,95 @@ describe("the walk to the bank and back", () => {
     // Never longer than the limit's own window, whatever the header says.
     expect(waited).toEqual([7000, 65_000]);
   });
+
+  test("an object store is this computer's by a loopback address or one of its own, and by no name", () => {
+    const own = ["127.0.0.1", "::1", "192.168.1.20", "fe80::1c2d:3eff:fe4f:5a6b"];
+    for (const address of [
+      "http://127.0.0.1:9000",
+      "http://localhost:9000",
+      "http://[::1]:9000",
+      "http://192.168.1.20:9000",
+      "http://[fe80::1c2d:3eff:fe4f:5a6b]:9000",
+    ]) {
+      expect(ofThisComputer(new URL(address), own), address).toBe(true);
+    }
+    for (const address of [
+      // The machine beside this one, a bucket at a provider, and names, which
+      // are whatever they resolve to when the deletion is sent.
+      "http://192.168.1.21:9000",
+      "https://s3.eu-central-1.amazonaws.com",
+      "https://kuutti-media.s3.eu-central-1.amazonaws.com",
+      "http://this-computer.local:9000",
+      "http://0.0.0.0:9000",
+    ]) {
+      expect(ofThisComputer(new URL(address), own), address).toBe(false);
+    }
+    expect(ofThisComputer(new URL("http://192.168.1.20:9000"), [])).toBe(false);
+  });
+
+  const healthy = {
+    status: "ok",
+    version: "0.0.0",
+    commit: "abc1234",
+    builtAt: "2026-09-01T09:00:00.000Z",
+    source: "https://github.com/kuutti-fi/kuutti-app",
+    db: "ok",
+    migrations: "current",
+  };
+  const json = (body: unknown, status: number) => new Response(JSON.stringify(body), { status });
+  const asking = (fetch: Fetch): BankContext => ({ api: API, now: () => new Date(), fetch });
+
+  test("the API is asked what it is before anybody is erased: nobody there, somebody else, not ready", async () => {
+    await expect(
+      lookAtApi(
+        asking(async () => {
+          throw new TypeError("fetch failed");
+        }),
+      ),
+    ).rejects.toThrow(/nothing answers at/);
+    await expect(
+      lookAtApi(asking(async () => new Response("<html></html>", { status: 200 }))),
+    ).rejects.toThrow(/is not Kuutti's API/);
+    await expect(lookAtApi(asking(async () => json({ status: "ok" }, 200)))).rejects.toThrow(
+      /is not Kuutti's API/,
+    );
+    await expect(
+      lookAtApi(
+        asking(async () => json({ ...healthy, status: "degraded", migrations: "pending" }, 503)),
+      ),
+    ).rejects.toThrow(/is not ready: database ok, migrations pending/);
+  });
+
+  test("an API whose bank is somewhere else is refused, and one whose bank is here is said", async () => {
+    const asked: string[] = [];
+    const to = (bank: string) =>
+      asking(async (input) => {
+        asked.push(String(input));
+        return String(input).endsWith("/health")
+          ? json(healthy, 200)
+          : answer(302, { location: bank });
+      });
+    await expect(
+      lookAtApi(to("https://tunnistus-pp.telia.fi/uas/oauth2/authorization?x")),
+    ).rejects.toThrow(/not the mock bank on this computer/);
+    expect(await lookAtApi(to("http://127.0.0.1:8080/ftn/authorize?state=s"))).toEqual({
+      commit: "abc1234",
+      bank: "http://127.0.0.1:8080",
+    });
+    // Two questions each time, and nothing posted to anybody.
+    const questions = [`${API}/health`, `${API}/auth/start?platform=ios&locale=fi`];
+    expect(asked).toEqual([...questions, ...questions]);
+  });
 });
 
 describe.skipIf(!reachable)("the personas, through the mock bank", () => {
+  test("the API of this repository, with the mock bank, is one the reset goes on with", async ({
+    ctx,
+  }) => {
+    const { bank } = await world(ctx);
+    expect(await lookAtApi(bank)).toMatchObject({ bank: new URL(ISSUER).origin });
+  });
+
   test("a newcomer logs in with one posted form and is a fresh account", async ({ ctx }) => {
     const { bank } = await world(ctx);
     const first = await loginAs(persona("aino"), bank);
@@ -396,5 +490,38 @@ describe.skipIf(!reachable)("the personas, through the mock bank", () => {
       spared: ["aino"],
     });
     expect(await loginAs(persona("aino"), bank)).toMatchObject({ outcome: "resumed" });
+  });
+
+  test("a persona whose role was taken away is reset at once, its ended staff sessions with it", async ({
+    ctx,
+  }) => {
+    const { bank, logger } = await world(ctx);
+    const now = () => new Date();
+    await loginAs(persona("aino"), bank);
+    await loginAs(persona("mikael"), bank);
+    // Both were moderators and had signed in to the panel. Aino's role was
+    // taken away as the command line does it: the role's row deleted, the
+    // session marked revoked and left to the nightly sweep; an older session
+    // of hers ran out. Mikael's role went by hand, and his session is live.
+    await ctx.client.query(
+      `INSERT INTO admin_session (identity_id, role, access_hash, expires_at, revoked_at)
+       SELECT id, 'moderator', 'hash of ' || broker_subject, now() + interval '8 hours',
+              CASE WHEN broker_subject = 'aino' THEN now() END
+       FROM identity WHERE broker_subject IN ('aino', 'mikael')`,
+    );
+    await ctx.client.query(
+      `INSERT INTO admin_session (identity_id, role, access_hash, expires_at)
+       SELECT id, 'moderator', 'hash of an older one', now() - interval '1 hour'
+       FROM identity WHERE broker_subject = 'aino'`,
+    );
+
+    const result = await resetPersonas({ db: ctx.client, logger, now });
+    expect(result).toEqual({ identities: 1, erased: 1, objects: 0, spared: ["mikael"] });
+    const { rows } = await ctx.client.query<{ key: string }>(
+      `SELECT i.broker_subject AS key FROM admin_session s JOIN identity i ON i.id = s.identity_id`,
+    );
+    expect(rows).toEqual([{ key: "mikael" }]);
+    expect(await loginAs(persona("aino"), bank)).toMatchObject({ outcome: "created" });
+    expect(await loginAs(persona("mikael"), bank)).toMatchObject({ outcome: "resumed" });
   });
 });

@@ -27,6 +27,12 @@ import type { MediaDeps } from "../../src/media/index.ts";
  * what it then wrote into the audit log can never be deleted. Erasing it and
  * failing on the deletion afterwards would leave a persona no later reset
  * could repair, so the question is asked before anybody is erased.
+ *
+ * A staff session that has ended is no staff row: taking a role away marks
+ * the sessions revoked and leaves the rows to the API's nightly sweep, which
+ * a developer's machine seldom runs. The reset deletes a persona's ended
+ * sessions itself, as the sweep would, so that a persona whose role was
+ * taken away is reset at once.
  */
 export type ResetDeps = { db: Queryable; logger: Logger; now: () => Date; media?: MediaDeps };
 
@@ -42,11 +48,12 @@ export async function resetPersonas(deps: ResetDeps): Promise<ResetResult> {
   const { rows: identities } = await deps.db.query<{ id: string; key: string; staff: boolean }>(
     `SELECT i.id, i.broker_subject AS key,
             (EXISTS (SELECT 1 FROM moderator_roles m WHERE m.identity_id = i.id)
-             OR EXISTS (SELECT 1 FROM admin_session s WHERE s.identity_id = i.id)
+             OR EXISTS (SELECT 1 FROM admin_session s WHERE s.identity_id = i.id
+                        AND s.revoked_at IS NULL AND s.expires_at >= $3)
              OR EXISTS (SELECT 1 FROM audit_log a WHERE a.actor_identity_id = i.id)
              OR EXISTS (SELECT 1 FROM photo_review r WHERE r.decided_by = i.id)) AS staff
      FROM identity i WHERE i.broker_subject = ANY($1) AND $2 = ANY(i.amr)`,
-    [DEMO_PERSONAS.map((p) => p.key), MOCK_BANK_AMR],
+    [DEMO_PERSONAS.map((p) => p.key), MOCK_BANK_AMR, deps.now()],
   );
   const spared = [...new Set(identities.filter((r) => r.staff).map((r) => r.key))].sort();
   const ids = identities.filter((r) => !r.staff).map((r) => r.id);
@@ -64,6 +71,16 @@ export async function resetPersonas(deps: ResetDeps): Promise<ResetResult> {
     erased += 1;
     objects += summary.objects;
   }
-  await transaction(deps.db, (tx) => deleteIdentities(tx, ids));
+  await transaction(deps.db, async (tx) => {
+    // The ended ones only, by the sweep's own rule (deleteDeadAdminSessions):
+    // a session begun since the question above stops the deletion on its
+    // foreign key, and the transaction with it.
+    await tx.query(
+      `DELETE FROM admin_session WHERE identity_id = ANY($1)
+         AND (revoked_at IS NOT NULL OR expires_at < $2)`,
+      [ids, deps.now()],
+    );
+    await deleteIdentities(tx, ids);
+  });
   return { identities: ids.length, erased, objects, spared };
 }

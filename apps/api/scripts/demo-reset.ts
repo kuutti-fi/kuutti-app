@@ -11,9 +11,11 @@
  * at the mock bank and talk to the API. Everything it touches is on this
  * computer, and it looks before it acts: development or test, an API and a
  * bank on a loopback address, configuration from this process alone (never
- * from a parameter store), a database server that is not a deployed one, and
- * an object store that is the local stand-in or none.
+ * from a parameter store), a database server that is not a deployed one, an
+ * object store at an address of this computer or none, and, where histories
+ * are to be given, an API that answers as ours before anybody is erased.
  */
+import { networkInterfaces } from "node:os";
 import { createPool } from "@kuutti/db";
 import {
   assertDemoTarget,
@@ -25,7 +27,7 @@ import { takeSnapshot } from "../src/jobs/waitlist-snapshot.ts";
 import { parseConfig } from "../src/lib/config.ts";
 import { createLogger } from "../src/lib/logger.ts";
 import { createMediaDeps } from "../src/media/index.ts";
-import { DemoError, onThisComputer } from "./demo/bank.ts";
+import { DemoError, lookAtApi, ofThisComputer, onThisComputer } from "./demo/bank.ts";
 import { giveHistory } from "./demo/histories.ts";
 import { resetPersonas } from "./demo/reset.ts";
 
@@ -74,12 +76,26 @@ if (!issuer || !onThisComputer(new URL(issuer))) {
   );
 }
 // Erasure deletes a photo's objects. The local stand-in's, or nobody's: a
-// bucket behind a distribution is a deployed one.
+// bucket behind a distribution is a deployed one, and an endpoint is any
+// address somebody wrote into the configuration, so it is asked where it is:
+// on this computer, by a loopback address or by one of the computer's own
+// (a phone on the network reaches the stand-in by that one, env.example).
 const media = createMediaDeps(config);
-const store = media.setup.mode === "presigned" ? media.deps : undefined;
 if (media.setup.mode === "cloudfront") {
   fail("refusing: the object store of this configuration is a deployed one");
 }
+if (media.setup.mode === "presigned") {
+  const endpoint = URL.canParse(media.setup.endpoint) ? new URL(media.setup.endpoint) : null;
+  const own = Object.values(networkInterfaces()).flatMap((list) =>
+    (list ?? []).map((a) => a.address),
+  );
+  if (!endpoint || !ofThisComputer(endpoint, own)) {
+    fail(
+      `refusing: the object store of this configuration is at ${endpoint ? endpoint.host : "no address"}, not on this computer (S3_ENDPOINT is a loopback address or one of this computer's own)`,
+    );
+  }
+}
+const store = media.setup.mode === "presigned" ? media.deps : undefined;
 
 const logger = await createLogger({ level: "warn", pretty: false });
 const pool = createPool({
@@ -102,6 +118,12 @@ try {
   assertDemoTarget(target, env);
 
   const now = () => new Date();
+  // Before anybody is erased: an API that is not there, or not ours, or not
+  // ready, would leave the six without the history they were erased for.
+  if (!bare) {
+    const looked = await lookAtApi({ api: apiUrl.origin, fetch, now });
+    console.log(JSON.stringify({ msg: "demo reset: the API", api: apiUrl.origin, ...looked }));
+  }
   const reset = await resetPersonas({ db: pool, logger, now, ...(store ? { media: store } : {}) });
   console.log(JSON.stringify({ msg: "demo reset: personas forgotten", ...reset }));
 
@@ -120,7 +142,7 @@ try {
 
   if (reset.spared.length > 0) {
     throw new DemoError(
-      `left alone, because they hold a staff row on this machine: ${reset.spared.join(", ")}. Take the role away (pnpm --filter @kuutti/db moderator) and reset again; a persona that has written into the audit log stays until the database is made anew`,
+      `left alone, because they hold a staff row on this machine: ${reset.spared.join(", ")}. Take the role away (pnpm --filter @kuutti/db moderator -- revoke), which ends the staff sessions too, and reset again; a persona that has looked at a photo or decided on one as a moderator is in the audit log and stays until the database is made anew`,
     );
   }
 } catch (error) {
