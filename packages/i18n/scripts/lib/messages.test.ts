@@ -364,3 +364,58 @@ legal.terms.summary:
     expect(checkMessages(messages, { release: false }).errors).toEqual([]);
   });
 });
+
+describe("i18n:check, after Copilot's second look at #74", () => {
+  it("sees a draft marker anywhere in the wording, as its own word", () => {
+    const messages = parseMessages(`
+legal.terms.summary:
+  en: "The terms (draft)."
+  description: The terms the person accepts by version.
+  fi: "Ehdot, LUONNOS."
+  consent_version: "2026-10-1"
+legal.privacy.summary:
+  en: "A draftsman's contract."
+  description: A word that only contains the marker.
+  fi: "Luonnoskirja ei ole luonnosteksti."
+  consent_version: "2026-10-1"
+`);
+    const drafts = checkMessages(messages, { release: true }).errors.filter((e) =>
+      e.includes("legal text is still a draft"),
+    );
+    expect(drafts.map((e) => e.split(":")[0])).toEqual(["legal.terms.summary"]);
+  });
+
+  it("holds a text in the file to the tags of its English", () => {
+    const messages: Messages = {
+      "demo.bold": {
+        en: "<b>Hello</b>",
+        description: "d",
+        fi: "<a>Hei</a>",
+        machine: { fi: true },
+      },
+    };
+    expect(checkMessages(messages, { release: false }).errors).toContain(
+      "demo.bold: fi does not keep the tags of en",
+    );
+  });
+
+  it("does not let a translation flatten a plural or a select, or change its kind", () => {
+    const messages: Messages = {
+      "demo.likes": {
+        en: "{likes, plural, one {# like} other {# likes}}",
+        description: "d",
+        fi: "{likes, number} tykkäystä",
+        machine: { fi: true },
+      },
+      "demo.who": {
+        en: "{gender, select, woman {She} man {He} other {They}} liked you",
+        description: "d",
+        fi: "{gender} tykkäsi sinusta",
+        machine: { fi: true },
+      },
+    };
+    const { errors } = checkMessages(messages, { release: false });
+    expect(errors).toContain("demo.likes: fi {likes} is a plural in en and is not one here");
+    expect(errors).toContain("demo.who: fi {gender} is a select in en and is not one here");
+  });
+});

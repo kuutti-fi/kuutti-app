@@ -447,6 +447,7 @@ export function importSheet(
   };
   const at = {
     key: column("key"),
+    en: column("en"),
     text: column(locale),
     approve: column("approve"),
     fingerprint: column("fingerprint"),
@@ -480,6 +481,16 @@ export function importSheet(
         result.refused,
         key,
         "changed in the repository since the sheet was exported; export it again",
+      );
+      continue;
+    }
+    // The fingerprint says the file has not moved; this says the reviewer read
+    // the file's English and not an edited cell.
+    if ((cells[at.en] ?? "") !== flatten(message.en)) {
+      note(
+        result.refused,
+        key,
+        "the English in the sheet is not the English in the repository; export it again",
       );
       continue;
     }

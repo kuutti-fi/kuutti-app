@@ -150,15 +150,38 @@ const REPLACEMENT = "\uFFFD";
 // top-level domain is letters of any script, and a phone number is digits of
 // any script. A false refusal (a date written out as 2026-09-27, "Valmis.Jatka"
 // without its space) costs a rephrase; a false pass costs a person.
-const DOMAIN = /(^|[^\p{L}\p{N}.@-])\p{L}[\p{L}\p{N}-]*\.\p{L}{2,}(?![\p{L}\p{N}])/u;
-const PHONE = /\+?\p{Nd}[\p{Nd} \u00a0-]{6,}\p{Nd}/u;
+const DOMAIN =
+  /(?<=^|[^\p{L}\p{N}.@-])\p{L}[\p{L}\p{N}-]*(?:\.[\p{L}\p{N}-]+)*\.\p{L}{2,}(?![\p{L}\p{N}])/gu;
+const PHONE = /\+?\p{Nd}[\p{Nd} \u00a0-]{6,}\p{Nd}/gu;
+const LINK = /[\p{L}][\p{L}\p{N}+.-]*:\/\/[^\s<>"']+/gu;
+const ADDRESS = /[\p{L}\p{N}._%+-]*@[\p{L}\p{N}._-]*/gu;
 // A spreadsheet reads a cell that starts with = as a formula (review.ts, the sheet).
 const FORMULA = /^\s*=/;
 
+const found = (pattern: RegExp, text: string, normalise: (match: string) => string): Set<string> =>
+  new Set([...text.matchAll(pattern)].map((match) => normalise(match[0])));
+
+/** True when `text` carries a match of `pattern` that `en` does not: one more, or another one. */
+function adds(
+  pattern: RegExp,
+  en: string,
+  text: string,
+  normalise: (match: string) => string,
+): boolean {
+  const source = found(pattern, en, normalise);
+  return [...found(pattern, text, normalise)].some((match) => !source.has(match));
+}
+
+const lower = (match: string): string => match.toLowerCase().replace(/[.,;:!?)]+$/, "");
+const digits = (match: string): string => match.replace(/\P{Nd}/gu, "");
+
 /**
  * What a text must not carry that its English lacks: invisible characters,
- * a link, markup, contact details, the start of a spreadsheet formula. Checked
- * on translator output, on a reviewer's sheet and on the file itself (#13, #55).
+ * a link, markup, contact details, the start of a spreadsheet formula. Each
+ * link, address and number of the translation must be one the English has:
+ * "the English has one too" would let hello@kuutti.app become another
+ * address. Checked on translator output, on a reviewer's sheet and on the
+ * file itself (#13, #55).
  */
 export function untrustedTextProblem(en: string, text: string): string | undefined {
   if (INVISIBLE.test(text)) return "contains control, bidirectional or line-separator characters";
@@ -167,19 +190,14 @@ export function untrustedTextProblem(en: string, text: string): string | undefin
   }
   const plain = text.normalize("NFKC");
   const source = en.normalize("NFKC");
-  if (plain.includes("://") && !source.includes("://")) {
-    return "contains a link the English source does not have";
-  }
+  if (adds(LINK, source, plain, lower)) return "contains a link the English source does not have";
   if (MARKUP.test(plain) && !MARKUP.test(source)) {
     return "contains markup the English source does not have";
   }
-  if (
-    (DOMAIN.test(plain) && !DOMAIN.test(source)) ||
-    (plain.includes("@") && !source.includes("@"))
-  ) {
+  if (adds(ADDRESS, source, plain, lower) || adds(DOMAIN, source, plain, lower)) {
     return "contains a web or e-mail address the English source does not have";
   }
-  if (PHONE.test(plain) && !PHONE.test(source)) {
+  if (adds(PHONE, source, plain, digits)) {
     return "contains a phone number the English source does not have";
   }
   if (FORMULA.test(plain) && !FORMULA.test(source)) {

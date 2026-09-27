@@ -232,7 +232,7 @@ describe("the review sheet", () => {
   });
 
   it("reports a sheet row named like an Object.prototype member instead of losing it", () => {
-    const back = `key\tfi\tapprove\tfingerprint\n__proto__\tHei\tx\t0\n`;
+    const back = `key\ten\tfi\tapprove\tfingerprint\n__proto__\tHello\tHei\tx\t0\n`;
     expect(importSheet(SOURCE, messages, "fi", back).refused).toEqual(
       Object.defineProperty({}, "__proto__", {
         value: "not in messages.yaml",
@@ -303,5 +303,25 @@ smoke.short:
     expect(result.corrected).toEqual([]);
     expect(result.refused["smoke.short"]).toBe("is over its max_length of 5");
     expect(result.yaml).toContain("fi: Selvä\n");
+  });
+});
+
+describe("the sheet's English", () => {
+  it("refuses a row whose English is not the repository's, whatever the fingerprint says", () => {
+    const yaml = `
+smoke.hello:
+  en: Hello
+  description: A greeting.
+  fi: Hei
+  machine: { fi: true }
+`;
+    const messages = parseMessages(yaml);
+    const sheet = exportSheet(messages, "fi", "tsv");
+    const edited = sheet.replace("\tHello\t", "\tGoodbye\t").replace("\tHei\t\t", "\tHei\tx\t");
+    const result = importSheet(yaml, messages, "fi", edited);
+    expect(result.approved).toEqual([]);
+    expect(result.refused["smoke.hello"]).toMatch(/English in the sheet is not the English/);
+    const asExported = sheet.replace("\tHei\t\t", "\tHei\tx\t");
+    expect(importSheet(yaml, messages, "fi", asExported).approved).toEqual(["smoke.hello"]);
   });
 });

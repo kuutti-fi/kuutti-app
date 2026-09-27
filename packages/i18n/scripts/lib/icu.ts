@@ -96,9 +96,30 @@ export function branchesOf(message: string): Record<string, Branching> {
 export function branchProblems(en: string, text: string, locale: string): string[] {
   const problems: string[] = [];
   const source = branchesOf(en);
-  for (const [name, target] of Object.entries(branchesOf(text))) {
+  const targets = branchesOf(text);
+  // The argument check sees names and coarse types only ({count, plural, …} and
+  // {count, number} are both numbers), so a branch the English has and the
+  // translation flattened, or turned into another kind, is reported here. An
+  // argument one side lacks altogether is the argument check's to report.
+  const inSource = argumentsOf(en);
+  const inTarget = argumentsOf(text);
+  for (const [name, original] of Object.entries(source)) {
+    const target = targets[name];
+    if (!(name in inTarget)) continue;
+    if (!target) problems.push(`{${name}} is a ${original.kind} in en and is not one here`);
+    else if (target.kind !== original.kind) {
+      problems.push(`{${name}} is a ${original.kind} in en and a ${target.kind} here`);
+    }
+  }
+  for (const [name, target] of Object.entries(targets)) {
     const original = source[name];
-    if (!original || original.kind !== target.kind) continue; // the argument check reports it
+    if (!original) {
+      if (name in inSource) {
+        problems.push(`{${name}} is a ${target.kind} here and is not one in en`);
+      }
+      continue;
+    }
+    if (original.kind !== target.kind) continue; // reported above
     if (target.kind === "select") {
       const missing = [...original.options].filter((o) => !target.options.has(o));
       const extra = [...target.options].filter((o) => !original.options.has(o));

@@ -12,9 +12,9 @@ export const DEFAULT_LOCALE: Locale = "en";
  * The languages a release ships (#55, TD-17): English and Finnish at launch.
  * `pnpm i18n:check --release` holds each of them to a native review; Swedish
  * waits in dev and staging, where a reviewer can read it, until one has cleared
- * it, and releasing it is adding it here. Pass it as `allowed` to resolveLocale
- * wherever a production build or the production API picks a language (the app
- * and the API follow in #55's language change; until then they offer all three).
+ * it, and releasing it is adding it here. A production build of the app and
+ * the production API pass it as `allowed` to resolveLocale; every other
+ * environment serves all the catalogues.
  */
 export const RELEASED_LOCALES = ["en", "fi"] as const satisfies readonly Locale[];
 

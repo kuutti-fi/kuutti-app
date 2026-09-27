@@ -300,3 +300,23 @@ describe("what the review of #74 tightened", () => {
     expect(rejectionReason("OK", "Selvä juttu", "fi")).toBeUndefined();
   });
 });
+
+describe("what the translation may not swap", () => {
+  it("keeps the English's own link, address and number, and takes no other", () => {
+    const en = "Write to hello@kuutti.app, see https://kuutti.app/help or call +358 40 123 4567.";
+    const kept =
+      "Kirjoita osoitteeseen hello@kuutti.app, katso https://kuutti.app/help tai soita +358 40 123 4567.";
+    expect(untrustedTextProblem(en, kept)).toBeUndefined();
+    expect(untrustedTextProblem(en, kept.replace("hello@kuutti.app", "scam@evil.fi"))).toMatch(
+      /web or e-mail address/,
+    );
+    expect(
+      untrustedTextProblem(en, kept.replace("https://kuutti.app/help", "https://evil.example/x")),
+    ).toMatch(/link/);
+    expect(untrustedTextProblem(en, kept.replace("123 4567", "765 4321"))).toMatch(/phone number/);
+    // Another spelling of the same number is the same number.
+    expect(untrustedTextProblem(en, kept.replace("+358 40 123 4567", "+358-40-123-4567"))).toBe(
+      undefined,
+    );
+  });
+});

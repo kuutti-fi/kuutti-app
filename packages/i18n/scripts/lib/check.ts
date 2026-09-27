@@ -1,5 +1,11 @@
 import { RELEASED_LOCALES } from "../../src/locales.ts";
-import { type ArgumentType, argumentsOf, branchProblems, inflectionProblems } from "./icu.ts";
+import {
+  type ArgumentType,
+  argumentsOf,
+  branchProblems,
+  inflectionProblems,
+  tagsOf,
+} from "./icu.ts";
 import { isStale } from "./review-hash.ts";
 import {
   isAdminKey,
@@ -40,7 +46,8 @@ const RELEASED_TRANSLATIONS = TRANSLATED_LOCALES.filter((locale) =>
 
 // A wording the association's counsel has not yet replaced (#46, ADR-010).
 const DRAFT_VERSION = /draft/i;
-const DRAFT_TEXT = /^\s*(DRAFT|LUONNOS|UTKAST)\b/i;
+// Anywhere in the wording, as its own word, however it is capitalised.
+const DRAFT_TEXT = /(?<![\p{L}])(DRAFT|LUONNOS|UTKAST)(?![\p{L}])/iu;
 
 export type CheckResult = { errors: string[]; warnings: string[] };
 
@@ -119,6 +126,10 @@ export function checkMessages(messages: Messages, options: { release: boolean })
       try {
         if (!sameArguments(source, argumentsOf(text))) {
           errors.push(`${key}: ${locale} does not use the same arguments as en`);
+        }
+        // The tags are markup the app renders: a translation keeps exactly the English's.
+        if ([...tagsOf(text)].sort().join() !== [...tagsOf(message.en)].sort().join()) {
+          errors.push(`${key}: ${locale} does not keep the tags of en`);
         }
         for (const problem of inflectionProblems(text, locale)) {
           errors.push(`${key}: ${locale} ${problem}`);
