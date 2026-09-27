@@ -15,6 +15,7 @@ import { Icon } from "@/components/ui/icon";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Text } from "@/components/ui/text";
 import { AccountActions, useOnboardingGate, useSession } from "@/features/identity";
+import { WaitlistCard } from "@/features/pond";
 import { apiBaseUrl, fetchHealth } from "@/lib/api";
 import { useT } from "@/lib/locale";
 import { cn } from "@/lib/utils";
@@ -236,6 +237,11 @@ export function SmokeScreen() {
             )}
           </View>
         </Card>
+
+        {/* How the person's own pond is filling up (#54): figures of the day, nothing below k. */}
+        {session.status === "signed-in" && gate.status === "complete" && gate.pond && (
+          <WaitlistCard pond={gate.pond} />
+        )}
 
         {/* Export and deletion (#51) until the profile gives them a home. */}
         <AccountActions />

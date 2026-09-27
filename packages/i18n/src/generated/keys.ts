@@ -183,6 +183,16 @@ export type MessageParams = {
   "photos.uploading": { "percent": number };
   "photos.zoom.back": Record<never, never>;
   "photos.zoom.label": { "position": number; "total": number };
+  "pond.waitlist.failed": Record<never, never>;
+  "pond.waitlist.finishing": { "people": number };
+  "pond.waitlist.label": Record<never, never>;
+  "pond.waitlist.loading": Record<never, never>;
+  "pond.waitlist.retry": Record<never, never>;
+  "pond.waitlist.small": { "k": number };
+  "pond.waitlist.split": { "women": number; "men": number; "nonBinary": number };
+  "pond.waitlist.steps": { "k": number };
+  "pond.waitlist.title": Record<never, never>;
+  "pond.waitlist.verified": { "people": number };
   "profile.bio.hint": { "min": number };
   "profile.bio.label": Record<never, never>;
   "profile.bio.orPreset": Record<never, never>;

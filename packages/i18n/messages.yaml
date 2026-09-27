@@ -2394,3 +2394,73 @@ smoke.gate.retry:
   fi: "Tarkista uudelleen"
   sv: "Kontrollera igen"
   machine: { fi: true, sv: true }
+
+pond.waitlist.label:
+  en: "People in your area"
+  description: "Home screen, accessible name of the card with the waitlist counter of the person's own pond (#54, ADR-013)."
+  fi: "Ihmiset alueellasi"
+  sv: "Människor i ditt område"
+  machine: { fi: true, sv: true }
+
+pond.waitlist.title:
+  en: "Your area"
+  description: "Waitlist card: the line above the pond's name. The name follows on a line of its own, in the nominative, never inside a sentence."
+  fi: "Alueesi"
+  sv: "Ditt område"
+  machine: { fi: true, sv: true }
+
+pond.waitlist.verified:
+  en: "{people, plural, one {# person has identified with their bank} other {# people have identified with their bank}}"
+  description: "Waitlist card: how many bank-verified people wait in the pond. {people} is at least the threshold k (ten), so never small."
+  fi: "{people, plural, one {# ihminen on tunnistautunut pankkitunnuksilla} other {# ihmistä on tunnistautunut pankkitunnuksilla}}"
+  sv: "{people, plural, one {# person har identifierat sig med bank-id} other {# personer har identifierat sig med bank-id}}"
+  machine: { fi: true, sv: true }
+
+pond.waitlist.split:
+  en: "{women, number} women, {men, number} men, {nonBinary, number} non-binary"
+  description: "Waitlist card: the split by self-declared gender, shown only when every group is at least k, so each number is 10 or more."
+  fi: "{women, number} naista, {men, number} miestä, {nonBinary, number} muunsukupuolista"
+  sv: "{women, number} kvinnor, {men, number} män, {nonBinary, number} icke-binära"
+  machine: { fi: true, sv: true }
+
+pond.waitlist.finishing:
+  en: "{people, plural, =0 {Everyone has finished their profile.} one {# person is still finishing their profile.} other {# people are still finishing their profile.}}"
+  description: "Waitlist card: how many of the verified people have not completed their profile yet. Shown only when the number is zero or at least k (ten); the one form exists for the grammar, not for use."
+  fi: "{people, plural, =0 {Kaikki ovat saaneet profiilinsa valmiiksi.} one {# ihminen viimeistelee vielä profiiliaan.} other {# ihmistä viimeistelee vielä profiiliaan.}}"
+  sv: "{people, plural, =0 {Alla har gjort klart sin profil.} one {# person håller fortfarande på med sin profil.} other {# personer håller fortfarande på med sin profil.}}"
+  machine: { fi: true, sv: true }
+
+pond.waitlist.small:
+  en: "Your area is just getting started. Numbers are shown only when at least {k, number} people are here."
+  description: "Waitlist card, below the threshold: no number is said about a small pond. {k} is the threshold. It names a condition, not a promise: numbers are never shown below {k}, and they may come a little later than at exactly {k}."
+  fi: "Alueesi on vasta alussa. Luvut näytetään vain, kun täällä on vähintään {k, number} ihmistä."
+  sv: "Ditt område har precis kommit igång. Siffror visas bara när minst {k, number} personer finns här."
+  machine: { fi: true, sv: true }
+
+pond.waitlist.steps:
+  en: "The numbers change only when at least {k, number} people have joined or left, so that one person joining or leaving does not show."
+  description: "Waitlist card, under the figures: why the numbers stand still for a while. {k} is the threshold (ten): the figures of an area move in steps of at least that many people, so one person's arrival or departure changes nothing in them. It says what the numbers do, not that nothing can ever be inferred."
+  fi: "Luvut muuttuvat vasta, kun vähintään {k, number} ihmistä on tullut tai lähtenyt, jotta yhden ihmisen tulo tai lähtö ei näy niistä."
+  sv: "Siffrorna ändras först när minst {k, number} personer har kommit eller lämnat, så att det inte syns när en enskild person kommer eller lämnar."
+  machine: { fi: true, sv: true }
+
+pond.waitlist.loading:
+  en: "Counting…"
+  description: "Waitlist card while the figures load."
+  fi: "Lasketaan…"
+  sv: "Räknar…"
+  machine: { fi: true, sv: true }
+
+pond.waitlist.failed:
+  en: "The numbers could not be read."
+  description: "Waitlist card when the figures could not be fetched."
+  fi: "Lukuja ei voitu lukea."
+  sv: "Siffrorna kunde inte läsas."
+  machine: { fi: true, sv: true }
+
+pond.waitlist.retry:
+  en: "Try again"
+  description: "Waitlist card, the button that fetches the figures again."
+  fi: "Yritä uudelleen"
+  sv: "Försök igen"
+  machine: { fi: true, sv: true }
