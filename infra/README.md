@@ -132,7 +132,8 @@ Once the checks exist on `main`, the ruleset `23053522` gains a pull-request rul
 
 ```sh
 gh api -X PUT repos/kuutti-fi/kuutti-app/rulesets/23053522 --input - <<'JSON'
-{"name":"Protect main","target":"branch","enforcement":"active","bypass_actors":[],
+{"name":"Protect main","target":"branch","enforcement":"active",
+ "bypass_actors":[{"actor_id":5,"actor_type":"RepositoryRole","bypass_mode":"always"}],
  "conditions":{"ref_name":{"include":["~DEFAULT_BRANCH"],"exclude":[]}},
  "rules":[
   {"type":"deletion"},{"type":"non_fast_forward"},{"type":"required_linear_history"},
@@ -143,7 +144,7 @@ gh api -X PUT repos/kuutti-fi/kuutti-app/rulesets/23053522 --input - <<'JSON'
 JSON
 ```
 
-The rules above are the live ones as of 2026-09-26: fourteen checks, `i18n` (#13) and `licenses` (#16) among them; one approving review since the `contributors` team got write (2026-09-25), dismissed when new commits arrive (the native review of #55 relies on that); squash merges only. `dependency review` runs on every pull request without being required. The ruleset on GitHub is the source of truth (`gh api repos/kuutti-fi/kuutti-app/rulesets/23053522`), and a PUT replaces all of it: read its `bypass_actors` with an admin token first (they are not visible without one, and the snippet's empty list would remove the admins' bypass). A change to the ruleset updates this snippet and `CLAUDE.md` (Git) in the same pull request.
+The rules above are the live ones as of 2026-09-26: fourteen checks, `i18n` (#13) and `licenses` (#16) among them; one approving review since the `contributors` team got write (2026-09-25), dismissed when new commits arrive (the native review of #55 relies on that); squash merges only. `dependency review` runs on every pull request without being required. The ruleset on GitHub is the source of truth (`gh api repos/kuutti-fi/kuutti-app/rulesets/23053522`), and a PUT replaces all of it, `bypass_actors` included: the snippet carries the live value, repository role 5 (admin) bypassing always, which only an admin token can read back, so compare before a PUT. A change to the ruleset updates this snippet and `CLAUDE.md` (Git) in the same pull request.
 
 ### Hardening settings (#16), maintainer only
 
