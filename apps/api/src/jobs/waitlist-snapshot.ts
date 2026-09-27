@@ -24,6 +24,15 @@ import type { NightlyJob } from "./nightly.ts";
  */
 export type WaitlistDeps = { db: Queryable; logger: Logger; now: () => Date };
 
+/**
+ * One count at a time, across every process that may run one (two containers
+ * overlap during a deploy, and each takes the first figures at boot). Without
+ * it two counts read the same standing row, each finds that the pond has moved
+ * by k, and the second overwrites the first with a total one person apart:
+ * the very difference the step rule is there to keep from being said.
+ */
+export const WAITLIST_LOCK_KEY = 725_121_154;
+
 type FactsRow = {
   pond_id: string;
   gender: string | null;
@@ -105,6 +114,8 @@ export async function takeSnapshot(deps: WaitlistDeps): Promise<SnapshotResult> 
   const at = deps.now();
   const day = finnishDay(at);
   const result = await transaction(deps.db, async (tx) => {
+    // Before anything is read: what this count compares with must be what the last one left.
+    await tx.query("SELECT pg_advisory_xact_lock($1)", [WAITLIST_LOCK_KEY]);
     const k = await readWaitlistK(tx);
     const counts = await countPonds(tx);
     const standing = await readStandingFigures(tx);

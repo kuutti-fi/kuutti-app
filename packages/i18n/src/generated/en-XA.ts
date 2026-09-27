@@ -187,7 +187,7 @@ export const enXA: Readonly<Record<string, string>> = {
   "pond.waitlist.label": "［Pééóópléé ííñ ýýóóúúr áárééáá］",
   "pond.waitlist.loading": "［Çóóúúñtííñg…］",
   "pond.waitlist.retry": "［Trýý áágááííñ］",
-  "pond.waitlist.small": "［ÝÝóóúúr áárééáá ííš júúšt gééttííñg štáártééd. Ñúúmbéérš ááppééáár óóñçéé {k, number} pééóópléé ááréé hééréé.］",
+  "pond.waitlist.small": "［ÝÝóóúúr áárééáá ííš júúšt gééttííñg štáártééd. Ñúúmbéérš ááréé šhóówñ óóñlýý whééñ áát lééáášt {k, number} pééóópléé ááréé hééréé.］",
   "pond.waitlist.split": "［{women, number} wóómééñ, {men, number} mééñ, {nonBinary, number} ñóóñ-bííñáárýý］",
   "pond.waitlist.steps": "［Théé ñúúmbéérš çhááñgéé óóñlýý whééñ áát lééáášt {k, number} pééóópléé háávéé jóóííñééd óór lééft, šóó tháát óóñéé pééršóóñ jóóííñííñg óór lééáávííñg dóóééš ñóót šhóów.］",
   "pond.waitlist.title": "［ÝÝóóúúr áárééáá］",

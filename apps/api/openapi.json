@@ -1949,9 +1949,21 @@
             "$ref": "#/components/schemas/WaitlistSplit"
           },
           "finishing": {
-            "type": "integer",
-            "nullable": true,
-            "minimum": 0
+            "anyOf": [
+              {
+                "type": "number",
+                "enum": [
+                  0
+                ]
+              },
+              {
+                "type": "integer",
+                "minimum": 10
+              },
+              {
+                "nullable": true
+              }
+            ]
           }
         },
         "required": [

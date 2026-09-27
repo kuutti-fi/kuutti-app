@@ -2431,10 +2431,10 @@ pond.waitlist.finishing:
   machine: { fi: true, sv: true }
 
 pond.waitlist.small:
-  en: "Your area is just getting started. Numbers appear once {k, number} people are here."
-  description: "Waitlist card, below the threshold: no number is said about a small pond. {k} is the threshold."
-  fi: "Alueesi on vasta alussa. Luvut näkyvät, kun täällä on {k, number} ihmistä."
-  sv: "Ditt område har precis kommit igång. Siffrorna visas när {k, number} personer finns här."
+  en: "Your area is just getting started. Numbers are shown only when at least {k, number} people are here."
+  description: "Waitlist card, below the threshold: no number is said about a small pond. {k} is the threshold. It names a condition, not a promise: numbers are never shown below {k}, and they may come a little later than at exactly {k}."
+  fi: "Alueesi on vasta alussa. Luvut näytetään vain, kun täällä on vähintään {k, number} ihmistä."
+  sv: "Ditt område har precis kommit igång. Siffror visas bara när minst {k, number} personer finns här."
   machine: { fi: true, sv: true }
 
 pond.waitlist.steps:

@@ -187,7 +187,7 @@ export const en: Readonly<Record<string, string>> = {
   "pond.waitlist.label": "People in your area",
   "pond.waitlist.loading": "Counting…",
   "pond.waitlist.retry": "Try again",
-  "pond.waitlist.small": "Your area is just getting started. Numbers appear once {k, number} people are here.",
+  "pond.waitlist.small": "Your area is just getting started. Numbers are shown only when at least {k, number} people are here.",
   "pond.waitlist.split": "{women, number} women, {men, number} men, {nonBinary, number} non-binary",
   "pond.waitlist.steps": "The numbers change only when at least {k, number} people have joined or left, so that one person joining or leaving does not show.",
   "pond.waitlist.title": "Your area",

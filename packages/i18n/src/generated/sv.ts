@@ -139,7 +139,7 @@ export const sv: Readonly<Record<string, string>> = {
   "pond.waitlist.label": "Människor i ditt område",
   "pond.waitlist.loading": "Räknar…",
   "pond.waitlist.retry": "Försök igen",
-  "pond.waitlist.small": "Ditt område har precis kommit igång. Siffrorna visas när {k, number} personer finns här.",
+  "pond.waitlist.small": "Ditt område har precis kommit igång. Siffror visas bara när minst {k, number} personer finns här.",
   "pond.waitlist.split": "{women, number} kvinnor, {men, number} män, {nonBinary, number} icke-binära",
   "pond.waitlist.steps": "Siffrorna ändras först när minst {k, number} personer har kommit eller lämnat, så att det inte syns när en enskild person kommer eller lämnar.",
   "pond.waitlist.title": "Ditt område",

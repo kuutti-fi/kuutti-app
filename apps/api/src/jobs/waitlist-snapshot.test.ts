@@ -1,8 +1,18 @@
+import { resolve } from "node:path";
+import { setTimeout as sleep } from "node:timers/promises";
+import { createPool, migrate, withTemporaryDatabase } from "@kuutti/db";
 import { WaitlistResponse } from "@kuutti/schema";
+import { it } from "vitest";
 import { withMatchingConfig } from "../test/account.ts";
 import { captureLogger, describe, expect, type TestContext, test } from "../test/harness.ts";
 import { people, pondNamed } from "../test/people.ts";
-import { countPonds, ensureFirstSnapshot, takeSnapshot, waitlistJob } from "./waitlist-snapshot.ts";
+import {
+  countPonds,
+  ensureFirstSnapshot,
+  takeSnapshot,
+  WAITLIST_LOCK_KEY,
+  waitlistJob,
+} from "./waitlist-snapshot.ts";
 
 // features/pond/waitlist.feature (#54, ADR-013): who is counted, and when the
 // figures move.
@@ -212,5 +222,53 @@ describe("the figures", () => {
     const first = await ensureFirstSnapshot((await deps(ctx, DAY_1)).deps);
     expect(first?.day).toBe("2026-10-05");
     expect(await ensureFirstSnapshot((await deps(ctx, DAY_2)).deps)).toBeNull();
+  });
+});
+
+// Two containers overlap during a deploy. A pool and a database of its own:
+// the counts must really run in parallel sessions, and nothing here may be
+// seen by another test file.
+describe("two counts at once", () => {
+  it("wait for each other, so the second compares with what the first left", async () => {
+    await withTemporaryDatabase(async (url) => {
+      const pool = createPool({ connectionString: url, max: 4, applicationName: "kuutti-counts" });
+      try {
+        await migrate(pool, resolve(import.meta.dirname, "../../../../packages/db/drizzle"));
+        const { logger } = await captureLogger();
+        const pond = await pondNamed(pool, "test-waitlist-parallel");
+        await people(pool, pond, 45, { gender: "woman" });
+        await takeSnapshot({ db: pool, logger, now: () => DAY_1 });
+        await people(pool, pond, 10, { gender: "woman" });
+
+        // The first count, by hand: it holds the lock and has written 55.
+        const first = await pool.connect();
+        let second: Promise<unknown>;
+        try {
+          await first.query("BEGIN");
+          await first.query("SELECT pg_advisory_xact_lock($1)", [WAITLIST_LOCK_KEY]);
+          await first.query(
+            "UPDATE waitlist_snapshot SET verified = 55, woman = 55, finishing = 55, day = $2 WHERE pond_id = $1",
+            [pond, "2026-10-06"],
+          );
+          second = takeSnapshot({ db: pool, logger, now: () => DAY_2 });
+          const waited = await Promise.race([second.then(() => "ran"), sleep(300, "waited")]);
+          expect(waited).toBe("waited");
+          // Somebody joins before the second count gets to look.
+          await people(pool, pond, 1, { gender: "woman" });
+          await first.query("COMMIT");
+        } finally {
+          first.release();
+        }
+        expect(await second).toMatchObject({ moved: 0 });
+        const { rows } = await pool.query<{ verified: number }>(
+          "SELECT verified FROM waitlist_snapshot WHERE pond_id = $1",
+          [pond],
+        );
+        // Without the lock the second count would have compared 56 with 45 and written 56.
+        expect(rows).toEqual([{ verified: 55 }]);
+      } finally {
+        await pool.end();
+      }
+    });
   });
 });

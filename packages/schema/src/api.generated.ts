@@ -2546,7 +2546,7 @@ export interface components {
             day: string | null;
             verified: number | null;
             split: components["schemas"]["WaitlistSplit"];
-            finishing: number | null;
+            finishing: 0 | number | unknown;
         };
         WaitlistSplit: {
             woman: number;

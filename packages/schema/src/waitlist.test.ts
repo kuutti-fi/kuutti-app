@@ -226,5 +226,11 @@ describe("the response", () => {
         ponds: [{ ...hidden, verified: 25, split: { woman: 13, man: 12, nonBinary: 0 } }],
       }).success,
     ).toBe(false);
+    const finishing = (n: number) =>
+      WaitlistResponse.safeParse({ k: 10, ponds: [{ ...hidden, verified: 25, finishing: n }] })
+        .success;
+    expect(finishing(0)).toBe(true);
+    expect(finishing(10)).toBe(true);
+    for (const n of [1, 9, -1, 10.5]) expect(finishing(n)).toBe(false);
   });
 });

@@ -145,7 +145,7 @@ export const fi: Readonly<Record<string, string>> = {
   "pond.waitlist.label": "Ihmiset alueellasi",
   "pond.waitlist.loading": "Lasketaan…",
   "pond.waitlist.retry": "Yritä uudelleen",
-  "pond.waitlist.small": "Alueesi on vasta alussa. Luvut näkyvät, kun täällä on {k, number} ihmistä.",
+  "pond.waitlist.small": "Alueesi on vasta alussa. Luvut näytetään vain, kun täällä on vähintään {k, number} ihmistä.",
   "pond.waitlist.split": "{women, number} naista, {men, number} miestä, {nonBinary, number} muunsukupuolista",
   "pond.waitlist.steps": "Luvut muuttuvat vasta, kun vähintään {k, number} ihmistä on tullut tai lähtenyt, jotta yhden ihmisen tulo tai lähtö ei näy niistä.",
   "pond.waitlist.title": "Alueesi",

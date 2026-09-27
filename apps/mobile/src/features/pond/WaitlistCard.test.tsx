@@ -77,7 +77,7 @@ describe("WaitlistCard", () => {
     await settle();
     expect(
       screen.getByText(
-        "Your area is just getting started. Numbers appear once 10 people are here.",
+        "Your area is just getting started. Numbers are shown only when at least 10 people are here.",
       ),
     ).toBeTruthy();
     expect(screen.queryByText(/identified with their bank/)).toBeNull();
