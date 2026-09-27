@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { WaitlistResponse } from "@kuutti/schema";
 import { createApp } from "../app.ts";
 import { takeSnapshot } from "../jobs/waitlist-snapshot.ts";
@@ -138,6 +140,31 @@ describe("the waitlist", () => {
     const response = await ctx.app.request("/waitlist");
     expect(response.status).toBe(500);
     expect(response.headers.get("cache-control")).toBeNull();
+  });
+
+  test("the published contract holds the floor too: no number under ten, and nothing that accepts anything", () => {
+    const document = JSON.parse(
+      readFileSync(resolve(import.meta.dirname, "../../openapi.json"), "utf8"),
+    ) as { components: { schemas: Record<string, { properties: Record<string, unknown> }> } };
+    const pond = document.components.schemas.WaitlistPond?.properties ?? {};
+    expect(pond.verified).toEqual({ type: "integer", nullable: true, minimum: 10 });
+    expect(pond.finishing).toEqual({
+      type: "integer",
+      nullable: true,
+      minimum: 0,
+      not: { type: "integer", minimum: 1, maximum: 9 },
+    });
+    const split = document.components.schemas.WaitlistSplit?.properties ?? {};
+    for (const cell of ["woman", "man", "nonBinary"]) {
+      expect(split[cell]).toEqual({ type: "integer", minimum: 10 });
+    }
+    // A schema without a type accepts anything, and the generated client type says `unknown`.
+    const generated = readFileSync(
+      resolve(import.meta.dirname, "../../../../packages/schema/src/api.generated.ts"),
+      "utf8",
+    );
+    expect(generated).toMatch(/finishing: number \| null;/);
+    expect(generated).toMatch(/verified: number \| null;/);
   });
 
   test("before any figures exist every pond is listed with no number and no day", async ({

@@ -59,8 +59,21 @@ export const WaitlistPond = z
     verified: z.int().min(WAITLIST_K_MIN).nullable(),
     /** Null unless every cell is at least k and nobody's undeclared gender is a small remainder. */
     split: WaitlistSplit.nullable(),
-    /** Null when it, or the rest of the pond, is between one and k-1: so none, or at least the floor. */
-    finishing: z.union([z.literal(0), z.int().min(WAITLIST_K_MIN)]).nullable(),
+    /**
+     * Null when it, or the rest of the pond, is between one and k-1: so none,
+     * or at least the floor. One integer with a rule, not a union: the OpenAPI
+     * generator writes a union's null branch as a schema that accepts anything,
+     * and the generated client type becomes `unknown`. The `not` says the
+     * same rule to a reader of the OpenAPI document.
+     */
+    finishing: z
+      .int()
+      .min(0)
+      .refine((n) => n === 0 || n >= WAITLIST_K_MIN, {
+        error: "the number finishing is none or at least the floor",
+      })
+      .meta({ not: { type: "integer", minimum: 1, maximum: WAITLIST_K_MIN - 1 } })
+      .nullable(),
   })
   .strict()
   .meta({ id: "WaitlistPond" });
