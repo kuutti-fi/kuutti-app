@@ -1,0 +1,30 @@
+# ADR-014: Demo mode: the shortcut lives in the mock bank
+
+- Status: accepted
+- Date: 2026-09-27
+- Follows: TD-1 (every account is bank-verified), TD-7 (re-registration), TD-14 (age from year and month), TD-19 (seeded environments), CLAUDE.md rules 1, 3 and 8 and the Testing section, `.claude/rules/infra.md` (the mock IdP is local), `docs/vendors/telia.md`; issue #73
+
+## Context
+
+Every M3 feature is tested by hand against an account created through the mock bank, and until now that began with typing a JSON document of claims into the mock's login form, `acr` and `amr` included, because the configuration that was meant to add them never did. A demo of the first ten minutes needs the same beginning, repeatably and on camera. #73 asks for named personas, a synthetic population, photos through the real pipeline and a one-command reset.
+
+The issue's first plan for the personas was a `demo=<persona>` query on `GET /auth/start`, forwarded to the bank as `login_hint` when the issuer is the mock, and a persona picker in development builds of the app. Two things stand against it. It does not work: measured on the pinned version of navikt/mock-oauth2-server, a `requestMappings` entry on `login_hint` adds nothing to a login through the form, whether the parameter is sent with the authorize request or with the token request. And it would have put a branch in the login route and a picker in the app, each of which must then be proven absent where it matters.
+
+## Decision
+
+1. **The personas are persons of the mock bank, and nothing else knows them.** The mock serves a login page of ours (`loginPagePath`): a button per persona, and the form for arbitrary claims below. A button posts what the server's own form posts, a name and the claims. The API's login and the app are unchanged: no `demo` parameter, no login route, no picker. The personas are not exported from `@kuutti/db` either, so nothing of them is on the API's import graph. Where there is no mock bank there are no personas: staging and production identify through Telia, and a preview, which may never use the real broker (`docs/vendors/telia.md`), has no mock deployed beside it today, so bank identification is off there. Deploying a mock bank anywhere public is a decision of its own and needs its own ADR: its form lets anybody be anybody, with this page or without.
+2. **Everything after the bank is the product.** The OIDC exchange, the parsing of the code, the HMAC, the age rule and the re-registration rule run for a persona as for anybody. A persona that must be refused (17 years old, banned, inside the waiting time) is refused by the code that refuses people.
+3. **Artificial codes.** A persona's personal identity code has an individual number of 900 to 999, which the population register never gives to a person. Rule 1 is about real codes; these cannot be one.
+4. **Two kinds of persona.** Eight are born on a fixed day and are the same identity for ever, so the seed can give them a history. Four are born relative to the day of the login (18 last month, 18 this month, 17, 99), so the age holds whenever the demo runs; their identity changes as the months pass, and they carry no history.
+5. **One source, one generated page.** `packages/db/src/seed/personas.ts` holds the personas and `personaClaims`; `pnpm demo:bank` writes `services/mock-idp/login.html` from them. The page is committed, because docker compose mounts it and a clean checkout must start. It computes a code when a button is pressed, so its script says again what `personaClaims` says; one test compares the file with the generator, another runs the page's script against `personaClaims` for every persona over a range of days.
+6. **The mock adds no claims.** The `requestMappings` entry on `scope` is removed: it added nothing to a login through the form (measured; it does to a `client_credentials` request, which nothing here makes). A mapping on `code` would add `acr` and `amr` to every login, and was not taken: what is posted is what the token says, so a test can still post another `acr` and see it refused.
+7. **Three kinds of data, three homes**, for the parts of #73 that follow. Generators and personas are code and move with the schema: this repository. The population is never stored: a seeded generator makes it. Faces are binary and carry a licence: a repository of their own, pinned here by tag and checksum.
+
+## Consequences
+
+- `services/mock-idp/{config.json,login.html,README.md,verify.ts}`, `docker-compose.yml` (the mock's read-only mount is the directory now, not a file), `packages/db/src/seed/{personas,bank-page}.ts`, `packages/db/src/cli/demo-bank.ts`, `pnpm demo:bank`. No table, no route, no change in either app.
+- What keeps a deployed API from a mock issuer is its configuration, not its code: `parseConfig` accepts any issuer in any environment. That is older than this decision and not changed by it; it is raised with the maintainer separately.
+- The personas' histories (part B of #73) must stay out of `packages/db/src/seed.ts`, which the API bundles and runs at a preview's boot: they belong to the seed's command line only.
+- The bank's names (given and family name) are in the claims, as the real broker sends them, and the product stores none (rule 3). A persona with å or ö in the name shows that they arrive whole and go nowhere.
+- A person who was 17 or "18 this month" on the day of a demo is a different identity next month. That is the price of an age that holds.
+- Still to come under #73, each its own change: the population generator and the personas' histories in the seed; photos through the pipeline and the assets repository; the reset; the storyboard.

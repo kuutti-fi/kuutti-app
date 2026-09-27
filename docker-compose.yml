@@ -52,7 +52,8 @@ services:
       retries: 12
 
   # Stand-in for the Telia ID Broker: issuer http://127.0.0.1:8080/ftn.
-  # The login page accepts arbitrary FTN-shaped claims (services/mock-idp/README.md).
+  # Its login page is ours: a button per persona and a form for arbitrary
+  # FTN-shaped claims (services/mock-idp/README.md, ADR-014).
   mock-idp:
     image: ghcr.io/navikt/mock-oauth2-server:6.0.2
     environment:
@@ -62,7 +63,10 @@ services:
     ports:
       - "127.0.0.1:8080:8080"
     volumes:
-      - ./services/mock-idp/config.json:/config/config.json:ro
+      # The directory, not its two files: a file mounted by itself is mounted
+      # by its identity, and git replaces a file when a branch is switched, so
+      # the container would go on reading a login page that is gone.
+      - ./services/mock-idp:/config:ro
 
 volumes:
   postgres-data:

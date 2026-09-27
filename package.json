@@ -29,7 +29,8 @@
     "i18n:review": "pnpm --filter @kuutti/i18n run review",
     "openapi": "pnpm --filter @kuutti/api openapi",
     "check:schema-words": "node scripts/check-schema-words.ts",
-    "check:licenses": "node scripts/check-licenses.ts"
+    "check:licenses": "node scripts/check-licenses.ts",
+    "demo:bank": "node packages/db/src/cli/demo-bank.ts"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.13",
