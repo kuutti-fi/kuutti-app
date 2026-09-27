@@ -17,7 +17,9 @@ name: Preview cleanup
 # repository for the same class of reason (check-workflow-permissions.py).
 # The GitHub environment "preview-cleanup" holds the same Dokploy and EAS
 # tokens as "preview" and has no required reviewer: nothing here runs code
-# from a pull request.
+# from a pull request. Order: select, drop the database, remove the EAS
+# alias and branch, and only then the Dokploy application, which is the
+# sweep's work list: a failure anywhere leaves it, and the next sweep retries.
 
 on:
   schedule:
@@ -43,10 +45,10 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  # Which pull requests lose their previews, then everything that needs the
-  # cleanup environment's tokens: Dokploy and EAS.
-  previews:
-    name: remove previews
+  # Which pull requests lose their previews. Needs the Dokploy token to list
+  # them, nothing else; gh, curl and jq are on the runner.
+  select:
+    name: select pull requests
     # Only from main: the plan role trusts main, and this file must be main's.
     if: vars.PREVIEWS_ENABLED == 'true' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04-arm
@@ -60,9 +62,8 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          sparse-checkout: .github/scripts
 
-      # gh, curl and jq are on the runner; pnpm is set up below only when
-      # there is something to remove, so an empty sweep costs seconds.
       - name: Pull requests to clean
         id: select
         env:
@@ -106,50 +107,16 @@ jobs:
           echo "numbers=$numbers" >> "$GITHUB_OUTPUT"
           echo "cleaning: $numbers"
 
-      - name: Remove the Dokploy applications
-        if: steps.select.outputs.numbers != '[]'
-        env:
-          DOKPLOY_URL: ${{ vars.DOKPLOY_URL }}
-          DOKPLOY_TOKEN: ${{ secrets.DOKPLOY_TOKEN }}
-          DOKPLOY_ENVIRONMENT_ID: ${{ vars.DOKPLOY_ENVIRONMENT_ID }}
-          PREVIEW_API_DOMAIN: ${{ vars.PREVIEW_API_DOMAIN }}
-          NUMBERS: ${{ steps.select.outputs.numbers }}
-        run: |
-          for pr in $(jq -r '.[]' <<< "$NUMBERS"); do
-            .github/scripts/dokploy-preview.sh delete "$pr"
-          done
-
-      - uses: ./.github/actions/pnpm
-        if: steps.select.outputs.numbers != '[]'
-
-      # The alias is what the pull request linked to; the deployments behind
-      # it stay listed in the EAS dashboard. The update branch is pruned so the
-      # free tier's branch list does not grow with every pull request (TD-2).
-      - name: Remove the EAS Hosting alias and the EAS Update branch
-        if: steps.select.outputs.numbers != '[]'
-        working-directory: apps/mobile
-        env:
-          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
-          NUMBERS: ${{ steps.select.outputs.numbers }}
-        run: |
-          for pr in $(jq -r '.[]' <<< "$NUMBERS"); do
-            pnpm exec eas deploy:alias:delete "pr-$pr" --non-interactive \
-              || echo "no EAS Hosting alias pr-$pr"
-            if jq -e '.expo.updates.url' app.json >/dev/null 2>&1; then
-              pnpm exec eas branch:delete "pr-$pr" --non-interactive \
-                || echo "no EAS Update branch pr-$pr"
-            fi
-          done
-
   # The database lives on the private RDS instance; only the box reaches it.
   # No GitHub environment here: the plan role trusts main, and a job with an
-  # environment presents a different OIDC subject.
+  # environment presents a different OIDC subject. It runs before the Dokploy
+  # application goes, because that application is the sweep's only work list:
+  # a drop that fails leaves the application in place, so the next sweep finds
+  # the pull request again and retries everything.
   databases:
     name: drop kuutti_pr_<n>
-    needs: previews
-    # Runs whenever the selection produced numbers, even if a later step of
-    # the previews job failed: a stranded kuutti_pr_<n> is the worse outcome.
-    if: ${{ !cancelled() && needs.previews.result != 'skipped' && needs.previews.outputs.numbers != '[]' && needs.previews.outputs.numbers != '' }}
+    needs: select
+    if: needs.select.outputs.numbers != '[]' && needs.select.outputs.numbers != ''
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -167,7 +134,7 @@ jobs:
 
       - name: Send the drop document to the staging box
         env:
-          NUMBERS: ${{ needs.previews.outputs.numbers }}
+          NUMBERS: ${{ needs.select.outputs.numbers }}
         run: |
           instance=$(aws ec2 describe-instances \
             --filters Name=tag:Name,Values=kuutti-staging Name=instance-state-name,Values=running \
@@ -189,3 +156,56 @@ jobs:
             if [ "$status" != Success ]; then echo "::error::dropping kuutti_pr_$pr: $status"; failed=1; fi
           done
           exit "$failed"
+
+  # Everything else, with the Dokploy application last: while it exists the
+  # sweep still lists the pull request, so any failure above or here is
+  # retried ten minutes later instead of leaving an alias, a branch or a
+  # database behind that nothing would find again.
+  remove:
+    name: remove previews
+    needs: [select, databases]
+    if: needs.databases.result == 'success'
+    runs-on: ubuntu-24.04-arm
+    environment: preview-cleanup
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/pnpm
+
+      # The alias is what the pull request linked to; the deployments behind
+      # it stay listed in the EAS dashboard. The update branch is pruned so the
+      # free tier's branch list does not grow with every pull request (TD-2).
+      # "Not found" is the normal answer for a pull request that had no web
+      # or native lane; any other failure fails the step and keeps the
+      # application for the next sweep.
+      - name: Remove the EAS Hosting alias and the EAS Update branch
+        working-directory: apps/mobile
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+          NUMBERS: ${{ needs.select.outputs.numbers }}
+        run: |
+          for pr in $(jq -r '.[]' <<< "$NUMBERS"); do
+            if ! out=$(pnpm exec eas deploy:alias:delete "pr-$pr" --non-interactive 2>&1); then
+              grep -qiE "not found|does not exist|no alias" <<< "$out" && echo "no EAS Hosting alias pr-$pr" || { echo "$out"; exit 1; }
+            fi
+            if jq -e '.expo.updates.url' app.json >/dev/null 2>&1; then
+              if ! out=$(pnpm exec eas branch:delete "pr-$pr" --non-interactive 2>&1); then
+                grep -qiE "not found|does not exist|no branch" <<< "$out" && echo "no EAS Update branch pr-$pr" || { echo "$out"; exit 1; }
+              fi
+            fi
+          done
+
+      - name: Remove the Dokploy applications
+        env:
+          DOKPLOY_URL: ${{ vars.DOKPLOY_URL }}
+          DOKPLOY_TOKEN: ${{ secrets.DOKPLOY_TOKEN }}
+          DOKPLOY_ENVIRONMENT_ID: ${{ vars.DOKPLOY_ENVIRONMENT_ID }}
+          PREVIEW_API_DOMAIN: ${{ vars.PREVIEW_API_DOMAIN }}
+          NUMBERS: ${{ needs.select.outputs.numbers }}
+        run: |
+          for pr in $(jq -r '.[]' <<< "$NUMBERS"); do
+            .github/scripts/dokploy-preview.sh delete "$pr"
+          done
