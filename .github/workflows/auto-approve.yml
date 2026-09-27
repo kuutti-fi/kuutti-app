@@ -35,7 +35,12 @@ jobs:
             --jq '.[] | select(.isDraft == false and .reviewDecision != "APPROVED" and .headRepositoryOwner.login == "kuutti-fi") | .number' |
           while read -r n; do
             # A native review record needs a person's approval on record (#55).
-            if gh pr diff --repo "$REPO" "$n" | grep -qE '^\+[[:space:]]*reviewed:'; then
+            # The diff is read first and the guard fails closed: no diff, no approval.
+            if ! diff=$(gh pr diff --repo "$REPO" "$n" 2>&1); then
+              echo "::warning::#$n: could not read the diff, not approving: $diff"
+              continue
+            fi
+            if grep -qE '^\+[[:space:]]*reviewed:' <<< "$diff"; then
               echo "#$n adds a native review record (reviewed:): left for a person to approve"
               continue
             fi
