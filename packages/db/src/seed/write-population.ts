@@ -67,19 +67,35 @@ export async function removePopulation(db: Queryable): Promise<RemoveResult> {
     );
     const identities = rows.filter((r) => r.synthetic).map((r) => r.id);
     const spared = rows.length - identities.length;
-    if (identities.length === 0) return { removed: 0, spared };
-    const accounts = (
-      await tx.query<{ id: string }>("SELECT id FROM account WHERE identity_id = ANY($1)", [
-        identities,
-      ])
-    ).rows.map((r) => r.id);
-    for (const table of ACCOUNT_TABLES) {
-      await tx.query(`DELETE FROM ${table} WHERE account_id = ANY($1)`, [accounts]);
-    }
-    await tx.query("DELETE FROM account WHERE id = ANY($1)", [accounts]);
-    await tx.query("DELETE FROM identity WHERE id = ANY($1)", [identities]);
+    await deleteIdentities(tx, identities);
     return { removed: identities.length, spared };
   });
+}
+
+/**
+ * Deletes the identities with their accounts and everything of those: rows,
+ * not tombstones. For people who never were (the population) and for the
+ * personas of the mock bank after the erasure path has run for them; the
+ * callers decide who that is, this only deletes in an order that holds. A
+ * row in a table this does not know (the append-only audit log, a staff
+ * role) stops it on the foreign key, and the transaction with it.
+ */
+export async function deleteIdentities(
+  tx: Queryable,
+  identities: readonly string[],
+): Promise<void> {
+  if (identities.length === 0) return;
+  const accounts = (
+    await tx.query<{ id: string }>("SELECT id FROM account WHERE identity_id = ANY($1)", [
+      identities,
+    ])
+  ).rows.map((r) => r.id);
+  for (const table of ACCOUNT_TABLES) {
+    await tx.query(`DELETE FROM ${table} WHERE account_id = ANY($1)`, [accounts]);
+  }
+  await tx.query("DELETE FROM auth_request WHERE identity_id = ANY($1)", [identities]);
+  await tx.query("DELETE FROM account WHERE id = ANY($1)", [accounts]);
+  await tx.query("DELETE FROM identity WHERE id = ANY($1)", [identities]);
 }
 
 export async function writePopulation(

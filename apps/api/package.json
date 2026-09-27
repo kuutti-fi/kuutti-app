@@ -10,6 +10,7 @@
     "start": "node dist/index.js",
     "openapi": "node --import tsx scripts/openapi.ts",
     "demo:population": "node --env-file-if-exists=../../.env --import tsx scripts/demo-population.ts",
+    "demo:reset": "node --env-file-if-exists=../../.env --import tsx scripts/demo-reset.ts",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run"
   },

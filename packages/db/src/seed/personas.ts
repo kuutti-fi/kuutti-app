@@ -113,7 +113,7 @@ export const DEMO_PERSONAS: readonly DemoPersona[] = [
     born: { year: 1993, month: 9, day: 27 },
     individual: 908,
     group: "history",
-    note: "Deleted her account yesterday: refused until the waiting time is over.",
+    note: "Deleted her account: refused until the waiting time is over.",
   },
   {
     key: "eetu",

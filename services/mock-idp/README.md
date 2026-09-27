@@ -19,13 +19,23 @@ One tap logs a persona in. Nothing in the API or the app knows about them: the b
 | Noa Salmi | 09/01/1999 | two photos only: the profile says what is missing |
 | Kerttu Åkerlund | 17/06/1985 | accepted an older wording of the terms: the app asks again |
 | Tapio Heikkinen | 05/02/1978 | a banned identity: the login is refused |
-| Ilona Öhman | 27/09/1993 | deleted her account yesterday: refused until the waiting time is over |
+| Ilona Öhman | 27/09/1993 | deleted her account: refused until the waiting time is over |
 | Eetu Laine | the 1st of last month, 18 years ago | the youngest who gets in |
 | Venla Nieminen | the 1st of this month, 18 years ago | refused until the last day of the month: age is counted from the end of the birth month (TD-14) |
 | Lauri Hämäläinen | the 1st of last month, 17 years ago | refused |
 | Helmi Koskinen | the 1st of last month, 99 years ago | the upper end of the age window |
 
-The first eight are the same identity on every day. What Kuutti holds about the six "with a history" comes from the seed, which does not know them yet (#73, the next change): until then they are newcomers like Aino and Mikael. The last four are born relative to today, so their age holds whenever this runs and their identity changes as the months pass; they carry no history.
+The first eight are the same identity on every day. What Kuutti holds about the six "with a history" is given by `pnpm demo:reset`; before it has run they are newcomers like Aino and Mikael. The last four are born relative to today, so their age holds whenever this runs and their identity changes as the months pass; they carry no history.
+
+## Resetting
+
+```bash
+pnpm demo:reset
+```
+
+Returns all twelve to where they begin, in a couple of seconds, with the local environment running (`pnpm env:up`). First every persona is forgotten: each live account goes through the erasure path, the function behind "delete my account", and then what erasure keeps of a person (the tombstone, the consents, the identity with its waiting time) is deleted too, which is right for a persona and never done for a person. Then the six histories are given anew: the command logs each persona in at this mock bank and sends the answers of onboarding and the profile through the API's own routes, as the app does. What no route does is done in the database afterwards: Kerttu's consent is given the version of an older wording, and Tapio's identity is banned. Ilona deletes her account herself.
+
+`pnpm demo:reset -- --bare` forgets everybody and gives no history. The command talks to a local API only, goes ahead in development and test only, and refuses a database server that is a deployed one, whatever the environment is called. The histories are data in `packages/db/src/seed/histories.ts`.
 
 Their personal identity codes are artificial: the individual number is in 900 to 999, which the population register does not give to a person. The page computes a code when its button is pressed, and the generator refuses a persona with any other number.
 

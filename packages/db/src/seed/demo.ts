@@ -15,6 +15,12 @@ export {
   parseDemoCommand,
 } from "./command.ts";
 export {
+  OLDER_TERMS_VERSION,
+  PERSONA_HISTORIES,
+  type PersonaHistory,
+  personaOf,
+} from "./histories.ts";
+export {
   assertArtificial,
   DEMO_PERSONAS,
   type DemoPersona,
@@ -49,6 +55,7 @@ export { everyText } from "./words.ts";
 export {
   type ConsentVersions,
   DEMO_SUBJECT_PREFIX,
+  deleteIdentities,
   demoHetuHmac,
   type RemoveResult,
   removePopulation,

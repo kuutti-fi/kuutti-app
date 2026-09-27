@@ -1,0 +1,101 @@
+import type { Queryable } from "@kuutti/db";
+import { OLDER_TERMS_VERSION, type PersonaHistory, personaOf } from "@kuutti/db/demo";
+import { ConsentsResponse, PondList, SessionResponse } from "@kuutti/schema";
+import { type BankContext, call, DemoError, loginAs } from "./bank.ts";
+
+/**
+ * Gives a persona its history (#73, ADR-014 §12): a login at the mock bank,
+ * then the answers of onboarding and the profile through the API's own
+ * routes, as the app sends them. What no route does, because no person can
+ * do it, is done in the database afterwards and named here: an older wording
+ * of the terms, and a ban.
+ */
+export type HistoryContext = BankContext & { db: Queryable };
+
+export type HistoryResult = {
+  key: string;
+  login: "created" | "resumed";
+  onboarded: boolean;
+  profile: boolean;
+  afterwards: PersonaHistory["afterwards"];
+};
+
+export async function giveHistory(
+  history: PersonaHistory,
+  context: HistoryContext,
+): Promise<HistoryResult> {
+  const persona = personaOf(history);
+  const login = await loginAs(persona, context, history.locale);
+  if (login.kind === "refused") {
+    throw new DemoError(
+      `${history.key} is refused at the login (${login.error}): reset the personas first`,
+    );
+  }
+  const as = (method: "GET" | "POST" | "PUT" | "DELETE", path: string, body?: unknown) =>
+    call(context, login.accessToken, method, path, body);
+
+  const { accountId } = SessionResponse.parse(await as("GET", "/auth/session"));
+
+  if (history.onboarding) {
+    const { currentVersions } = ConsentsResponse.parse(await as("GET", "/consents"));
+    for (const kind of ["terms", "privacy"] as const) {
+      await as("POST", "/consents", {
+        kind,
+        version: currentVersions[kind],
+        locale: history.locale,
+      });
+    }
+    await as("PUT", "/account/gender", { gender: history.onboarding.gender });
+    await as("PUT", "/preferences", {
+      seeks: history.onboarding.seeks,
+      ageWindow: history.onboarding.ageWindow,
+    });
+    const { ponds } = PondList.parse(await as("GET", "/ponds"));
+    const pond = ponds.find((p) => p.slug === history.onboarding?.pond);
+    if (!pond) throw new DemoError(`no pond ${history.onboarding.pond}: run the seed first`);
+    await as("PUT", "/account/pond", { pondId: pond.id });
+  }
+  if (history.profile) await as("PUT", "/profile", history.profile);
+
+  const at = context.now();
+  switch (history.afterwards) {
+    case "older_terms":
+      // The wording moved on after she agreed: her consent names a version
+      // that is no longer the one in force, and the app asks again.
+      await context.db.query(
+        "UPDATE consent SET version = $2 WHERE account_id = $1 AND kind = 'terms'",
+        [accountId, OLDER_TERMS_VERSION],
+      );
+      break;
+    case "banned":
+      // What a moderator's decision will write (M4): the sanction is on the
+      // identity, so a new login finds it; the account and its sessions end.
+      await context.db.query(
+        `UPDATE identity SET standing = 'banned', standing_changed_at = $2
+         WHERE id = (SELECT identity_id FROM account WHERE id = $1)`,
+        [accountId, at],
+      );
+      await context.db.query(
+        "UPDATE account SET state = 'banned', state_changed_at = $2 WHERE id = $1",
+        [accountId, at],
+      );
+      await context.db.query("DELETE FROM session WHERE account_id = $1", [accountId]);
+      break;
+    case "deleted":
+      await as("POST", "/account/delete", { confirm: true });
+      break;
+    case "nothing":
+      break;
+  }
+  // The script's own device leaves; a ban and a deletion have ended it already.
+  if (history.afterwards === "nothing" || history.afterwards === "older_terms") {
+    await as("POST", "/auth/logout");
+  }
+  return {
+    key: history.key,
+    login: login.outcome,
+    onboarded: history.onboarding !== null,
+    profile: history.profile !== null,
+    afterwards: history.afterwards,
+  };
+}
