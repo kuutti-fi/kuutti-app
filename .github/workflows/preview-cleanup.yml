@@ -6,9 +6,14 @@ name: Preview cleanup
 # dropped through one Run Command document (modules/compute) that the plan role
 # may send to the staging box and nothing else.
 #
-# It runs unattended from main: a sweep every ten minutes removes the previews
-# of every pull request that is closed or merged and retires previews older
-# than seven days, and a dispatch (from main) removes one pull request's. It
+# It runs unattended from main: a sweep removes the previews of every pull
+# request that is closed or merged and retires previews older than seven days,
+# and a dispatch (from main) removes one pull request's. The sweep starts on
+# every push to main, which is what a merge is, and on a schedule for what no
+# merge follows (a pull request closed unmerged, the seven days). The push is
+# the trigger that counts: GitHub starts scheduled workflows when it has room,
+# and in this repository that has meant once in two to six hours, whatever the
+# cron line says (ADR-012 §6). A push to main runs main's copy of this file. It
 # does NOT run on the pull request's close event: that event runs the pull
 # request's own copy of this file, which would put the tokens in a
 # contributor's hands without a reviewer, and the reviewer is exactly what
@@ -23,6 +28,8 @@ name: Preview cleanup
 # EAS removal does not, it fails the run by name.
 
 on:
+  push:
+    branches: [main]
   schedule:
     - cron: "*/10 * * * *"
   workflow_dispatch:
