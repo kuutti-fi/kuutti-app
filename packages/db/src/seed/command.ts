@@ -55,10 +55,15 @@ export function parseDemoCommand(argv: readonly string[], appEnv: string | undef
   let seed = DEMO_SEED;
   const actions = new Set<"remove" | "dry-run">();
 
+  const seen = new Set<string>();
   for (let i = 0; i < args.length; i += 1) {
     const arg = args[i] as string;
     const equals = arg.indexOf("=");
     const flag = equals > 0 ? arg.slice(0, equals) : arg;
+    // Twice is refused, not the last one taken: `--env production --env
+    // development` must not talk its own first word away.
+    if (seen.has(flag)) throw new DemoCommandError(`${flag} is given twice`);
+    seen.add(flag);
     const value = () => {
       if (equals > 0) return arg.slice(equals + 1);
       i += 1;

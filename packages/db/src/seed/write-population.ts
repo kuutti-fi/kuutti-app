@@ -20,8 +20,10 @@ import { DEMO_LABEL_PREFIX, type SyntheticPerson } from "./population.ts";
  *
  * Raw parameterised SQL over the Queryable seam, as the API's repositories
  * use: a test hands in a rolled-back transaction. No statement takes input
- * from a request; this runs from the command line against a local or preview
- * database and refuses production before it connects (the command does).
+ * from a request. This runs from the command line against a local database
+ * or a pull request's own; the command refuses an environment that is not
+ * allowed before it connects, and a deployed server after it has connected
+ * and asked, before anything is written or removed (command.ts).
  */
 
 /** What marks an identity as made by this module. */

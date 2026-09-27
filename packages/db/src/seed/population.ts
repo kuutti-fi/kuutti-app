@@ -182,6 +182,13 @@ export function planSizes(size: number): { ponds: Record<string, number>; neverO
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+/** A person agrees to the terms at most this long after registering. */
+const CONSENT_DELAY_MAX_MINUTES = 9;
+/**
+ * Nobody registered later than this before the epoch, so that what follows a
+ * registration (the consents) is before the epoch too.
+ */
+const REGISTERED_BEFORE_EPOCH_MS = (CONSENT_DELAY_MAX_MINUTES + 1) * 60_000;
 
 function bornFor(age: number, random: Random, epoch: Date): { year: number; month: number } {
   const month = random.int(1, 12);
@@ -246,7 +253,10 @@ function onboarded(
   const age = drawAge(random);
   const born = bornFor(age, random, epoch);
   const registeredAt = new Date(
-    epoch.getTime() - random.int(0, 60) * DAY_MS - random.int(0, 1439) * 60_000,
+    epoch.getTime() -
+      REGISTERED_BEFORE_EPOCH_MS -
+      random.int(0, 60) * DAY_MS -
+      random.int(0, 1439) * 60_000,
   );
   const language = random.weighted(LANGUAGE_WEIGHTS);
   const seeks = random.weighted(SEEKS[gender]).split(",") as Gender[];
@@ -254,7 +264,9 @@ function onboarded(
     min: Math.max(AGE_MIN, age - random.int(2, 8)),
     max: Math.min(AGE_MAX, age + random.int(2, 10)),
   };
-  const agreedAt = new Date(registeredAt.getTime() + random.int(1, 9) * 60_000);
+  const agreedAt = new Date(
+    registeredAt.getTime() + random.int(1, CONSENT_DELAY_MAX_MINUTES) * 60_000,
+  );
   const consents: SyntheticConsent[] = [
     { kind: "terms", localeShown: language, givenAt: agreedAt },
     { kind: "privacy", localeShown: language, givenAt: agreedAt },
@@ -299,7 +311,10 @@ export function generatePopulation(options: PopulationOptions = {}): SyntheticPe
       birthYear: born.year,
       birthMonth: born.month,
       registeredAt: new Date(
-        epoch.getTime() - random.int(0, 20) * DAY_MS - random.int(0, 1439) * 60_000,
+        epoch.getTime() -
+          REGISTERED_BEFORE_EPOCH_MS -
+          random.int(0, 20) * DAY_MS -
+          random.int(0, 1439) * 60_000,
       ),
       pond: null,
       gender: null,
