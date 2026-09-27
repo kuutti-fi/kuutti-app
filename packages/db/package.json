@@ -7,7 +7,8 @@
   "main": "./src/index.ts",
   "types": "./src/index.ts",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./demo": "./src/seed/demo.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit -p tsconfig.json",
@@ -19,6 +20,7 @@
     "moderator": "node --env-file-if-exists=../../.env --import tsx src/cli/moderator.ts"
   },
   "dependencies": {
+    "@kuutti/schema": "workspace:*",
     "drizzle-orm": "^0.45.2",
     "pg": "^8.16.0"
   },
