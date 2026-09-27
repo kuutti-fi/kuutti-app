@@ -1,6 +1,6 @@
 import { RELEASED_LOCALES } from "../../src/locales.ts";
 import { type ArgumentType, argumentsOf, branchProblems, inflectionProblems } from "./icu.ts";
-import { reviewHash } from "./review-hash.ts";
+import { isStale } from "./review-hash.ts";
 import {
   isAdminKey,
   isLegalKey,
@@ -40,7 +40,7 @@ const RELEASED_TRANSLATIONS = TRANSLATED_LOCALES.filter((locale) =>
 
 // A wording the association's counsel has not yet replaced (#46, ADR-010).
 const DRAFT_VERSION = /draft/i;
-const DRAFT_TEXT = /^\s*(DRAFT|LUONNOS|UTKAST)\b/;
+const DRAFT_TEXT = /^\s*(DRAFT|LUONNOS|UTKAST)\b/i;
 
 export type CheckResult = { errors: string[]; warnings: string[] };
 
@@ -49,15 +49,6 @@ function sameArguments(a: Record<string, ArgumentType>, b: Record<string, Argume
   return (
     names.join() === Object.keys(b).sort().join() && names.every((name) => a[name] === b[name])
   );
-}
-
-const lengthOf = graphemeLength;
-
-/** True when `locale`'s text carries a review hash that no longer matches it and its English. */
-export function isStale(message: Message, locale: TranslatedLocale): boolean {
-  const hash = message.reviewed?.[locale];
-  const text = message[locale];
-  return hash !== undefined && text !== undefined && hash !== reviewHash(message.en, text);
 }
 
 /** True for legal text still in draft: its version or its wording says so. */
@@ -104,7 +95,10 @@ export function checkMessages(messages: Messages, options: { release: boolean })
     }
     if (message.max_length !== undefined && Object.keys(source).length > 0) {
       errors.push(`${key}: max_length fits a text without arguments only`);
-    } else if (message.max_length !== undefined && lengthOf(message.en) > message.max_length) {
+    } else if (
+      message.max_length !== undefined &&
+      graphemeLength(message.en) > message.max_length
+    ) {
       errors.push(`${key}: en is over its max_length of ${message.max_length}`);
     }
 
@@ -135,7 +129,7 @@ export function checkMessages(messages: Messages, options: { release: boolean })
       } catch (error) {
         errors.push(`${key}: ${locale} is not valid ICU (${(error as Error).message})`);
       }
-      if (message.max_length !== undefined && lengthOf(text) > message.max_length) {
+      if (message.max_length !== undefined && graphemeLength(text) > message.max_length) {
         errors.push(`${key}: ${locale} is over its max_length of ${message.max_length}`);
       }
       // What the translator's output is held to holds for every text in the file.

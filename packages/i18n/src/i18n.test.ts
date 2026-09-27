@@ -70,6 +70,11 @@ describe("locale resolution", () => {
     expect(resolveLocale(["de-DE", "sv_SE", "fi"])).toBe("sv");
     expect(resolveLocale(["de-DE"])).toBe("en");
     expect(resolveLocale([])).toBe("en");
+    // The answer is always one of the allowed locales (#55).
+    expect(resolveLocale(["sv-FI", "fi"], ["en", "fi"])).toBe("fi");
+    expect(resolveLocale(["sv"], ["en", "fi"])).toBe("en");
+    expect(resolveLocale(["sv"], ["fi"])).toBe("fi");
+    expect(() => resolveLocale(["fi"], [])).toThrow(/at least one/);
   });
 
   it("offers only the released languages where it is told to: Swedish waits for its reviewer", () => {

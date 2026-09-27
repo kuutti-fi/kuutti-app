@@ -14,7 +14,9 @@
 #     max_length: 20
 #       optional: characters the text may take where the room is fixed
 #
-# Every fi and sv text carries machine or reviewed. docs/i18n/translation-review-guide.md is the review.
+# Every fi and sv text carries machine or reviewed, except legal.*, which carries
+# neither (written by people, versioned by consent_version).
+# docs/i18n/translation-review-guide.md is the review.
 #
 # Never inflect a dynamic value: proper nouns and user values stand in nominative
 # positions only ("in {pond}" is banned; ponds carry their case forms in the

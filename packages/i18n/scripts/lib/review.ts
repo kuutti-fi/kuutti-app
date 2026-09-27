@@ -1,6 +1,6 @@
 import { isMap, parseDocument, Scalar, YAMLMap } from "yaml";
-import { checkMessages, isStale } from "./check.ts";
-import { reviewHash } from "./review-hash.ts";
+import { checkMessages } from "./check.ts";
+import { isStale, reviewHash } from "./review-hash.ts";
 import {
   isAdminKey,
   isLegalKey,
@@ -167,7 +167,7 @@ function approvalProblem(
 ): string | undefined {
   const outside = notReviewedHere(key);
   if (outside) return outside;
-  const reason = rejectionReason(message.en, text, locale);
+  const reason = rejectionReason(message.en, text, locale, message.max_length);
   if (reason) return reason;
   // The file's own rules over the approved text: arguments, plural and select
   // branches, inflection, max_length.
@@ -299,18 +299,40 @@ const BOM = "﻿";
 const APPROVE = /^(x|yes|y|ok|✓|✔|1|true|kyllä|k|ja|j)$/i;
 const flatten = (text: string): string => text.replace(/\s+/g, " ").trim();
 
+// A spreadsheet runs a cell that starts with one of these as a formula, quoted
+// or not. Machine text is data from outside, so such a cell is written with a
+// space in front, which makes it text; the import trims it away again.
+const FORMULA_START = /^[=+\-@]/;
+
 /** One cell of a tab-separated line, quoted the way spreadsheets quote. */
-function tsvCell(text: string): string {
+export function tsvCell(text: string): string {
   if (/[\t\r\n]/.test(text))
     throw new Error(`a sheet cell cannot hold a tab or a line break: ${JSON.stringify(text)}`);
-  return /^"|"$/.test(text) || text.includes('"') ? `"${text.replace(/"/g, '""')}"` : text;
+  const safe = FORMULA_START.test(text) ? ` ${text}` : text;
+  return safe !== text || /^"|"$/.test(text) || text.includes('"')
+    ? `"${safe.replace(/"/g, '""')}"`
+    : text;
 }
 
-function parseTsvCell(cell: string): string {
+export function parseTsvCell(cell: string): string {
   const trimmed = cell.trim();
   return trimmed.length >= 2 && trimmed.startsWith('"') && trimmed.endsWith('"')
-    ? trimmed.slice(1, -1).replace(/""/g, '"')
+    ? trimmed.slice(1, -1).replace(/""/g, '"').trim()
     : trimmed;
+}
+
+/**
+ * The bytes of a returned sheet as text, or an error a reviewer can act on.
+ * Strict on purpose: a lenient decoder turns the bytes of a sheet saved in a
+ * legacy code page (Excel's default for tab-delimited text) into U+FFFD, and
+ * "N\uFFFDkemiin" would then be imported, even approved, as if it were Finnish.
+ */
+export function decodeSheet(bytes: Uint8Array): string {
+  try {
+    return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+  } catch {
+    throw new Error("the sheet is not UTF-8 text; save it as tab-separated values (UTF-8)");
+  }
 }
 
 const sheetColumns = (locale: TranslatedLocale): string[] => [
@@ -479,7 +501,7 @@ export function importSheet(
       markReviewed(entry, locale, message.en, text);
       result.approved.push(key);
     } else if (changed) {
-      const problem = rejectionReason(message.en, text, locale);
+      const problem = rejectionReason(message.en, text, locale, message.max_length);
       if (problem) {
         note(result.refused, key, problem);
         continue;

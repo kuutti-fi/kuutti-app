@@ -6,18 +6,19 @@
  *                       [--retranslate | --stale] [--chunk-size 40]
  *                       [--mode sync|batch] [--dry-run] [--compare]
  *   pnpm i18n:translate --batch-id <id>      collect a batch submitted earlier
- *   pnpm i18n:translate --review             what still carries the flag
  *
  * By default only texts that do not exist yet are translated. --retranslate
  * writes machine text again (never reviewed text) and needs --prefix or
  * --keys; --stale redoes reviewed text whose English or translation changed.
  * --compare sends the requests for machine text (or --stale) under a --prefix
  * or --keys and prints old and new side by side, writing nothing. legal.*
- * keys are never sent; admin.* keys are English only.
+ * keys are never sent; admin.* keys are English only. What still waits for a
+ * reviewer is `pnpm i18n:review --list`.
  */
 import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { parseArgs } from "node:util";
+import { z } from "zod";
 import {
   anthropicTranslator,
   type BatchChunk,
@@ -27,8 +28,13 @@ import {
   formatUsage,
   submitBatch,
 } from "./lib/anthropic-translator.ts";
-import { unreviewed } from "./lib/check.ts";
-import { parseMessages, TRANSLATED_LOCALES, type TranslatedLocale } from "./lib/schema.ts";
+import { reviewHash } from "./lib/review-hash.ts";
+import {
+  isTranslatedLocale,
+  parseMessages,
+  TRANSLATED_LOCALES,
+  type TranslatedLocale,
+} from "./lib/schema.ts";
 import {
   applyTranslations,
   planChunks,
@@ -56,7 +62,6 @@ const { values } = parseArgs({
     "batch-id": { type: "string" },
     "dry-run": { type: "boolean", default: false },
     compare: { type: "boolean", default: false },
-    review: { type: "boolean", default: false },
   },
 });
 
@@ -65,12 +70,10 @@ function fail(message: string): never {
   process.exit(1);
 }
 
-const isLocale = (value: string | undefined): value is TranslatedLocale =>
-  (TRANSLATED_LOCALES as readonly string[]).includes(value ?? "");
-if (values.locale !== undefined && !isLocale(values.locale)) {
+if (values.locale !== undefined && !isTranslatedLocale(values.locale)) {
   fail(`--locale is ${TRANSLATED_LOCALES.join(" or ")}`);
 }
-const locales: TranslatedLocale[] = isLocale(values.locale)
+const locales: TranslatedLocale[] = isTranslatedLocale(values.locale)
   ? [values.locale]
   : [...TRANSLATED_LOCALES];
 const chunkSize = Number(values["chunk-size"] ?? "40");
@@ -116,23 +119,6 @@ if ((selection.mode === "retranslate" || values.compare) && !values.prefix && !v
   fail(`${values.compare ? "--compare" : "--retranslate"} needs --prefix or --keys`);
 }
 
-if (values.review) {
-  // Kept from #13: the list now lives in `pnpm i18n:review --list`.
-  const messages = parseMessages(readFileSync(file, "utf8"));
-  for (const locale of locales) {
-    const keys = unreviewed(messages, locale);
-    console.log(`${locale}: ${keys.length} machine-translated texts awaiting a native review`);
-    for (const key of keys)
-      console.log(
-        `  ${key}\n    en: ${messages[key]?.en}\n    ${locale}: ${messages[key]?.[locale]}`,
-      );
-  }
-  console.log(
-    "\nA native reviewer approves them through `pnpm i18n:review` (docs/i18n/translation-review-guide.md).",
-  );
-  process.exit(0);
-}
-
 const glossary = readFileSync(resolve(root, "glossary.yaml"), "utf8");
 const tone = readFileSync(resolve(root, "..", "..", "docs", "i18n", "tone.md"), "utf8");
 const contextFor = (
@@ -175,7 +161,26 @@ function apply(
   return result.written.length;
 }
 
-type Manifest = { selection: Selection; requests: BatchRequests };
+// What a batch asked for, kept on disk until it is collected: read back through
+// a schema like any input (a day may pass, and a file is a file), with the
+// fingerprint of each key's English at the time, so an answer made from an
+// older English is never written under a newer one.
+const Manifest = z.strictObject({
+  selection: z.strictObject({
+    mode: z.enum(["missing", "retranslate", "stale"]),
+    keys: z.array(z.string()).optional(),
+    prefix: z.string().optional(),
+  }),
+  requests: z.record(
+    z.string(),
+    z.strictObject({ locale: z.enum(TRANSLATED_LOCALES), keys: z.array(z.string()) }),
+  ),
+  sources: z.record(z.string(), z.string()),
+});
+type Manifest = { selection: Selection; requests: BatchRequests; sources: Record<string, string> };
+
+/** The fingerprint of a key's English: the review hash of it alone. */
+const sourceOf = (en: string): string => reviewHash(en, "");
 
 async function collect(id: string): Promise<void> {
   const path = resolve(batches, `${id}.json`);
@@ -184,7 +189,7 @@ async function collect(id: string): Promise<void> {
       `no record of batch ${id} in packages/i18n/.batches; it is collected where it was submitted`,
     );
   }
-  const manifest = JSON.parse(readFileSync(path, "utf8")) as Manifest;
+  const manifest: Manifest = Manifest.parse(JSON.parse(readFileSync(path, "utf8")));
   const state = await batchState(id);
   if (!state.ended) {
     const c = state.counts;
@@ -195,10 +200,19 @@ async function collect(id: string): Promise<void> {
     return;
   }
   const outcome = await collectBatch(id, manifest.requests);
+  const now = parseMessages(readFileSync(file, "utf8"));
   for (const locale of TRANSLATED_LOCALES) {
     const asked = Object.values(manifest.requests)
       .filter((request) => request.locale === locale)
-      .flatMap((request) => request.keys);
+      .flatMap((request) => request.keys)
+      .filter((key) => {
+        const en = Object.hasOwn(now, key) ? now[key]?.en : undefined;
+        if (en !== undefined && manifest.sources[key] === sourceOf(en)) return true;
+        console.error(
+          `✖ ${locale} ${key}: the English changed since the batch was submitted; translate it again`,
+        );
+        return false;
+      });
     if (asked.length === 0) continue;
     const written = apply(locale, asked, outcome.translations[locale], manifest.selection);
     console.log(`${locale}: wrote ${written}, flagged machine: true`);
@@ -255,10 +269,16 @@ if (batchId !== undefined) {
     );
     if (chunks.length > 0) {
       const { id, requests } = await submitBatch(chunks);
+      // The id names a file: the same check --batch-id gets.
+      if (!/^[A-Za-z0-9_-]+$/.test(id))
+        fail(`the batch id is not a file name: ${JSON.stringify(id)}`);
+      const sources = Object.fromEntries(
+        chunks.flatMap((chunk) => chunk.items.map((item) => [item.key, sourceOf(item.en)])),
+      );
       mkdirSync(batches, { recursive: true });
       writeFileSync(
         resolve(batches, `${id}.json`),
-        `${JSON.stringify({ selection, requests } satisfies Manifest, null, 2)}\n`,
+        `${JSON.stringify({ selection, requests, sources } satisfies Manifest, null, 2)}\n`,
       );
       console.log(
         `Submitted batch ${id} (${chunks.length} requests). Most finish within an hour, all within 24.\n` +
@@ -286,7 +306,10 @@ if (batchId !== undefined) {
         if (values.compare) {
           for (const item of chunk.items) {
             const text = translations[item.key];
-            const refused = text === undefined ? undefined : rejectionReason(item.en, text, locale);
+            const refused =
+              text === undefined
+                ? undefined
+                : rejectionReason(item.en, text, locale, item.max_length);
             console.log(
               `  ${item.key}\n    en:  ${shown(item.en)}\n    now: ${shown(messages[item.key]?.[locale])}\n    new: ${shown(text)}` +
                 (refused ? `\n    ✖ would be refused: ${refused}` : ""),

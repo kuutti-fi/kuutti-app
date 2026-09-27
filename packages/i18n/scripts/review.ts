@@ -21,6 +21,7 @@ import { commandData } from "./lib/annotate.ts";
 import { stale, unreviewed } from "./lib/check.ts";
 import {
   approve,
+  decodeSheet,
   exportSheet,
   formatProgress,
   importSheet,
@@ -30,7 +31,12 @@ import {
   selectKeys,
   sheetKeys,
 } from "./lib/review.ts";
-import { parseMessages, TRANSLATED_LOCALES, type TranslatedLocale } from "./lib/schema.ts";
+import {
+  isTranslatedLocale,
+  parseMessages,
+  TRANSLATED_LOCALES,
+  type TranslatedLocale,
+} from "./lib/schema.ts";
 
 const file = resolve(import.meta.dirname, "..", "messages.yaml");
 const annotate = process.env.GITHUB_ACTIONS === "true";
@@ -59,13 +65,25 @@ function fail(message: string): never {
   process.exit(1);
 }
 
-const isLocale = (value: string | undefined): value is TranslatedLocale =>
-  (TRANSLATED_LOCALES as readonly string[]).includes(value ?? "");
-
 function requireLocale(): TranslatedLocale {
-  if (!isLocale(values.locale)) fail(`--locale is ${TRANSLATED_LOCALES.join(" or ")}`);
+  if (!isTranslatedLocale(values.locale)) fail(`--locale is ${TRANSLATED_LOCALES.join(" or ")}`);
   return values.locale;
 }
+
+// One thing at a time: `--approve --reflag` must never approve and quietly drop the rest.
+const operations = (
+  [
+    ["--approved-since", values["approved-since"] !== undefined],
+    ["--export", values.export !== undefined],
+    ["--import", values.import !== undefined],
+    ["--approve", values.approve],
+    ["--reflag", values.reflag],
+    ["--list", values.list],
+  ] as const
+)
+  .filter(([, given]) => given)
+  .map(([name]) => name);
+if (operations.length > 1) fail(`${operations.join(" and ")} are different commands; give one`);
 
 const yamlText = readFileSync(file, "utf8");
 const messages = parseMessages(yamlText);
@@ -100,17 +118,32 @@ function selected(): string[] {
   return keys;
 }
 
-if (values["approved-since"]) {
-  let before: ReturnType<typeof parseMessages> = {};
+/**
+ * messages.yaml as it was at `ref`. No file at that ref means every review in
+ * the file is new; any other failure (no git, a ref that does not resolve, a
+ * file that does not parse) stops the command, because an empty "before" would
+ * print the same "nothing newly approved" as a working comparison.
+ */
+function messagesAt(ref: string): ReturnType<typeof parseMessages> {
+  let text: string;
   try {
-    before = parseMessages(
-      execFileSync("git", ["show", `${values["approved-since"]}:packages/i18n/messages.yaml`], {
-        encoding: "utf8",
-      }),
-    );
-  } catch {
-    // No messages.yaml at that ref: every review in the file is new.
+    // --end-of-options: a ref that starts with a dash is a ref, never an option.
+    text = execFileSync("git", ["show", "--end-of-options", `${ref}:packages/i18n/messages.yaml`], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+  } catch (error) {
+    const stderr = String((error as { stderr?: unknown }).stderr ?? (error as Error).message);
+    if (/exists on disk, but not in|does not exist in|path .* does not exist/i.test(stderr)) {
+      return {};
+    }
+    fail(`could not read messages.yaml at ${JSON.stringify(ref)}: ${stderr.trim()}`);
   }
+  return parseMessages(text);
+}
+
+if (values["approved-since"]) {
+  const before = messagesAt(values["approved-since"]);
   const found = newlyReviewed(before, messages);
   // One warning on each approved key's line: it shows in the pull request's
   // diff, where whoever approves the pull request sees what it approves.
@@ -143,7 +176,13 @@ if (values["approved-since"]) {
   }
 } else if (values.import) {
   const locale = requireLocale();
-  const result = importSheet(yamlText, messages, locale, readFileSync(values.import, "utf8"));
+  let sheet: string;
+  try {
+    sheet = decodeSheet(readFileSync(values.import));
+  } catch (error) {
+    fail((error as Error).message);
+  }
+  const result = importSheet(yamlText, messages, locale, sheet);
   report("Approved", result.approved);
   report("Corrected, still waiting for approval", result.corrected);
   reportReasons("Refused", result.refused);

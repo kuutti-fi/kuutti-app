@@ -3,13 +3,16 @@ import { commandData } from "./annotate.ts";
 import { checkMessages } from "./check.ts";
 import {
   approve,
+  decodeSheet,
   exportSheet,
   formatProgress,
   importSheet,
   newlyReviewed,
+  parseTsvCell,
   progress,
   reflag,
   selectKeys,
+  tsvCell,
 } from "./review.ts";
 import { reviewHash } from "./review-hash.ts";
 import { parseMessages } from "./schema.ts";
@@ -244,5 +247,61 @@ describe("the review sheet", () => {
 describe("CI annotations", () => {
   it("escape a line break, so text in messages.yaml cannot start a workflow command", () => {
     expect(commandData("a\n::add-mask::x 100%")).toBe("a%0A::add-mask::x 100%25");
+  });
+});
+
+describe("the sheet, after the review of #74", () => {
+  const yaml = `
+smoke.formula:
+  en: "+1 like"
+  description: A count with a plus sign in front.
+  fi: "+1 tykkäys"
+  machine: { fi: true }
+smoke.short:
+  en: OK
+  description: A button in a row.
+  fi: Selvä
+  machine: { fi: true }
+  max_length: 5
+`;
+
+  it("writes a cell that a spreadsheet would run as a formula as text, and reads it back unchanged", () => {
+    for (const text of ["=1+1", "+358 40", "-2", "@SUM(A1)"]) {
+      const cell = tsvCell(text);
+      expect(cell.startsWith('" ')).toBe(true);
+      expect(parseTsvCell(cell)).toBe(text);
+    }
+    expect(tsvCell("Selvä")).toBe("Selvä");
+    const messages = parseMessages(yaml);
+    const sheet = exportSheet(messages, "fi", "tsv");
+    expect(sheet).toContain('" +1 tykkäys"');
+    // The round trip: approving the exported sheet as it is changes no text.
+    const approved = sheet
+      .split("\n")
+      .map((line) => (line.startsWith("smoke.formula") ? line.replace("\t\t", "\tx\t") : line))
+      .join("\n");
+    const result = importSheet(yaml, messages, "fi", approved);
+    expect(result.approved).toEqual(["smoke.formula"]);
+    expect(parseMessages(result.yaml)["smoke.formula"]?.fi).toBe("+1 tykkäys");
+  });
+
+  it("refuses a sheet that is not UTF-8 instead of importing replacement characters", () => {
+    // "Näkemiin" as Windows-1252 bytes: what Excel's tab-delimited save writes.
+    const legacy = Uint8Array.from([0x4e, 0xe4, 0x6b, 0x65, 0x6d, 0x69, 0x69, 0x6e]);
+    expect(() => decodeSheet(legacy)).toThrow(/not UTF-8/);
+    expect(decodeSheet(new TextEncoder().encode("Näkemiin"))).toBe("Näkemiin");
+    // UTF-16 with its byte order mark is refused the same way.
+    expect(() => decodeSheet(Uint8Array.from([0xff, 0xfe, 0x4e, 0x00]))).toThrow(/not UTF-8/);
+  });
+
+  it("refuses a corrected row that does not fit its room, approved or not", () => {
+    const messages = parseMessages(yaml);
+    const sheet = exportSheet(messages, "fi", "tsv");
+    const corrected = sheet.replace("\tSelvä\t", "\tSelvä juttu\t");
+    expect(corrected).not.toBe(sheet);
+    const result = importSheet(yaml, messages, "fi", corrected);
+    expect(result.corrected).toEqual([]);
+    expect(result.refused["smoke.short"]).toBe("is over its max_length of 5");
+    expect(result.yaml).toContain("fi: Selvä\n");
   });
 });

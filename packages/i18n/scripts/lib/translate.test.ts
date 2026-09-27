@@ -11,6 +11,7 @@ import {
   selectForTranslation,
   type TranslationItem,
   type Translator,
+  untrustedTextProblem,
 } from "./translate.ts";
 
 const SOURCE = `# A comment that must survive.
@@ -269,5 +270,33 @@ legal.terms.title:
     );
     expect(result.written).toEqual(["demo.save"]);
     expect(parseMessages(result.yaml)["demo.thanks"]?.fi).toBe("Kiitos");
+  });
+});
+
+describe("what the review of #74 tightened", () => {
+  it("sees contact details written in look-alike characters, any script of digit, any script of domain", () => {
+    const en = "Call the support line.";
+    // Full-width digits: NFKC makes them ordinary ones.
+    expect(untrustedTextProblem(en, "Soita ０４０ １２３ ４５６７")).toMatch(/phone number/);
+    // Arabic-Indic digits are digits too.
+    expect(untrustedTextProblem(en, "Soita ٠٤٠١٢٣٤٥٦٧")).toMatch(/phone number/);
+    // An internationalised top-level domain.
+    expect(untrustedTextProblem(en, "Katso evil.рф")).toMatch(/web or e-mail address/);
+    expect(untrustedTextProblem(en, "Katso ｅｖｉｌ．ｃｏｍ")).toMatch(/web or e-mail address/);
+    // What the English has, the translation may keep.
+    expect(untrustedTextProblem("See kuutti.app", "Katso kuutti.app")).toBeUndefined();
+    expect(untrustedTextProblem(en, "Soita tukeen.")).toBeUndefined();
+  });
+
+  it("refuses a text that was not read as UTF-8, and the start of a spreadsheet formula", () => {
+    expect(untrustedTextProblem("Goodbye", "N\uFFFDkemiin")).toMatch(/not read as UTF-8/);
+    expect(untrustedTextProblem("Total", "=cmd|'/c calc'!A0")).toMatch(/formula/);
+    expect(untrustedTextProblem("=1+1 is two", "=1+1 on kaksi")).toBeUndefined();
+  });
+
+  it("holds a text to its room wherever it is judged", () => {
+    expect(rejectionReason("OK", "Selvä", "fi", 5)).toBeUndefined();
+    expect(rejectionReason("OK", "Selvä juttu", "fi", 5)).toBe("is over its max_length of 5");
+    expect(rejectionReason("OK", "Selvä juttu", "fi")).toBeUndefined();
   });
 });

@@ -5,6 +5,10 @@ import { z } from "zod";
 export const TRANSLATED_LOCALES = ["fi", "sv"] as const;
 export type TranslatedLocale = (typeof TRANSLATED_LOCALES)[number];
 
+/** A command-line value that names a translated locale. */
+export const isTranslatedLocale = (value: string | undefined): value is TranslatedLocale =>
+  (TRANSLATED_LOCALES as readonly string[]).includes(value ?? "");
+
 const KEY_PATTERN = /^[a-z][A-Za-z0-9_]*(\.[A-Za-z0-9_]+)+$/;
 
 const MachineFlags = z.strictObject({ fi: z.boolean().optional(), sv: z.boolean().optional() });

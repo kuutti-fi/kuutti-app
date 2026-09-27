@@ -349,3 +349,18 @@ describe("what the file itself may hold (#55)", () => {
     expect(() => parseMessages(legal)).toThrow(/letters, digits, dots and dashes/);
   });
 });
+
+describe("the release gate, after the review of #74", () => {
+  it("sees a draft marker however it is capitalised", () => {
+    const messages = parseMessages(`
+legal.terms.summary:
+  en: "Draft: the terms."
+  description: The terms the person accepts by version.
+  fi: "Luonnos: ehdot."
+  consent_version: "2026-10-1"
+`);
+    const { errors } = checkMessages(messages, { release: true });
+    expect(errors.some((e) => e.includes("legal text is still a draft"))).toBe(true);
+    expect(checkMessages(messages, { release: false }).errors).toEqual([]);
+  });
+});

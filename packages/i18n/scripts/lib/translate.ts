@@ -1,6 +1,6 @@
 import { isMap, parseDocument, Scalar, YAMLMap } from "yaml";
 import { argumentsOf, branchProblems, inflectionProblems, tagsOf } from "./icu.ts";
-import { reviewHash } from "./review-hash.ts";
+import { isStale } from "./review-hash.ts";
 import { isAdminKey, isLegalKey, type Messages, type TranslatedLocale } from "./schema.ts";
 
 /**
@@ -68,12 +68,11 @@ export function selectForTranslation(
     .filter(([key]) => !selection.keys || selection.keys.includes(key))
     .filter(([, message]) => {
       const text = message[locale];
-      const hash = message.reviewed?.[locale];
       if (selection.mode === "missing") return text === undefined;
       if (selection.mode === "retranslate") {
         return text !== undefined && message.machine?.[locale] === true;
       }
-      return text !== undefined && hash !== undefined && hash !== reviewHash(message.en, text);
+      return isStale(message, locale);
     })
     .map(([key, message]) => toItem(key, message));
 }
@@ -125,10 +124,8 @@ export function reviewedExamples(
     .filter(([key]) => key.startsWith(`${namespace}.`) && !isAdminKey(key) && !isLegalKey(key))
     .flatMap(([, message]) => {
       const text = message[locale];
-      const hash = message.reviewed?.[locale];
-      return text !== undefined && hash !== undefined && hash === reviewHash(message.en, text)
-        ? [{ en: message.en, text }]
-        : [];
+      const reviewed = message.reviewed?.[locale] !== undefined && !isStale(message, locale);
+      return text !== undefined && reviewed ? [{ en: message.en, text }] : [];
     })
     .slice(0, limit);
 }
@@ -141,43 +138,75 @@ export const graphemeLength = (text: string): number => [...graphemes.segment(te
 const MARKUP = /<\/?[a-z][^>]*>/i;
 // Invisible or direction-changing characters, and line or paragraph separators.
 const INVISIBLE = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/u;
+// What a decoder leaves where the bytes were not the encoding it was told (a
+// sheet saved as Windows-1252 and read as UTF-8): never part of a real text.
+const REPLACEMENT = "\uFFFD";
 // Contact details a translation must not add: a web address, an e-mail address,
-// a phone number. On a dating app they are how a scam starts.
-const DOMAIN = /(^|[^\p{L}\p{N}.@-])\p{L}[\p{L}\p{N}-]*\.[a-z]{2,}(?![\p{L}\p{N}])/iu;
-const PHONE = /\+?\d[\d \u00a0-]{6,}\d/;
+// a phone number. On a dating app they are how a scam starts. The model is
+// contactDetailsIn in apps/api/src/profile/text.ts (the plain-text rule of
+// #47): this package cannot import from an app (rules/layout.md), so the
+// patterns are kept alike by hand. Like there, the text is compatibility-
+// normalised first (full-width and other look-alike digits and letters), a
+// top-level domain is letters of any script, and a phone number is digits of
+// any script. A false refusal (a date written out as 2026-09-27, "Valmis.Jatka"
+// without its space) costs a rephrase; a false pass costs a person.
+const DOMAIN = /(^|[^\p{L}\p{N}.@-])\p{L}[\p{L}\p{N}-]*\.\p{L}{2,}(?![\p{L}\p{N}])/u;
+const PHONE = /\+?\p{Nd}[\p{Nd} \u00a0-]{6,}\p{Nd}/u;
+// A spreadsheet reads a cell that starts with = as a formula (review.ts, the sheet).
+const FORMULA = /^\s*=/;
 
 /**
  * What a text must not carry that its English lacks: invisible characters,
- * a link, markup, contact details. Checked on translator output, on a
- * reviewer's sheet and on the file itself (#13, #55).
+ * a link, markup, contact details, the start of a spreadsheet formula. Checked
+ * on translator output, on a reviewer's sheet and on the file itself (#13, #55).
  */
 export function untrustedTextProblem(en: string, text: string): string | undefined {
   if (INVISIBLE.test(text)) return "contains control, bidirectional or line-separator characters";
-  if (text.includes("://") && !en.includes("://")) {
+  if (text.includes(REPLACEMENT)) {
+    return "contains a replacement character: the text was not read as UTF-8";
+  }
+  const plain = text.normalize("NFKC");
+  const source = en.normalize("NFKC");
+  if (plain.includes("://") && !source.includes("://")) {
     return "contains a link the English source does not have";
   }
-  if (MARKUP.test(text) && !MARKUP.test(en)) {
+  if (MARKUP.test(plain) && !MARKUP.test(source)) {
     return "contains markup the English source does not have";
   }
-  if ((DOMAIN.test(text) && !DOMAIN.test(en)) || (text.includes("@") && !en.includes("@"))) {
+  if (
+    (DOMAIN.test(plain) && !DOMAIN.test(source)) ||
+    (plain.includes("@") && !source.includes("@"))
+  ) {
     return "contains a web or e-mail address the English source does not have";
   }
-  if (PHONE.test(text) && !PHONE.test(en)) {
+  if (PHONE.test(plain) && !PHONE.test(source)) {
     return "contains a phone number the English source does not have";
+  }
+  if (FORMULA.test(plain) && !FORMULA.test(source)) {
+    return "starts with =, which a spreadsheet reads as a formula";
   }
   return undefined;
 }
 
-/** Why a returned translation cannot be written, or undefined when it can. */
+/**
+ * Why a text cannot be written as `locale`'s, or undefined when it can. With
+ * `maxLength` (the message's max_length) the room is checked too, so that the
+ * translator's apply, its --compare and a reviewer's corrected row all refuse
+ * the same texts.
+ */
 export function rejectionReason(
   en: string,
   text: string,
   locale: TranslatedLocale,
+  maxLength?: number,
 ): string | undefined {
   if (text.trim().length === 0) return "empty";
   // Machine output is data from outside, and so is a reviewer's sheet.
   const untrusted = untrustedTextProblem(en, text);
   if (untrusted) return untrusted;
+  if (maxLength !== undefined && graphemeLength(text.trim()) > maxLength) {
+    return `is over its max_length of ${maxLength}`;
+  }
   try {
     const source = argumentsOf(en);
     const target = argumentsOf(text);
@@ -250,11 +279,7 @@ export function applyTranslations(
       rejected[item.key] = "the translator returned nothing for this key";
       continue;
     }
-    const reason =
-      rejectionReason(item.en, text, locale) ??
-      (item.max_length !== undefined && graphemeLength(text.trim()) > item.max_length
-        ? `is over its max_length of ${item.max_length}`
-        : undefined);
+    const reason = rejectionReason(item.en, text, locale, item.max_length);
     if (reason) {
       rejected[item.key] = reason;
       continue;

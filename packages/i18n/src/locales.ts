@@ -30,18 +30,22 @@ export const LOCALE_NAMES: Record<AnyLocale, string> = {
  * The first preference we have a catalogue for, by language ("fi-FI" and "fi"
  * are both Finnish), else English. Input is a list of BCP 47 tags in order of
  * preference: the device's locales, or a parsed Accept-Language header.
- * `allowed` narrows the catalogues on offer, to RELEASED_LOCALES in production.
+ * `allowed` narrows the catalogues on offer, to RELEASED_LOCALES in production,
+ * and the answer is always one of them: English when it is allowed, else the
+ * first allowed locale. An empty list is a programming error.
  */
 export function resolveLocale(
   preferences: readonly string[],
   allowed: readonly Locale[] = LOCALES,
 ): Locale {
+  const [first] = allowed;
+  if (first === undefined) throw new Error("resolveLocale needs at least one allowed locale");
   for (const tag of preferences) {
     const language = tag.trim().toLowerCase().split(/[-_]/)[0] ?? "";
     const match = allowed.find((locale) => locale === language);
     if (match) return match;
   }
-  return DEFAULT_LOCALE;
+  return allowed.includes(DEFAULT_LOCALE) ? DEFAULT_LOCALE : first;
 }
 
 const MAX_ACCEPT_LANGUAGE_LENGTH = 256;
