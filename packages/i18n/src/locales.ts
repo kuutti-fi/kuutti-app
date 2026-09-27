@@ -8,6 +8,16 @@ export type AnyLocale = Locale | typeof PSEUDO_LOCALE;
 
 export const DEFAULT_LOCALE: Locale = "en";
 
+/**
+ * The languages a release ships (#55, TD-17): English and Finnish at launch.
+ * `pnpm i18n:check --release` holds each of them to a native review; Swedish
+ * waits in dev and staging, where a reviewer can read it, until one has cleared
+ * it, and releasing it is adding it here. A production build of the app and
+ * the production API pass it as `allowed` to resolveLocale; every other
+ * environment serves all the catalogues.
+ */
+export const RELEASED_LOCALES = ["en", "fi"] as const satisfies readonly Locale[];
+
 /** Each language under its own name, which is how a language picker lists them; never translated. */
 export const LOCALE_NAMES: Record<AnyLocale, string> = {
   en: "English",
@@ -16,19 +26,26 @@ export const LOCALE_NAMES: Record<AnyLocale, string> = {
   "en-XA": "［Pseudo］",
 };
 
-const isLocale = (tag: string): tag is Locale => (LOCALES as readonly string[]).includes(tag);
-
 /**
  * The first preference we have a catalogue for, by language ("fi-FI" and "fi"
  * are both Finnish), else English. Input is a list of BCP 47 tags in order of
  * preference: the device's locales, or a parsed Accept-Language header.
+ * `allowed` narrows the catalogues on offer, to RELEASED_LOCALES in production,
+ * and the answer is always one of them: English when it is allowed, else the
+ * first allowed locale. An empty list is a programming error.
  */
-export function resolveLocale(preferences: readonly string[]): Locale {
+export function resolveLocale(
+  preferences: readonly string[],
+  allowed: readonly Locale[] = LOCALES,
+): Locale {
+  const [first] = allowed;
+  if (first === undefined) throw new Error("resolveLocale needs at least one allowed locale");
   for (const tag of preferences) {
     const language = tag.trim().toLowerCase().split(/[-_]/)[0] ?? "";
-    if (isLocale(language)) return language;
+    const match = allowed.find((locale) => locale === language);
+    if (match) return match;
   }
-  return DEFAULT_LOCALE;
+  return allowed.includes(DEFAULT_LOCALE) ? DEFAULT_LOCALE : first;
 }
 
 const MAX_ACCEPT_LANGUAGE_LENGTH = 256;

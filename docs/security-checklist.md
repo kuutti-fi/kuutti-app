@@ -39,6 +39,7 @@ The four surfaces that matter most, in order: the OIDC exchange with Telia, the 
 - [ ] Drizzle query builder only. Any raw `sql` template carries a reviewer comment explaining why.
 - [ ] All input passes through a zod schema from `packages/schema` at the route boundary, including query strings, headers used for logic, and WebSocket messages.
 - [x] Uploaded images are re-encoded by sharp with `limitInputPixels`; the original bytes are never stored or served. (#48: `apps/api/src/media/pipeline.ts`; the pixel cap is applied to the file header before the decoder, the route tests read the stored bytes back.)
+- [x] The translator (`pnpm i18n:translate`) sends only message text (and approved translations as examples), the glossary and the tone guide to the Claude API; its output is validated and stays machine text until a native review (#55).
 
 ## Insecure design
 

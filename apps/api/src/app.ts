@@ -24,7 +24,7 @@ import {
   onError,
   validationHook,
 } from "./lib/errors.ts";
-import { requestLocale } from "./lib/i18n.ts";
+import { requestLocale, servedLocales } from "./lib/i18n.ts";
 import { type Logger, requestLogger } from "./lib/logger.ts";
 import { openApiDocument } from "./lib/openapi.ts";
 import { rateLimit } from "./lib/rate-limit.ts";
@@ -72,7 +72,8 @@ export function createApp(deps: Deps) {
   // even rejected requests are logged, then the protections, then routes.
   app.use("*", serverRequestId());
   // Before everything that may answer, so a refusal speaks the request's language (#13).
-  app.use("*", requestLocale());
+  // What this environment serves: the released languages only in production (#55).
+  app.use("*", requestLocale(servedLocales(deps.config.APP_ENV)));
   app.use("*", requestLogger(deps.logger, { trustedProxy: deps.config.TRUSTED_PROXY }));
   app.use("*", secureHeaders());
   // No environment of this API is a web surface (rule 8); previews have public

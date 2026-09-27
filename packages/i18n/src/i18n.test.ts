@@ -5,6 +5,7 @@ import {
   formatNumber,
   formatPond,
   parseAcceptLanguage,
+  RELEASED_LOCALES,
   resolveLocale,
   typedT,
 } from "./index.ts";
@@ -69,6 +70,18 @@ describe("locale resolution", () => {
     expect(resolveLocale(["de-DE", "sv_SE", "fi"])).toBe("sv");
     expect(resolveLocale(["de-DE"])).toBe("en");
     expect(resolveLocale([])).toBe("en");
+    // The answer is always one of the allowed locales (#55).
+    expect(resolveLocale(["sv-FI", "fi"], ["en", "fi"])).toBe("fi");
+    expect(resolveLocale(["sv"], ["en", "fi"])).toBe("en");
+    expect(resolveLocale(["sv"], ["fi"])).toBe("fi");
+    expect(() => resolveLocale(["fi"], [])).toThrow(/at least one/);
+  });
+
+  it("offers only the released languages where it is told to: Swedish waits for its reviewer", () => {
+    expect(RELEASED_LOCALES).toEqual(["en", "fi"]);
+    expect(resolveLocale(["sv-FI", "fi-FI"], RELEASED_LOCALES)).toBe("fi");
+    expect(resolveLocale(["sv-FI"], RELEASED_LOCALES)).toBe("en");
+    expect(resolveLocale(["sv-FI"])).toBe("sv");
   });
 
   it("reads Accept-Language by weight and drops q=0 and the wildcard", () => {
@@ -115,10 +128,11 @@ describe("formatting", () => {
   });
 
   it("reads a pond's case form from the database and never builds one", () => {
-    const helsinki = { name: "Helsinki", name_inessive: "Helsingissä" };
+    // The shape of PondSummary: every case form is required, so none is dropped silently.
+    const helsinki = { name: "Helsinki", nameInessive: "Helsingissä" };
     expect(formatPond(helsinki, "inessive", "fi")).toBe("Helsingissä");
     expect(formatPond(helsinki, "inessive", "en")).toBe("Helsinki");
+    expect(formatPond(helsinki, "inessive", "sv")).toBe("Helsinki");
     expect(formatPond(helsinki, "nominative", "fi")).toBe("Helsinki");
-    expect(formatPond({ name: "Oulu" }, "inessive", "fi")).toBe("Oulu");
   });
 });

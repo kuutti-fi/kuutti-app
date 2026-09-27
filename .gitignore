@@ -28,6 +28,8 @@ out/
 coverage/
 
 # --- Logs and caches ---
+# What each request of an i18n:translate batch asked for, until it is collected (#55).
+packages/i18n/.batches/
 *.log
 npm-debug.log*
 yarn-error.log*

@@ -1,13 +1,25 @@
 import { describe, expect, it } from "vitest";
 import { checkMessages } from "./check.ts";
+import { reviewHash } from "./review-hash.ts";
 import { parseMessages } from "./schema.ts";
-import { applyTranslations, missingTranslations, type Translator } from "./translate.ts";
+import {
+  applyTranslations,
+  missingTranslations,
+  planChunks,
+  rejectionReason,
+  reviewedExamples,
+  selectForTranslation,
+  type TranslationItem,
+  type Translator,
+  untrustedTextProblem,
+} from "./translate.ts";
 
 const SOURCE = `# A comment that must survive.
 demo.greeting:
   en: Hello
   description: Greeting on the first screen.
   sv: Hej
+  machine: { sv: true }
 
 demo.count:
   en: "{likes, plural, one {# like} other {# likes}}"
@@ -107,7 +119,7 @@ describe("i18n:translate", () => {
     });
     expect(result.written).toEqual([]);
     expect(Object.values(result.rejected)).toEqual([
-      "contains control or bidirectional formatting characters",
+      "contains control, bidirectional or line-separator characters",
       "contains a link the English source does not have",
       "contains markup the English source does not have",
     ]);
@@ -127,5 +139,184 @@ describe("i18n:translate", () => {
     ]);
     const release = checkMessages(after, { release: true }).errors;
     expect(release.filter((e) => e.includes("still machine-translated"))).toHaveLength(3);
+  });
+});
+
+describe("untrusted text (#55)", () => {
+  it("refuses contact details, line separators and tags the English does not have", () => {
+    const cases: [string, string, string][] = [
+      ["Contact us", "Ota yhteyttä: kuutti-tuki.fi", "a web or e-mail address"],
+      ["Hello", "Hei tuki@evil.fi", "a web or e-mail address"],
+      ["Call us", "Soita +358 40 1234567", "a phone number"],
+      ["Hello", "Hei maailma", "line-separator characters"],
+      ["<b>Hello</b>", "<a>Hei</a>", "does not keep the tags"],
+    ];
+    for (const [en, text, reason] of cases) {
+      expect(rejectionReason(en, text, "fi"), text).toContain(reason);
+    }
+    // What the English has, the translation may keep; a time or a count is no phone number.
+    expect(
+      rejectionReason("Write to hello@kuutti.app", "Kirjoita: hello@kuutti.app", "fi"),
+    ).toBeUndefined();
+    expect(rejectionReason("<b>Hello</b>", "<b>Hei</b>", "fi")).toBeUndefined();
+    expect(rejectionReason("Opens at 12.30", "Aukeaa klo 12.30", "fi")).toBeUndefined();
+  });
+});
+
+describe("what a translation run covers (#55)", () => {
+  const FILE = `demo.hello:
+  en: Hello
+  description: d
+  fi: Hei
+  machine: { fi: true }
+
+demo.bye:
+  en: Goodbye for now
+  description: d
+  fi: Näkemiin
+  reviewed: { fi: "${reviewHash("Goodbye", "Näkemiin")}" }
+
+demo.thanks:
+  en: Thanks
+  description: d
+  fi: Kiitos
+  reviewed: { fi: "${reviewHash("Thanks", "Kiitos")}" }
+
+demo.save:
+  en: Save
+  description: a button
+  max_length: 12
+
+other.title:
+  en: Title
+  description: d
+  fi: Otsikko
+  machine: { fi: true }
+
+legal.terms.title:
+  en: Terms
+  description: d
+  fi: Käyttöehdot
+  consent_version: "1"
+`;
+  const messages = parseMessages(FILE);
+  const keys = (items: TranslationItem[]): string[] => items.map((item) => item.key);
+
+  it("selects missing text, machine text to write again, or reviews gone stale, never legal text", () => {
+    expect(keys(selectForTranslation(messages, "fi", { mode: "missing" }))).toEqual(["demo.save"]);
+    expect(keys(selectForTranslation(messages, "fi", { mode: "retranslate" }))).toEqual([
+      "demo.hello",
+      "other.title",
+    ]);
+    // demo.bye's English changed after its review; demo.thanks is still current.
+    expect(keys(selectForTranslation(messages, "fi", { mode: "stale" }))).toEqual(["demo.bye"]);
+    expect(
+      keys(selectForTranslation(messages, "fi", { mode: "retranslate", prefix: "other." })),
+    ).toEqual(["other.title"]);
+    expect(
+      keys(selectForTranslation(messages, "fi", { mode: "retranslate", keys: ["demo.hello"] })),
+    ).toEqual(["demo.hello"]);
+    // The room a text has goes to the translator with it.
+    expect(selectForTranslation(messages, "fi", { mode: "missing" })[0]?.max_length).toBe(12);
+  });
+
+  it("sends only current reviews as examples, from the same namespace", () => {
+    expect(reviewedExamples(messages, "fi", "demo")).toEqual([{ en: "Thanks", text: "Kiitos" }]);
+    expect(reviewedExamples(messages, "fi", "other")).toEqual([]);
+  });
+
+  it("splits a selection per namespace into evenly sized requests", () => {
+    const items = (prefix: string, n: number): TranslationItem[] =>
+      Array.from({ length: n }, (_, i) => ({ key: `${prefix}.k${i}`, en: "x", description: "d" }));
+    const plan = planChunks([...items("profile", 90), ...items("smoke", 3)], 40);
+    expect(plan.map((chunk) => [chunk.namespace, chunk.items.length])).toEqual([
+      ["profile", 30],
+      ["profile", 30],
+      ["profile", 30],
+      ["smoke", 3],
+    ]);
+  });
+
+  it("writes a stale text again as machine text, dropping its old review", () => {
+    const items = selectForTranslation(messages, "fi", { mode: "stale" });
+    const result = applyTranslations(FILE, messages, "fi", { "demo.bye": "Näkemiin nyt" }, items);
+    expect(result.written).toEqual(["demo.bye"]);
+    const after = parseMessages(result.yaml)["demo.bye"];
+    expect(after).toMatchObject({ fi: "Näkemiin nyt", machine: { fi: true } });
+    expect(after?.reviewed).toBeUndefined();
+  });
+
+  it("refuses an answer over its max_length before it is written", () => {
+    const items = selectForTranslation(messages, "fi", { mode: "missing" });
+    const result = applyTranslations(
+      FILE,
+      messages,
+      "fi",
+      { "demo.save": "Tallenna muutokset" },
+      items,
+    );
+    expect(result.rejected).toEqual({ "demo.save": "is over its max_length of 12" });
+    expect(result.written).toEqual([]);
+  });
+
+  it("ignores an answer for a key the run did not select", () => {
+    const items = selectForTranslation(messages, "fi", { mode: "missing" });
+    const result = applyTranslations(
+      FILE,
+      messages,
+      "fi",
+      { "demo.thanks": "Kiitti", "demo.save": "Tallenna" },
+      items,
+    );
+    expect(result.written).toEqual(["demo.save"]);
+    expect(parseMessages(result.yaml)["demo.thanks"]?.fi).toBe("Kiitos");
+  });
+});
+
+describe("what the review of #74 tightened", () => {
+  it("sees contact details written in look-alike characters, any script of digit, any script of domain", () => {
+    const en = "Call the support line.";
+    // Full-width digits: NFKC makes them ordinary ones.
+    expect(untrustedTextProblem(en, "Soita ０４０ １２３ ４５６７")).toMatch(/phone number/);
+    // Arabic-Indic digits are digits too.
+    expect(untrustedTextProblem(en, "Soita ٠٤٠١٢٣٤٥٦٧")).toMatch(/phone number/);
+    // An internationalised top-level domain.
+    expect(untrustedTextProblem(en, "Katso evil.рф")).toMatch(/web or e-mail address/);
+    expect(untrustedTextProblem(en, "Katso ｅｖｉｌ．ｃｏｍ")).toMatch(/web or e-mail address/);
+    // What the English has, the translation may keep.
+    expect(untrustedTextProblem("See kuutti.app", "Katso kuutti.app")).toBeUndefined();
+    expect(untrustedTextProblem(en, "Soita tukeen.")).toBeUndefined();
+  });
+
+  it("refuses a text that was not read as UTF-8, and the start of a spreadsheet formula", () => {
+    expect(untrustedTextProblem("Goodbye", "N\uFFFDkemiin")).toMatch(/not read as UTF-8/);
+    expect(untrustedTextProblem("Total", "=cmd|'/c calc'!A0")).toMatch(/formula/);
+    expect(untrustedTextProblem("=1+1 is two", "=1+1 on kaksi")).toBeUndefined();
+  });
+
+  it("holds a text to its room wherever it is judged", () => {
+    expect(rejectionReason("OK", "Selvä", "fi", 5)).toBeUndefined();
+    expect(rejectionReason("OK", "Selvä juttu", "fi", 5)).toBe("is over its max_length of 5");
+    expect(rejectionReason("OK", "Selvä juttu", "fi")).toBeUndefined();
+  });
+});
+
+describe("what the translation may not swap", () => {
+  it("keeps the English's own link, address and number, and takes no other", () => {
+    const en = "Write to hello@kuutti.app, see https://kuutti.app/help or call +358 40 123 4567.";
+    const kept =
+      "Kirjoita osoitteeseen hello@kuutti.app, katso https://kuutti.app/help tai soita +358 40 123 4567.";
+    expect(untrustedTextProblem(en, kept)).toBeUndefined();
+    expect(untrustedTextProblem(en, kept.replace("hello@kuutti.app", "scam@evil.fi"))).toMatch(
+      /web or e-mail address/,
+    );
+    expect(
+      untrustedTextProblem(en, kept.replace("https://kuutti.app/help", "https://evil.example/x")),
+    ).toMatch(/link/);
+    expect(untrustedTextProblem(en, kept.replace("123 4567", "765 4321"))).toMatch(/phone number/);
+    // Another spelling of the same number is the same number.
+    expect(untrustedTextProblem(en, kept.replace("+358 40 123 4567", "+358-40-123-4567"))).toBe(
+      undefined,
+    );
   });
 });

@@ -40,19 +40,21 @@ export function formatNumber(
 /** The grammatical cases a pond's name is stored in (#4: `ponds.name_inessive`). */
 export type PondCase = "nominative" | "inessive";
 
-/** A pond as the database hands it over: the name in every case form a sentence may need. */
-export type PondName = { name: string; name_inessive?: string | null };
+/**
+ * A pond as the API hands it over (`PondSummary` in packages/schema): the name
+ * in every case form a sentence may need. Every form is required, so a caller
+ * that drops one is a type error instead of a sentence silently back in the
+ * nominative (#55).
+ */
+export type PondName = { name: string; nameInessive: string };
 
 /**
  * A pond's name in the case a sentence needs, read from the stored form and
  * never built: Finnish inflects proper nouns irregularly ("Helsinki",
  * "Helsingissä"), so TD-17 stores each form per pond. English and Swedish
- * use the nominative. Without a stored form the nominative comes back, and the
- * message around it must be one that stays grammatical then.
+ * use the nominative.
  */
 export function formatPond(pond: PondName, grammaticalCase: PondCase, locale: AnyLocale): string {
-  if (locale === "fi" && grammaticalCase === "inessive" && pond.name_inessive) {
-    return pond.name_inessive;
-  }
+  if (locale === "fi" && grammaticalCase === "inessive") return pond.nameInessive;
   return pond.name;
 }

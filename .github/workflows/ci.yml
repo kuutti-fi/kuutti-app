@@ -93,12 +93,22 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          # A pull request's merge commit and its first parent, the base: what
+          # the review notice below compares against, without another fetch.
+          fetch-depth: 2
       - uses: ./.github/actions/pnpm
       # rules/i18n.md: the file validates, a missing fi fails, a missing sv
-      # warns, no dynamic value is inflected. Unreviewed Finnish blocks a
-      # release tag, which is build.yml's i18n release gate.
+      # warns, no dynamic value is inflected, every translation is machine
+      # text or carries a current native review (#55). Unreviewed Finnish
+      # blocks a release tag, which is build.yml's i18n release gate.
       - name: messages.yaml follows the rules
         run: pnpm i18n:check
+      - name: How far the native review has come
+        run: node packages/i18n/scripts/review.ts --markdown >> "$GITHUB_STEP_SUMMARY"
+      # An approval shows on the pull request, so one nobody asked for is seen (#55).
+      - name: Texts newly approved by a native review
+        if: github.event_name == 'pull_request'
+        run: node packages/i18n/scripts/review.ts --approved-since HEAD^1
       - name: Compiled catalogues and the key type are committed and current
         run: |
           pnpm i18n:build
