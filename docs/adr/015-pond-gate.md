@@ -28,7 +28,7 @@ What makes the gate harder than the counter is that the person chooses what is c
 
 ## Parameters
 
-`gate_k` = 30 and `majority_share_max` = 0.6 are rows of `matching_config` since version 1. The step is `waitlist_k` (10, migration 0017). No new row.
+`gate_k` = 30 and `majority_share_max` = 0.6 are rows of `matching_config` since version 1. The step is `waitlist_k` (10, migration 0017). No new row. The step is raised only to a multiple of the step in force (10 to 20, never to 15): a figure read in a step that is no multiple of the one it was said under can be a whole new step from the pool, and the next count then says one crossing anew (§6).
 
 ## For the maintainer to confirm
 
