@@ -1,10 +1,14 @@
 import type { GateResponse } from "@kuutti/schema";
 import { act, fireEvent } from "@testing-library/react-native";
+import { AppState } from "react-native";
 import { a11yProblems, type HostNode, pressables } from "@/test/a11y";
 import { renderWithTheme } from "@/test/render";
 import { GateCard } from "./GateCard";
 
 // The gate card (#94, ADR-015): where the person stands, in words.
+
+/** The screen gets the focus again, as on coming back to it (jest.setup.js). */
+const { __focus: focus } = jest.requireMock("expo-router") as { __focus: () => void };
 
 const gate = (state: Partial<GateResponse> & Pick<GateResponse, "state">): GateResponse => ({
   within: null,
@@ -103,6 +107,92 @@ describe("GateCard", () => {
     await settle();
     expect(screen.getByText("Matching is open for you.")).toBeTruthy();
     expect(calls).toHaveLength(2);
+  });
+
+  it("reads again when the screen comes back to the front, and shows what it knew meanwhile", async () => {
+    // The second answer comes when the test lets it: what stands meanwhile is what is asked.
+    let arrive: () => void = () => undefined;
+    const held = new Promise<void>((resolve) => {
+      arrive = resolve;
+    });
+    let asked = 0;
+    globalThis.fetch = jest.fn(async () => {
+      asked += 1;
+      if (asked === 1) return json(gate({ state: "incomplete" }));
+      await held;
+      return json(gate({ state: "closed", needed: 30 }));
+    }) as unknown as typeof fetch;
+    const screen = await renderWithTheme(<GateCard />);
+    await settle();
+    const unfinished = "Matching opens for finished profiles. Yours still lacks something.";
+    expect(screen.getByText(unfinished)).toBeTruthy();
+
+    // Back from the photos: the screen was there all along.
+    await act(async () => {
+      focus();
+    });
+    await settle();
+    expect(asked).toBe(2);
+    expect(screen.getByText(unfinished)).toBeTruthy();
+    expect(screen.queryByText("Looking…")).toBeNull();
+
+    await act(async () => {
+      arrive();
+    });
+    await settle();
+    expect(
+      screen.getByText("About 30 more people are needed before matching opens for you."),
+    ).toBeTruthy();
+  });
+
+  it("reads again when the app comes back to the foreground", async () => {
+    // The environment's stand-in for the app's state records who listens.
+    const listening = AppState.addEventListener as unknown as jest.Mock;
+    listening.mockClear();
+    const calls = answering([
+      () => json(gate({ state: "pending" })),
+      () => json(gate({ state: "open" })),
+    ]);
+    const screen = await renderWithTheme(<GateCard />);
+    await settle();
+    expect(
+      screen.getByText("Your profile is finished. Where you stand is counted tonight."),
+    ).toBeTruthy();
+    const heard = listening.mock.calls.filter(([type]) => type === "change");
+    expect(heard).toHaveLength(1);
+    const listener = heard[0]?.[1] as (state: string) => void;
+
+    // Going to the background reads nothing; the morning after does.
+    await act(async () => {
+      listener("background");
+    });
+    await settle();
+    expect(calls).toHaveLength(1);
+    await act(async () => {
+      listener("active");
+    });
+    await settle();
+    expect(screen.getByText("Matching is open for you.")).toBeTruthy();
+    expect(calls).toHaveLength(2);
+
+    const subscription = listening.mock.results[0]?.value as { remove: jest.Mock };
+    await screen.unmount();
+    expect(subscription.remove).toHaveBeenCalled();
+  });
+
+  it("keeps what it knew when a later read fails", async () => {
+    answering([
+      () => json(gate({ state: "waiting", within: 10 })),
+      () => json({ error: { code: "internal_error", message: "x", requestId: "r" } }, 500),
+    ]);
+    const screen = await renderWithTheme(<GateCard />);
+    await settle();
+    await act(async () => {
+      focus();
+    });
+    await settle();
+    expect(screen.getByText("You are among the next 10 in line for your area.")).toBeTruthy();
+    expect(screen.queryByText("Where you stand could not be read.")).toBeNull();
   });
 
   it("refuses an answer that says a place and a number at once", async () => {

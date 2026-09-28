@@ -29,9 +29,29 @@ jest.mock("@sentry/react-native", () => ({
 
 // Expo Router's navigation is native-backed; tests see one router object they
 // can assert on (src/features/identity/SignInScreen.test.tsx) and no params.
+// A screen in a test has the focus from the start, and `__focus()` gives it
+// the focus again, as coming back to it does (src/features/pond/GateCard.test.tsx).
 jest.mock("expo-router", () => {
+  const { useEffect } = require("react");
   const router = { push: jest.fn(), replace: jest.fn(), back: jest.fn(), setParams: jest.fn() };
-  return { __router: router, useRouter: () => router, useLocalSearchParams: () => ({}) };
+  const focused = new Set();
+  return {
+    __router: router,
+    __focus: () => {
+      for (const effect of focused) effect();
+    },
+    useRouter: () => router,
+    useLocalSearchParams: () => ({}),
+    useFocusEffect: (effect) =>
+      useEffect(() => {
+        focused.add(effect);
+        const cleanup = effect();
+        return () => {
+          focused.delete(effect);
+          if (typeof cleanup === "function") cleanup();
+        };
+      }, [effect]),
+  };
 });
 
 // The phone's photo picker and the image manipulator are native (#48). The

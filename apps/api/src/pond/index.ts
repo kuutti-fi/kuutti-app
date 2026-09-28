@@ -14,6 +14,7 @@ export {
   type GateRow,
   joinsAGroupThatWaits,
   neededFrom,
+  placeAlone,
   readGateRow,
   sayPlace,
   sayPool,

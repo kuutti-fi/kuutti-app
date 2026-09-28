@@ -1,6 +1,6 @@
 import { resolve } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
-import { createPool, migrate, withTemporaryDatabase } from "@kuutti/db";
+import { createPool, migrate, type Queryable, withTemporaryDatabase } from "@kuutti/db";
 import { GateResponse } from "@kuutti/schema";
 import { it } from "vitest";
 import { eraseAccount, exportAccount } from "../identity/index.ts";
@@ -334,6 +334,60 @@ describe("the person's own gate", () => {
 
     await counted(ctx, NIGHT_2);
     expect(await rowOf(ctx, he)).toMatchObject({ admitted_at: NIGHT_2 });
+  });
+
+  test("the place of a first ask is the place as the written admissions stand", async ({ ctx }) => {
+    const pond = await setUp(ctx, "test-gate-place");
+    await people(ctx.client, pond, 6, MEN);
+    await people(ctx.client, pond, 4, WOMEN);
+    await counted(ctx, NIGHT_1);
+    // Three women and twelve men finish their profile on one day, and nobody has asked.
+    await people(ctx.client, pond, 3, { ...WOMEN, registeredAt: at("09:00") });
+    const men = await people(ctx.client, pond, 12, { ...MEN, registeredAt: at("10:00") });
+
+    // The last of the men asks. Counted together the women would make room for
+    // four before him, and he would be eighth. None of that is written: eleven
+    // stand before him.
+    expect((await askedBy(ctx, men[11])).gate).toEqual({
+      state: "waiting",
+      within: 20,
+      needed: null,
+      step: 10,
+    });
+    expect(await rowOf(ctx, men[11])).toMatchObject({ admitted_at: null, place_said: 20 });
+
+    // The night lets the women and four of the men in, and says his place anew.
+    await counted(ctx, NIGHT_2);
+    expect(await rowOf(ctx, men[3])).toMatchObject({ admitted_at: NIGHT_2 });
+    expect(await rowOf(ctx, men[11])).toMatchObject({ admitted_at: null, place_said: 10 });
+  });
+
+  test("a first ask reads the pond only for somebody who lives in it", async ({ ctx }) => {
+    const pond = await setUp(ctx, "test-gate-lives");
+    const other = await pondNamed(ctx.client, "test-gate-lives-not");
+    await people(ctx.client, pond, 12, ALIKE);
+    await counted(ctx, NIGHT_1);
+    const [she] = await people(ctx.client, pond, 1, ALIKE);
+    const { logger } = await captureLogger();
+
+    // She chooses another pond between the look of the route and the count.
+    const read: number[] = [];
+    const db = {
+      query: async (text: string, values?: unknown[]) => {
+        if (text.includes("pg_try_advisory_xact_lock")) {
+          await ctx.client.query("UPDATE account SET pond_id = $2 WHERE id = $1", [she, other]);
+        }
+        const result = await ctx.client.query(text, values);
+        if (text.includes("FROM account me")) read.push(result.rows.length);
+        return result;
+      },
+    } as unknown as Queryable;
+    const gate = await gateOf({ db, logger, now: () => NIGHT_2 }, she as string);
+
+    // The statement names her, and finds her gone: nobody of the pond she left is read.
+    expect(read).toEqual([0]);
+    expect(gate.state).toBe("pending");
+    expect(await rowOf(ctx, she)).toBeUndefined();
   });
 
   test("the pool of a first ask is of the people whose admission is written", async ({ ctx }) => {

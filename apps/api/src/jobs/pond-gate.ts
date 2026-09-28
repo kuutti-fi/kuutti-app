@@ -10,6 +10,7 @@ import {
   admitsAlone,
   GATE_EMPTIED,
   neededFrom,
+  placeAlone,
   readGateRow,
   sayPlace,
   sayPool,
@@ -164,27 +165,38 @@ type Written = {
   countedAt: Date | null;
 };
 
+/** Whose rows a count writes: at night those of the accounts it locked, on a first ask the asker's. */
+type Counted = { locked: readonly string[] } | { asker: string };
+
+// The pond is read for a person who asked only while they live in it: the
+// statement names the caller (rule 6), and a caller who has moved since the
+// route looked reads nothing of the pond they left.
+const FACTS_FOR_THE_ASKER = `${FACTS}
+    AND EXISTS (SELECT 1 FROM account me
+                 WHERE me.id = $4 AND me.pond_id = $1
+                   AND me.state IN ('active', 'shadow_banned'))`;
+
 /**
- * The count of one pond. At night (`only` undefined) `locked` are the
- * accounts whose rows were locked before anything was read, and nobody else
- * is counted: what is written for a person was read under their lock. On a
- * first ask the whole pond is read and the asker's row alone is written.
+ * The count of one pond. At night nobody is counted but the accounts whose
+ * rows were locked before anything was read: what is written for a person
+ * was read under their lock. On a first ask the pond is read for the asker
+ * and the asker's row alone is written.
  */
 async function countPond(
   tx: Queryable,
   pondId: string,
   config: { gateK: number; shareMax: number; step: number },
   at: Date,
-  only: string | undefined,
-  locked: readonly string[] | null,
+  counted: Counted,
 ): Promise<Omit<GateCount, "ponds">> {
+  const only = "asker" in counted ? counted.asker : undefined;
   const { rows } = await tx.query<FactsRow>(
-    locked === null ? FACTS : `${FACTS} AND a.id = ANY($4::uuid[])`,
+    "asker" in counted ? FACTS_FOR_THE_ASKER : `${FACTS} AND a.id = ANY($4::uuid[])`,
     [
       pondId,
       CURRENT_CONSENT_VERSIONS.terms,
       CURRENT_CONSENT_VERSIONS.privacy,
-      ...(locked === null ? [] : [locked]),
+      "asker" in counted ? counted.asker : counted.locked,
     ],
   );
   const subjects = rows.flatMap((row) => subjectFrom(row, pondId, at) ?? []);
@@ -201,7 +213,14 @@ async function countPond(
   let opened = 0;
   for (const subject of subjects) {
     if (!night && subject.id !== only) continue;
-    const place = admission.waiting.get(subject.id);
+    // In the line. At night the place is what the count of everybody left;
+    // on a first ask it is the place as the written admissions stand, behind
+    // everybody of the group who is not let in, whoever the night may let in.
+    const place = admission.waiting.has(subject.id)
+      ? night
+        ? admission.waiting.get(subject.id)
+        : (placeAlone(subjects, subject.id) ?? undefined)
+      : undefined;
     if (place !== undefined) {
       written.push({
         accountId: subject.id,
@@ -351,7 +370,7 @@ export async function countGates(
       opened: 0,
     };
     for (const pondId of ponds) {
-      const pond = await countPond(tx, pondId, config, at, undefined, locked);
+      const pond = await countPond(tx, pondId, config, at, { locked });
       total.counted += pond.counted;
       total.admitted += pond.admitted;
       total.waiting += pond.waiting;
@@ -394,7 +413,7 @@ async function countFirst(deps: GateDeps, pondId: string, accountId: string): Pr
     // Asked again under the lock: of several first asks at once, one counts.
     const { rows } = await tx.query("SELECT 1 FROM gate WHERE account_id = $1", [accountId]);
     if (rows.length > 0) return false;
-    await countPond(tx, pondId, await readConfig(tx), at, accountId, null);
+    await countPond(tx, pondId, await readConfig(tx), at, { asker: accountId });
     return true;
   });
   if (counted) deps.logger.info({}, "pond gate counted on a first ask");

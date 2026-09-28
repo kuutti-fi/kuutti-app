@@ -7,6 +7,7 @@ import {
   contestedGroup,
   joinsAGroupThatWaits,
   neededFrom,
+  placeAlone,
   sayPlace,
   sayPool,
 } from "./gate.ts";
@@ -267,6 +268,36 @@ describe("a first ask", () => {
     expect(admitsAlone(people, he[0]?.id as string, 0.6)).toBe(false);
     // She is of the smaller group and needs nobody.
     expect(admitsAlone(people, newcomer[0]?.id as string, 0.6)).toBe(true);
+  });
+
+  it("says the place behind everybody of the group who is not let in, whoever a count would let in", () => {
+    const recorded = [
+      ...group(6, "man", ["woman"], { admitted: true }),
+      ...group(4, "woman", ["man"], { admitted: true }),
+    ];
+    const women = group(3, "woman", ["man"], { from: 100 });
+    const men = group(12, "man", ["woman"], { from: 200 });
+    const people = [...recorded, ...women, ...men];
+    const last = men[11]?.id as string;
+    // Counted together the three women make room for four of the men: the last is eighth.
+    expect(admit(people, 0.6).waiting.get(last)).toBe(8);
+    // As the admissions stand eleven stand before him.
+    expect(placeAlone(people, last)).toBe(12);
+    expect(sayPlace(placeAlone(people, last) as number, 10)).toBe(20);
+    expect(placeAlone(people, men[0]?.id as string)).toBe(1);
+    // Somebody who waits with nobody has no place in any line.
+    const both = group(1, "man", ["woman", "man"], { from: 300 });
+    expect(placeAlone([...people, ...both], both[0]?.id as string)).toBeNull();
+  });
+
+  it("for any pond: a place on a first ask is never better than the place of the count", () => {
+    fc.assert(
+      fc.property(applicantsArb, (people) => {
+        for (const [id, place] of admit(people, 0.6).waiting) {
+          expect(placeAlone(people, id)).toBeGreaterThanOrEqual(place);
+        }
+      }),
+    );
   });
 
   it("for any pond: whoever a first ask lets in, counting everybody lets in too, and passes nobody", () => {

@@ -141,6 +141,30 @@ export function admitsAlone(people: readonly Applicant[], id: string, shareMax: 
 }
 
 /**
+ * A person's place in the line as the recorded admissions stand: behind
+ * everybody of their group who is not let in and registered before them.
+ * For the same count as `admitsAlone`, and for the same reason: `admit`
+ * takes out of the line whoever it would let in, and a place that counted
+ * on that would be better than what is written. Said in steps it is "among
+ * the next twenty" where the night may find "among the next ten"; it is
+ * never the other way round. Null for somebody who waits with nobody.
+ */
+export function placeAlone(people: readonly Applicant[], id: string): number | null {
+  const person = people.find((candidate) => candidate.id === id);
+  if (!person) return null;
+  const group = contestedGroup(person);
+  if (group === null) return null;
+  const before = people.filter(
+    (other) =>
+      !other.admitted &&
+      other.id !== id &&
+      contestedGroup(other) === group &&
+      byRegistration(other, person) < 0,
+  );
+  return before.length + 1;
+}
+
+/**
  * The size of a person's pool as it is said to them: in whole steps, rounded
  * down, the first figure like every later one. An exact pool would answer
  * whatever a person asks of it: with a window of one year of birth it says
