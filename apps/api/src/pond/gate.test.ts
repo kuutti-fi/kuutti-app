@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   type Applicant,
   admit,
+  admitsAlone,
   contestedGroup,
   joinsAGroupThatWaits,
   neededFrom,
@@ -34,6 +35,34 @@ function group(
     };
   });
 }
+
+/** Any pond: people of the three genders, some let in already, registered at any time. */
+const applicantsArb = fc
+  .array(
+    fc.record({
+      gender: fc.constantFrom("woman", "man", "non_binary"),
+      seeksOwn: fc.boolean(),
+      admitted: fc.boolean(),
+      minute: fc.integer({ min: 0, max: 10_000 }),
+    }),
+    { maxLength: 60 },
+  )
+  .map((drawn) =>
+    drawn.map(
+      (d, i): Applicant => ({
+        id: `p-${String(i).padStart(3, "0")}`,
+        gender: d.gender as Applicant["gender"],
+        seeks:
+          d.gender === "non_binary"
+            ? ["woman", "man"]
+            : d.seeksOwn
+              ? [d.gender as "woman" | "man"]
+              : [d.gender === "woman" ? "man" : "woman"],
+        admitted: d.admitted,
+        registeredAt: new Date(T0 + d.minute * 60_000),
+      }),
+    ),
+  );
 
 describe("admission", () => {
   it("The smaller group is always let in, the larger while it is at most its share", () => {
@@ -131,33 +160,6 @@ describe("admission", () => {
     expect([...other.waiting]).toEqual([...one.waiting].map(([id, n]) => [`swapped-${id}`, n]));
   });
 
-  const applicantsArb = fc
-    .array(
-      fc.record({
-        gender: fc.constantFrom("woman", "man", "non_binary"),
-        seeksOwn: fc.boolean(),
-        admitted: fc.boolean(),
-        minute: fc.integer({ min: 0, max: 10_000 }),
-      }),
-      { maxLength: 60 },
-    )
-    .map((drawn) =>
-      drawn.map(
-        (d, i): Applicant => ({
-          id: `p-${String(i).padStart(3, "0")}`,
-          gender: d.gender as Applicant["gender"],
-          seeks:
-            d.gender === "non_binary"
-              ? ["woman", "man"]
-              : d.seeksOwn
-                ? [d.gender as "woman" | "man"]
-                : [d.gender === "woman" ? "man" : "woman"],
-          admitted: d.admitted,
-          registeredAt: new Date(T0 + d.minute * 60_000),
-        }),
-      ),
-    );
-
   it("for any pond: everybody is let in or waits, nobody twice, and nobody who was in is touched", () => {
     fc.assert(
       fc.property(applicantsArb, (people) => {
@@ -218,6 +220,72 @@ describe("admission", () => {
           const other = g === "woman" ? "man" : "woman";
           expect(count[g]).toBeGreaterThan(count[other]);
           expect((count[g] + 1) / (count.woman + count.man + 1)).toBeGreaterThan(0.6);
+        }
+      }),
+    );
+  });
+});
+
+describe("a first ask", () => {
+  const inside = [
+    ...group(3, "man", ["woman"], { admitted: true }),
+    ...group(3, "woman", ["man"], { admitted: true }),
+  ];
+
+  it("lets in who waits with nobody, whoever else is there", () => {
+    const crowd = group(9, "man", ["woman"], { from: 100 });
+    const both = group(1, "man", ["woman", "man"], { from: 200 });
+    const nonBinary = group(1, "non_binary", ["man"], { from: 201 });
+    const people = [...inside, ...crowd, ...both, ...nonBinary];
+    expect(admitsAlone(people, both[0]?.id as string, 0.6)).toBe(true);
+    expect(admitsAlone(people, nonBinary[0]?.id as string, 0.6)).toBe(true);
+  });
+
+  it("lets in the first of a group when the group may enter as the admissions stand", () => {
+    const first = group(1, "man", ["woman"], { from: 100 });
+    expect(admitsAlone([...inside, ...first], first[0]?.id as string, 0.6)).toBe(true);
+  });
+
+  it("lets nobody pass somebody of their group who registered before them", () => {
+    const earlier = group(1, "man", ["woman"], { from: 100 });
+    const later = group(1, "man", ["woman"], { from: 200 });
+    const women = group(2, "woman", ["man"], { from: 150 });
+    const people = [...inside, ...earlier, ...women, ...later];
+    // Counted together both are let in.
+    expect(admit(people, 0.6).admitted).toContain(later[0]?.id);
+    expect(admitsAlone(people, later[0]?.id as string, 0.6)).toBe(false);
+    expect(admitsAlone(people, earlier[0]?.id as string, 0.6)).toBe(true);
+  });
+
+  it("lets nobody in through room that somebody not let in would make", () => {
+    const four = group(1, "man", ["woman"], { admitted: true });
+    const newcomer = group(1, "woman", ["man"], { from: 100 });
+    const he = group(1, "man", ["woman"], { from: 200 });
+    // Four men and three women are inside. With her he would be the fifth of nine.
+    const people = [...inside, ...four, ...newcomer, ...he];
+    expect(admit(people, 0.6).admitted).toContain(he[0]?.id);
+    expect(admitsAlone(people, he[0]?.id as string, 0.6)).toBe(false);
+    // She is of the smaller group and needs nobody.
+    expect(admitsAlone(people, newcomer[0]?.id as string, 0.6)).toBe(true);
+  });
+
+  it("for any pond: whoever a first ask lets in, counting everybody lets in too, and passes nobody", () => {
+    fc.assert(
+      fc.property(applicantsArb, (people) => {
+        const together = new Set(admit(people, 0.6).admitted);
+        for (const person of people) {
+          if (person.admitted || !admitsAlone(people, person.id, 0.6)) continue;
+          expect(together.has(person.id)).toBe(true);
+          const g = contestedGroup(person);
+          if (!g) continue;
+          for (const other of people) {
+            if (other.admitted || other.id === person.id || contestedGroup(other) !== g) continue;
+            const before =
+              other.registeredAt.getTime() < person.registeredAt.getTime() ||
+              (other.registeredAt.getTime() === person.registeredAt.getTime() &&
+                other.id < person.id);
+            expect(before).toBe(false);
+          }
         }
       }),
     );

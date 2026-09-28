@@ -5,6 +5,7 @@ export {
   type Applicant,
   admissionAnew,
   admit,
+  admitsAlone,
   contestedGroup,
   type Declared,
   deleteGateOfAccount,

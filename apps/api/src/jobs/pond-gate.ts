@@ -7,6 +7,7 @@ import { inEachOthersPool, type PoolPerson, preferencesFrom } from "../matching/
 import {
   type Applicant,
   admit,
+  admitsAlone,
   GATE_EMPTIED,
   neededFrom,
   readGateRow,
@@ -157,6 +158,8 @@ type Written = {
   placeSaid: number | null;
   poolSaid: number;
   openedAt: Date | null;
+  /** Null for a row that says nothing yet: the next count decides. */
+  countedAt: Date | null;
 };
 
 async function countPond(
@@ -174,21 +177,39 @@ async function countPond(
   const subjects = rows.flatMap((row) => subjectFrom(row, pondId, at) ?? []);
   const admission = admit(subjects, config.shareMax);
   const newly = new Set(admission.admitted);
-  const inside = (subject: Subject) => subject.admitted || newly.has(subject.id);
+  // The night writes every row, so whoever it lets in is inside for
+  // everybody it counts. A first ask writes the asker's row alone: nothing in
+  // it may rest on an admission that is not written (ADR-015 §7).
+  const night = only === undefined;
+  const inside = (subject: Subject) => subject.admitted || (night && newly.has(subject.id));
   const shown = subjects.filter((subject) => subject.visible && inside(subject));
 
   const written: Written[] = [];
   let opened = 0;
   for (const subject of subjects) {
-    if (only !== undefined && subject.id !== only) continue;
-    if (!inside(subject)) {
-      const place = admission.waiting.get(subject.id);
+    if (!night && subject.id !== only) continue;
+    const place = admission.waiting.get(subject.id);
+    if (place !== undefined) {
       written.push({
         accountId: subject.id,
         admittedAt: null,
-        placeSaid: place === undefined ? null : sayPlace(place, config.step),
+        placeSaid: sayPlace(place, config.step),
         poolSaid: 0,
         openedAt: null,
+        countedAt: at,
+      });
+      continue;
+    }
+    if (!night && !admitsAlone(subjects, subject.id, config.shareMax)) {
+      // Let in only together with others whose rows this count does not
+      // write: the row says nothing, and the night decides for all of them.
+      written.push({
+        accountId: subject.id,
+        admittedAt: null,
+        placeSaid: null,
+        poolSaid: 0,
+        openedAt: null,
+        countedAt: null,
       });
       continue;
     }
@@ -204,6 +225,7 @@ async function countPond(
       placeSaid: null,
       poolSaid: sayPool(subject.poolSaid, pool, config.step),
       openedAt: subject.openedAt ?? (opens ? at : null),
+      countedAt: at,
     });
   }
 
@@ -213,9 +235,10 @@ async function countPond(
     // pond none for the pond that was left (ADR-015 §8).
     await tx.query(
       `INSERT INTO gate (account_id, pond_id, admitted_at, place_said, pool_said, opened_at, counted_at)
-       SELECT u.account_id, $2, u.admitted_at, u.place_said, u.pool_said, u.opened_at, $8
-       FROM unnest($1::uuid[], $3::timestamptz[], $4::int[], $5::int[], $6::timestamptz[])
-            AS u(account_id, admitted_at, place_said, pool_said, opened_at)
+       SELECT u.account_id, $2, u.admitted_at, u.place_said, u.pool_said, u.opened_at, u.counted_at
+       FROM unnest($1::uuid[], $3::timestamptz[], $4::int[], $5::int[], $6::timestamptz[],
+                   $8::timestamptz[])
+            AS u(account_id, admitted_at, place_said, pool_said, opened_at, counted_at)
        JOIN account a ON a.id = u.account_id
         AND a.pond_id = $2 AND a.state = ANY($7::account_state[])
        FOR SHARE OF a
@@ -231,14 +254,14 @@ async function countPond(
         written.map((w) => w.poolSaid),
         written.map((w) => w.openedAt),
         ["active", "shadow_banned"],
-        at,
+        written.map((w) => w.countedAt),
       ],
     );
   }
   return {
     counted: written.length,
-    admitted: written.filter((w) => newly.has(w.accountId)).length,
-    waiting: written.filter((w) => w.admittedAt === null).length,
+    admitted: written.filter((w) => w.admittedAt !== null && newly.has(w.accountId)).length,
+    waiting: written.filter((w) => w.placeSaid !== null).length,
     opened,
   };
 }
@@ -307,8 +330,11 @@ export async function countGates(
 /**
  * The one count outside the night: a person who was never counted, the
  * first time they ask, alone. Nobody else's row is written, so asking moves
- * nobody's figure. Whether it counted; when another count holds the lock it
- * does not wait for it, and the person is told that the night will say.
+ * nobody's figure, and the person is let in then and there only when that
+ * needs nobody else's admission (`admitsAlone`); their pool is of the people
+ * whose admission is written. Whether it counted; when another count holds
+ * the lock it does not wait for it, and the person is told that the night
+ * will say.
  *
  * Its log line has no outcome: beside the request's line, which names the
  * account, "one waits" would say that this person does not seek their own

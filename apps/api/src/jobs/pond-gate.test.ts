@@ -81,6 +81,8 @@ const EMPTIED = {
   opened_at: null,
   counted_at: null,
 };
+/** A time of the day after the first night: people of separate calls register in the order meant. */
+const at = (time: string) => new Date(`2026-10-05T${time}:00Z`);
 const MEN: PeopleOptions = { ...ALIKE, gender: "man", seeks: ["woman"] };
 const WOMEN: PeopleOptions = { ...ALIKE, gender: "woman", seeks: ["man"] };
 
@@ -242,7 +244,7 @@ describe("the gate", () => {
   test("nothing finer than what is said is kept", async ({ ctx }) => {
     const { rows } = await ctx.client.query<{ column_name: string }>(
       `SELECT column_name FROM information_schema.columns
-       WHERE table_name = 'gate' ORDER BY column_name`,
+       WHERE table_schema = current_schema() AND table_name = 'gate' ORDER BY column_name`,
     );
     expect(rows.map((row) => row.column_name)).toEqual(COLUMNS.split(", ").sort());
     const pond = await setUp(ctx, "test-gate-kept");
@@ -275,6 +277,78 @@ describe("the person's own gate", () => {
     const row = await rowOf(ctx, newcomer);
     await askedBy(ctx, newcomer);
     expect(await rowOf(ctx, newcomer)).toEqual(row);
+  });
+
+  test("a first ask lets nobody in on the strength of admissions that are not written", async ({
+    ctx,
+  }) => {
+    const pond = await setUp(ctx, "test-gate-firm");
+    await people(ctx.client, pond, 3, MEN);
+    await people(ctx.client, pond, 3, WOMEN);
+    await counted(ctx, NIGHT_1);
+    // Four finish their profile on one day. Counted together all four are let in,
+    // the later man after the earlier one and the women between them.
+    await people(ctx.client, pond, 1, { ...WOMEN, registeredAt: at("09:00") });
+    const [earlier] = await people(ctx.client, pond, 1, { ...MEN, registeredAt: at("10:00") });
+    await people(ctx.client, pond, 1, { ...WOMEN, registeredAt: at("11:00") });
+    const [later] = await people(ctx.client, pond, 1, { ...MEN, registeredAt: at("12:00") });
+    const before = await rowsOf(ctx, pond);
+
+    // The later one asks first. Somebody of his group stands before him and has no row.
+    expect((await askedBy(ctx, later)).gate).toEqual({
+      state: "pending",
+      within: null,
+      needed: null,
+      step: 10,
+    });
+    expect(await rowOf(ctx, later)).toEqual({ account_id: later, pond_id: pond, ...EMPTIED });
+    expect(await rowOf(ctx, earlier)).toBeUndefined();
+    expect((await rowsOf(ctx, pond)).filter((row) => row.account_id !== later)).toEqual(before);
+    // Asking again counts nothing: the row is there, and it says that the night will.
+    expect((await askedBy(ctx, later)).gate.state).toBe("pending");
+    expect(await rowOf(ctx, later)).toEqual({ account_id: later, pond_id: pond, ...EMPTIED });
+
+    // The earlier one is first of his group, and three and three let him in as they stand.
+    expect((await askedBy(ctx, earlier)).gate).toMatchObject({ state: "closed", needed: 30 });
+    // Through the route the hour is that of the clock: that he is let in is what is asked.
+    expect((await rowOf(ctx, earlier))?.admitted_at).toBeInstanceOf(Date);
+
+    await counted(ctx, NIGHT_2);
+    expect(await rowOf(ctx, later)).toMatchObject({ admitted_at: NIGHT_2, place_said: null });
+  });
+
+  test("a first ask lets nobody in through room that a newcomer without a row would make", async ({
+    ctx,
+  }) => {
+    const pond = await setUp(ctx, "test-gate-room");
+    await people(ctx.client, pond, 3, MEN);
+    await people(ctx.client, pond, 2, WOMEN);
+    await counted(ctx, NIGHT_1);
+    expect((await rowsOf(ctx, pond)).every((row) => row.admitted_at !== null)).toBe(true);
+    // With her there would be room for him; she has not been counted.
+    await people(ctx.client, pond, 1, { ...WOMEN, registeredAt: at("09:00") });
+    const [he] = await people(ctx.client, pond, 1, { ...MEN, registeredAt: at("10:00") });
+    expect((await askedBy(ctx, he)).gate.state).toBe("pending");
+    expect(await rowOf(ctx, he)).toEqual({ account_id: he, pond_id: pond, ...EMPTIED });
+
+    await counted(ctx, NIGHT_2);
+    expect(await rowOf(ctx, he)).toMatchObject({ admitted_at: NIGHT_2 });
+  });
+
+  test("the pool of a first ask is of the people whose admission is written", async ({ ctx }) => {
+    const pond = await setUp(ctx, "test-gate-written");
+    await people(ctx.client, pond, 9, ALIKE);
+    await counted(ctx, NIGHT_1);
+    // Twenty-five more finish their profile and none of them has asked.
+    const newcomers = await people(ctx.client, pond, 25, ALIKE);
+    const { gate } = await askedBy(ctx, newcomers[24]);
+    // Nine are let in, which is said as none: the gate does not open on the other twenty-four.
+    expect(gate).toEqual({ state: "closed", within: null, needed: 30, step: 10 });
+    expect(await rowOf(ctx, newcomers[24])).toMatchObject({ pool_said: 0, opened_at: null });
+
+    const { result } = await counted(ctx, NIGHT_2);
+    expect(result.opened).toBe(34);
+    expect((await askedBy(ctx, newcomers[24])).gate.state).toBe("open");
   });
 
   test("the first count says nothing of its outcome in the log", async ({ ctx }) => {

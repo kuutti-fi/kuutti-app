@@ -110,6 +110,37 @@ export function admit(people: readonly Applicant[], shareMax: number): Admission
 }
 
 /**
+ * Whether a person is let in as the recorded admissions stand, needing
+ * nobody else's: the question of the one count that writes one row only, a
+ * person's first ask (ADR-015 §7). `admit` decides for everybody at once,
+ * and a place given on the strength of admissions that are not written
+ * would stand when those never come about: somebody who registered later
+ * would be inside, and the one before them in the line.
+ *
+ * So: people who wait with nobody are let in. Of the two groups, a person
+ * is let in when nobody of their group who is not let in registered before
+ * them, and their group may enter counting only those who are let in
+ * already. Everybody else is told that the night will say.
+ */
+export function admitsAlone(people: readonly Applicant[], id: string, shareMax: number): boolean {
+  const person = people.find((candidate) => candidate.id === id);
+  if (!person) return false;
+  if (person.admitted) return true;
+  const group = contestedGroup(person);
+  if (group === null) return true;
+  const passes = people.some(
+    (other) =>
+      !other.admitted &&
+      other.id !== id &&
+      contestedGroup(other) === group &&
+      byRegistration(other, person) < 0,
+  );
+  if (passes) return false;
+  const recorded = people.filter((other) => other.admitted);
+  return admit([...recorded, person], shareMax).admitted.includes(id);
+}
+
+/**
  * The size of a person's pool as it is said to them: in whole steps, rounded
  * down, the first figure like every later one. An exact pool would answer
  * whatever a person asks of it: with a window of one year of birth it says
