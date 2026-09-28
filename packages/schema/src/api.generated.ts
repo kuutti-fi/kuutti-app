@@ -1783,6 +1783,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/gate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Where the caller stands at the pond gate
+         * @description Between a finished profile and the first round (TD-10): on the pond's waitlist with a place, let in and waiting for enough people who match (how many more, in steps of `step`), or open. Counted nightly, and once when a person with a finished profile first asks.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The caller's gate. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["GateResponse"];
+                    };
+                };
+                /** @description unauthenticated, session_expired or session_revoked. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/waitlist": {
         parameters: {
             query?: never;
@@ -2209,6 +2257,7 @@ export interface components {
                 at: string;
             }[];
             research: components["schemas"]["ResearchExport"];
+            gate: components["schemas"]["ExportedGate"];
         };
         /** @enum {string|null} */
         Gender: "woman" | "man" | "non_binary" | null;
@@ -2371,6 +2420,18 @@ export interface components {
             /** @enum {string} */
             field?: "tech" | "engineering" | "business" | "arts" | "science" | "health" | "education" | "law" | "social" | "trades" | "service" | "other";
         };
+        ExportedGate: {
+            /** Format: uuid */
+            pondId: string;
+            /** Format: date-time */
+            admittedAt: string | null;
+            placeSaid: number | null;
+            poolSaid: number;
+            /** Format: date-time */
+            openedAt: string | null;
+            /** Format: date-time */
+            countedAt: string | null;
+        } | null;
         PhotoList: {
             photos: components["schemas"]["Photo"][];
             /** @description matching_config max_photos. */
@@ -2536,6 +2597,14 @@ export interface components {
             /** @enum {string} */
             locale: "fi" | "sv" | "en";
         };
+        GateResponse: {
+            state: components["schemas"]["GateState"];
+            within: number | null;
+            needed: number | null;
+            step: number;
+        };
+        /** @enum {string} */
+        GateState: "incomplete" | "pending" | "waiting" | "closed" | "open";
         WaitlistResponse: {
             k: number;
             ponds: components["schemas"]["WaitlistPond"][];

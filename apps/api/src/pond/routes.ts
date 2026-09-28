@@ -1,5 +1,11 @@
 import { createRoute, OpenAPIHono } from "@hono/zod-openapi";
-import { ErrorResponse, PondChoice, PondList, WaitlistResponse } from "@kuutti/schema";
+import {
+  ErrorResponse,
+  GateResponse,
+  PondChoice,
+  PondList,
+  WaitlistResponse,
+} from "@kuutti/schema";
 import type { MiddlewareHandler } from "hono";
 import type { Deps } from "../app.ts";
 import { callerOf } from "../lib/auth-middleware.ts";
@@ -58,14 +64,47 @@ const waitlistRoute = createRoute({
   },
 });
 
+// The person's own place at the gate (#94, ADR-015). What is said is the
+// person's alone and moves in steps; nothing of anybody else is in it.
+const gateRoute = createRoute({
+  method: "get",
+  path: "/gate",
+  summary: "Where the caller stands at the pond gate",
+  description:
+    "Between a finished profile and the first round (TD-10): on the pond's waitlist with a place, let in and waiting for enough people who match (how many more, in steps of `step`), or open. Counted nightly, and once when a person with a finished profile first asks.",
+  ...bearer,
+  responses: {
+    200: { description: "The caller's gate.", ...json(GateResponse) },
+    401: unauthenticated,
+  },
+});
+
+/**
+ * How the route learns the caller's gate. Handed in by the app: the count
+ * reads across slices and lives with the nightly jobs (rules/layout.md), and
+ * this slice does not import it.
+ */
+export type GateReader = (accountId: string) => Promise<GateResponse>;
+
 /** The figures move at most once a day; an hour is short enough for the day's turn. */
 export const WAITLIST_CACHE_CONTROL = "public, max-age=3600";
 
-export function pondRoutes(deps: Deps, requireSession: MiddlewareHandler<AppEnv>) {
+export function pondRoutes(
+  deps: Deps,
+  requireSession: MiddlewareHandler<AppEnv>,
+  readGate: GateReader,
+) {
   const app = new OpenAPIHono<AppEnv>();
-  for (const path of new Set([listRoute, chooseRoute].map((r) => r.getRoutingPath()))) {
+  for (const path of new Set([listRoute, chooseRoute, gateRoute].map((r) => r.getRoutingPath()))) {
     app.use(path, requireSession);
   }
+
+  app.openapi(gateRoute, async (c) => {
+    const { accountId } = callerOf(c);
+    // Never cached by anybody in between: it is one person's.
+    c.header("Cache-Control", "no-store");
+    return c.json(await readGate(accountId), 200);
+  });
 
   app.openapi(waitlistRoute, async (c) => {
     // The read first, the header after it: a failure must not be answered as

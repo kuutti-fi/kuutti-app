@@ -25,6 +25,7 @@ import {
   describeTarget,
   PERSONA_HISTORIES,
 } from "@kuutti/db/demo";
+import { countGates } from "../src/jobs/pond-gate.ts";
 import { takeSnapshot } from "../src/jobs/waitlist-snapshot.ts";
 import { parseConfig } from "../src/lib/config.ts";
 import { createLogger } from "../src/lib/logger.ts";
@@ -165,6 +166,9 @@ try {
   await pool.query("DELETE FROM waitlist_snapshot");
   const counted = await takeSnapshot({ db: pool, logger, now });
   console.log(JSON.stringify({ msg: "demo reset: counter recounted", ...counted }));
+  // And the gates (#94): who is let into each pond, and for whom matching is open.
+  const gates = await countGates({ db: pool, logger, now });
+  console.log(JSON.stringify({ msg: "demo reset: gates counted", ...gates }));
 
   if (reset.spared.length > 0) {
     throw new DemoError(

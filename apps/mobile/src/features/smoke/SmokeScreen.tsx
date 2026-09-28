@@ -15,7 +15,7 @@ import { Icon } from "@/components/ui/icon";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Text } from "@/components/ui/text";
 import { AccountActions, useOnboardingGate, useSession } from "@/features/identity";
-import { WaitlistCard } from "@/features/pond";
+import { GateCard, WaitlistCard } from "@/features/pond";
 import { apiBaseUrl, fetchHealth } from "@/lib/api";
 import { useT } from "@/lib/locale";
 import { cn } from "@/lib/utils";
@@ -242,6 +242,9 @@ export function SmokeScreen() {
         {session.status === "signed-in" && gate.status === "complete" && gate.pond && (
           <WaitlistCard pond={gate.pond} />
         )}
+
+        {/* Where the person stands themselves (#94): in line, waiting for enough people, or open. */}
+        {session.status === "signed-in" && gate.status === "complete" && gate.pond && <GateCard />}
 
         {/* Export and deletion (#51) until the profile gives them a home. */}
         <AccountActions />

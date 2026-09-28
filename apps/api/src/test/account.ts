@@ -65,6 +65,31 @@ export async function signedInAccount(
   };
 }
 
+/**
+ * A device session for an account that exists already, such as one of
+ * `people()`: what a route test needs to call as that person.
+ */
+export async function signInAs(
+  db: Queryable,
+  accountId: string,
+): Promise<{ accountId: string; headers: { authorization: string } }> {
+  const accessToken = randomBytes(32).toString("base64url");
+  const refreshToken = randomBytes(32).toString("base64url");
+  const now = Date.now();
+  await db.query(
+    `INSERT INTO session (account_id, platform, access_hash, access_expires_at, refresh_hash, expires_at)
+     VALUES ($1, 'ios', $2, $3, $4, $5)`,
+    [
+      accountId,
+      hashToken(accessToken),
+      new Date(now + 15 * 60 * 1000),
+      hashToken(refreshToken),
+      new Date(now + 90 * 24 * 60 * 60 * 1000),
+    ],
+  );
+  return { accountId, headers: { authorization: `Bearer ${accessToken}` } };
+}
+
 /** matching_config rows a test needs, upserted inside its transaction (rolled back with it). */
 export async function withMatchingConfig(
   db: Queryable,

@@ -34,6 +34,7 @@ import {
   writePopulation,
 } from "@kuutti/db/demo";
 import { CURRENT_CONSENT_VERSIONS } from "../src/identity/index.ts";
+import { countGates } from "../src/jobs/pond-gate.ts";
 import { takeSnapshot } from "../src/jobs/waitlist-snapshot.ts";
 import { createLogger } from "../src/lib/logger.ts";
 
@@ -89,6 +90,9 @@ try {
   const logger = await createLogger({ level: "silent", pretty: false });
   const counted = await takeSnapshot({ db: pool, logger, now: () => new Date() });
   console.log(JSON.stringify({ msg: "demo population: counter recounted", ...counted }));
+  // And the gates (#94): who is let into each pond, and for whom matching is open.
+  const gates = await countGates({ db: pool, logger, now: () => new Date() });
+  console.log(JSON.stringify({ msg: "demo population: gates counted", ...gates }));
 } catch (error) {
   if (error instanceof DemoCommandError) {
     console.error(`✖ ${error.message}`);

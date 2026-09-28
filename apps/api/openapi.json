@@ -489,6 +489,9 @@
           },
           "research": {
             "$ref": "#/components/schemas/ResearchExport"
+          },
+          "gate": {
+            "$ref": "#/components/schemas/ExportedGate"
           }
         },
         "required": [
@@ -501,7 +504,8 @@
           "profile",
           "photos",
           "photoAccessLog",
-          "research"
+          "research",
+          "gate"
         ]
       },
       "Gender": {
@@ -1206,6 +1210,48 @@
         },
         "additionalProperties": false
       },
+      "ExportedGate": {
+        "type": "object",
+        "nullable": true,
+        "properties": {
+          "pondId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "admittedAt": {
+            "type": "string",
+            "nullable": true,
+            "format": "date-time"
+          },
+          "placeSaid": {
+            "type": "integer",
+            "nullable": true,
+            "minimum": 1
+          },
+          "poolSaid": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "openedAt": {
+            "type": "string",
+            "nullable": true,
+            "format": "date-time"
+          },
+          "countedAt": {
+            "type": "string",
+            "nullable": true,
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "pondId",
+          "admittedAt",
+          "placeSaid",
+          "poolSaid",
+          "openedAt",
+          "countedAt"
+        ]
+      },
       "PhotoList": {
         "type": "object",
         "properties": {
@@ -1907,6 +1953,45 @@
           "locale"
         ],
         "additionalProperties": false
+      },
+      "GateResponse": {
+        "type": "object",
+        "properties": {
+          "state": {
+            "$ref": "#/components/schemas/GateState"
+          },
+          "within": {
+            "type": "integer",
+            "nullable": true,
+            "minimum": 1
+          },
+          "needed": {
+            "type": "integer",
+            "nullable": true,
+            "minimum": 1
+          },
+          "step": {
+            "type": "integer",
+            "minimum": 10
+          }
+        },
+        "required": [
+          "state",
+          "within",
+          "needed",
+          "step"
+        ],
+        "additionalProperties": false
+      },
+      "GateState": {
+        "type": "string",
+        "enum": [
+          "incomplete",
+          "pending",
+          "waiting",
+          "closed",
+          "open"
+        ]
       },
       "WaitlistResponse": {
         "type": "object",
@@ -3559,6 +3644,39 @@
           },
           "404": {
             "description": "No live account (erased meanwhile).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/gate": {
+      "get": {
+        "summary": "Where the caller stands at the pond gate",
+        "description": "Between a finished profile and the first round (TD-10): on the pond's waitlist with a place, let in and waiting for enough people who match (how many more, in steps of `step`), or open. Counted nightly, and once when a person with a finished profile first asks.",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The caller's gate.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GateResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "unauthenticated, session_expired or session_revoked.",
             "content": {
               "application/json": {
                 "schema": {

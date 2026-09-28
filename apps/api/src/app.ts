@@ -12,6 +12,7 @@ import {
   sessionStore,
   wellKnownRoutes,
 } from "./identity/index.ts";
+import { gateOf } from "./jobs/pond-gate.ts";
 import { requireAdmin } from "./lib/admin-middleware.ts";
 import { requireSession } from "./lib/auth-middleware.ts";
 import type { Config } from "./lib/config.ts";
@@ -132,7 +133,13 @@ export function createApp(deps: Deps) {
   app.route("/", photoAdminRoutes(deps, moderators));
   app.route("/", profileRoutes(deps, guard));
   app.route("/", onboardingRoutes(deps, guard));
-  app.route("/", pondRoutes(deps, guard));
+  // The gate's count reads across slices and lives with the jobs; the pond's route is handed it.
+  app.route(
+    "/",
+    pondRoutes(deps, guard, (accountId) =>
+      gateOf({ db: deps.db, logger: deps.logger, now: () => new Date() }, accountId),
+    ),
+  );
   app.route("/", preferencesRoutes(deps, guard));
 
   // The bearer scheme the session routes declare (#35); the tokens themselves

@@ -16,7 +16,7 @@ import {
 import { AppError } from "../lib/errors.ts";
 import type { Logger } from "../lib/logger.ts";
 import { readPreferences } from "../matching/index.ts";
-import { findPondOfAccount } from "../pond/index.ts";
+import { admissionAnew, findPondOfAccount } from "../pond/index.ts";
 import { enrolResearchSubject, removeResearchSubject, track } from "../research/index.ts";
 import * as repo from "./repo.ts";
 
@@ -219,9 +219,17 @@ export async function declareGender(
   accountId: string,
   gender: Gender,
 ): Promise<void> {
-  if (!(await repo.setGender(deps.db, accountId, gender))) {
-    throw new AppError(404, "not_found", "No live account");
-  }
+  const declared = await transaction(deps.db, async (tx) => {
+    const before = await repo.lockGender(tx, accountId);
+    if (before === undefined) return false;
+    if (!(await repo.setGender(tx, accountId, gender))) return false;
+    // The gender decides with whom one waits at the pond gate (#94, ADR-015
+    // §9): joining a group that waits is decided anew by the next count.
+    const { seeks } = await readPreferences(tx, accountId);
+    await admissionAnew(tx, accountId, { gender: before, seeks }, { gender, seeks });
+    return true;
+  });
+  if (!declared) throw new AppError(404, "not_found", "No live account");
   // The value stays out of the log: self-declared, and nobody's business there.
   deps.logger.info({ accountId }, "gender declared");
 }

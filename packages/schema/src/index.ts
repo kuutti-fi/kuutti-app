@@ -3,6 +3,7 @@ export * from "./account-state.ts";
 export * from "./admin.ts";
 export type { components as ApiComponents, paths as ApiPaths } from "./api.generated.ts";
 export { ErrorResponse } from "./errors.ts";
+export * from "./gate.ts";
 export { HealthResponse } from "./health.ts";
 export * from "./identity.ts";
 export * from "./media.ts";

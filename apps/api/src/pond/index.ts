@@ -1,7 +1,27 @@
-// Public surface of the pond slice in apps/api (#46, TD-10). Other slices import from here only.
+// Public surface of the pond slice in apps/api (#46, #54, #94; TD-10). Other slices import from here only.
 
+export {
+  type Admission,
+  type Applicant,
+  admissionAnew,
+  admit,
+  admitsAlone,
+  contestedGroup,
+  type Declared,
+  deleteGateOfAccount,
+  exportGate,
+  GATE_EMPTIED,
+  type GateRow,
+  joinsAGroupThatWaits,
+  neededFrom,
+  placeAlone,
+  readGateRow,
+  saidInStep,
+  sayPlace,
+  sayPool,
+} from "./gate.ts";
 export { findPondOfAccount, listPonds } from "./repo.ts";
-export { pondRoutes } from "./routes.ts";
+export { type GateReader, pondRoutes } from "./routes.ts";
 export {
   readStandingFigures,
   readWaitlist,

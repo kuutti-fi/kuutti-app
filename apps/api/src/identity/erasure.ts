@@ -10,7 +10,7 @@ import {
   type MediaDeps,
   type PhotoErasure,
 } from "../media/index.ts";
-import { findPondOfAccount } from "../pond/index.ts";
+import { deleteGateOfAccount, exportGate, findPondOfAccount } from "../pond/index.ts";
 import { eraseProfileOfAccount, exportProfile } from "../profile/index.ts";
 import { exportResearch, removeResearchSubject } from "../research/index.ts";
 import { exportConsents } from "./onboarding.ts";
@@ -24,6 +24,7 @@ import * as repo from "./repo.ts";
 // identity row (with one more deletion and the cooldown), the audit log,
 // staff rows. Likes, matches, bookmarks and push tokens join here as their
 // slices land; the research_id mapping goes (#50), the events keyed by it stay.
+// The place at the pond gate (#94) goes, and is in the export as it is held.
 
 export type ErasureDeps = {
   db: Queryable;
@@ -71,6 +72,8 @@ export async function eraseAccount(deps: ErasureDeps, accountId: string): Promis
     // The two hard rows go (TD-7); the consent rows stay as proof (ADR-010),
     // and the tombstone keeps neither gender nor pond.
     const preferences = await deletePreferencesOfAccount(tx, accountId);
+    // The place at the pond gate (#94): where the person stood is theirs, and goes.
+    await deleteGateOfAccount(tx, accountId);
     const researchSubjects = await removeResearchSubject(tx, accountId);
     // A second deletion racing the first sees the live row above and the
     // tombstone here (READ COMMITTED re-evaluates after the other commit).
@@ -124,11 +127,12 @@ export async function exportAccount(deps: ErasureDeps, accountId: string): Promi
     : { db: deps.db, logger: deps.logger, now: deps.now };
   const photos = await exportPhotos(media, accountId);
   const profile = await exportProfile(deps.db, accountId);
-  const [pond, preferences, consents, research] = await Promise.all([
+  const [pond, preferences, consents, research, gate] = await Promise.all([
     findPondOfAccount(deps.db, accountId),
     readPreferences(deps.db, accountId),
     exportConsents(deps.db, accountId),
     exportResearch(deps.db, accountId),
+    exportGate(deps.db, accountId),
   ]);
   return {
     exportedAt: deps.now().toISOString(),
@@ -160,5 +164,6 @@ export async function exportAccount(deps: ErasureDeps, accountId: string): Promi
     photos: photos.photos,
     photoAccessLog: photos.accessLog,
     research,
+    gate,
   };
 }

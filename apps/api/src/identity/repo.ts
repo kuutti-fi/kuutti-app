@@ -655,6 +655,18 @@ export async function setGender(
   return result.rowCount === 1;
 }
 
+/** The gender as declared so far, under the lock erasure takes first; undefined for no live account. */
+export async function lockGender(
+  db: Queryable,
+  accountId: string,
+): Promise<string | null | undefined> {
+  const { rows } = await db.query<{ gender: string | null }>(
+    "SELECT gender FROM account WHERE id = $1 AND state <> 'deleted' FOR UPDATE",
+    [accountId],
+  );
+  return rows[0] ? rows[0].gender : undefined;
+}
+
 /** registered becomes active once (the onboarding rule decides when); nothing else changes here. */
 export async function activateAccount(
   db: Queryable,
