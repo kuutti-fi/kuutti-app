@@ -480,34 +480,19 @@ node -e 'const c=require("node:crypto");const [pem,use]=process.argv.slice(1);co
 
 `kuutti.app` is served by Amplify Hosting from the site's own repository, `kuutti-fi/kuutti-app-site`: its `amplify.yml` is the build spec, its `customHttp.yml` the headers, and a push to its `main` deploys. The placeholder page this repository served from `site/` until 2026-09-28 is gone.
 
-The Amplify app is the console-created exception of ADR-001, and the one part that needs a browser is GitHub's consent: the Amplify GitHub App (`aws-amplify-eu-central-1`) must have access to the repository, and creating the app from the CLI takes a personal access token with `admin:repo_hook` that Amplify uses once, for the webhook, and does not store. Setting it up, once:
+The Amplify app (`kuutti-app-site`, eu-central-1) is the console-created exception of ADR-001: connecting Amplify to a repository is an installation of the Amplify GitHub App, a browser consent that no provider and no CLI call performs without a personal access token, which the ADR forbids. Creating it, once, in the Amplify console: *Create new app*, GitHub; on GitHub's page give the Amplify GitHub App access to `kuutti-app-site` (*Only select repositories*); repository `kuutti-fi/kuutti-app-site`, branch `main`, not a monorepo; the build settings are read from the repository's `amplify.yml`; *Save and deploy*. Then *Custom domains*, *Add domain*, `kuutti.app` from the Route 53 list: Amplify issues the certificate and writes the validation and alias records into the zone itself (10 to 30 minutes).
+
+The console leaves three things to put right, from the CLI after `pnpm aws:login`, no token involved: it adds a catch-all rewrite (`/<*>` to `/index.html`, 404-200) that would answer every missing address with the home page, and the site has real pages and a 404 of its own; the redirect from `www` and the cost allocation tag are not set.
 
 ```bash
-# GitHub: give the Amplify GitHub App access to the repository (an owner of the organisation).
-INSTALLATION=$(gh api /orgs/kuutti-fi/installations --jq '.installations[] | select(.app_slug == "aws-amplify-eu-central-1") | .id')
-gh api -X PUT "/user/installations/$INSTALLATION/repositories/$(gh api repos/kuutti-fi/kuutti-app-site --jq .id)"
-
-# AWS: the app, its production branch, the first build. The token is a classic one with
-# admin:repo_hook and a short expiry, read into the shell, never on a command line.
-read -rs GH_AMPLIFY_TOKEN
-APP=$(aws amplify create-app --name kuutti-site --platform WEB \
-  --repository https://github.com/kuutti-fi/kuutti-app-site --access-token "$GH_AMPLIFY_TOKEN" \
-  --enable-branch-auto-build \
-  --custom-rules source=https://www.kuutti.app,target=https://kuutti.app,status=301 \
-  --tags Project=kuutti --query app.appId --output text)
-aws amplify create-branch --app-id "$APP" --branch-name main --stage PRODUCTION --enable-auto-build
-aws amplify start-job --app-id "$APP" --branch-name main --job-type RELEASE
-aws amplify list-jobs --app-id "$APP" --branch-name main --query 'jobSummaries[0].status'
-
-# The domain. The zone is Route 53 in this account, so Amplify issues the certificate and
-# writes the validation and alias records into the zone itself (10 to 30 minutes).
-aws amplify create-domain-association --app-id "$APP" --domain-name kuutti.app \
-  --sub-domain-settings '[{"prefix":"","branchName":"main"},{"prefix":"www","branchName":"main"}]'
-aws amplify get-domain-association --app-id "$APP" --domain-name kuutti.app \
-  --query 'domainAssociation.[domainStatus,statusReason]'
+APP=$(aws amplify list-apps --query "apps[?name=='kuutti-app-site'].appId" --output text)
+aws amplify update-app --app-id "$APP" --custom-rules source=https://www.kuutti.app,target=https://kuutti.app,status=301
+aws amplify tag-resource --resource-arn "arn:aws:amplify:eu-central-1:$(aws sts get-caller-identity --query Account --output text):apps/$APP" --tags Project=kuutti,ManagedBy=console
+aws amplify get-domain-association --app-id "$APP" --domain-name kuutti.app --query 'domainAssociation.[domainStatus,statusReason]' --output text
+curl -sI https://kuutti.app/ | grep -i -E '^HTTP|content-security-policy'
 ```
 
-A domain is associated with one app at a time: moving it from another app means `delete-domain-association` on that app first, and some minutes without the site while the certificate is issued anew. To retire the app: `delete-app`, then the records it left in the zone.
+A domain is associated with one app at a time: moving it from another app means removing it there first, and some minutes without the site while the certificate is issued anew. To retire the app: `delete-app`, then the records it left in the zone.
 
 ## What is not here
 
