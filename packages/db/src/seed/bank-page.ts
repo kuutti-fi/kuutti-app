@@ -26,7 +26,7 @@ const GROUPS: ReadonlyArray<{ group: DemoPersona["group"]; title: string; lead: 
   {
     group: "history",
     title: "People with a history",
-    lead: "The same identity on every day. What Kuutti holds about them comes from the seed; without it they are newcomers too.",
+    lead: "The same identity on every day. What Kuutti holds about them is given by pnpm demo:reset; before it has run they are newcomers too.",
   },
   {
     group: "ages",

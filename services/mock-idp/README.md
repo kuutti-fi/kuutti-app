@@ -14,18 +14,36 @@ One tap logs a persona in. Nothing in the API or the app knows about them: the b
 |---|---|---|
 | Aino Virtanen | 14/03/1997 | the walkthrough: registers, onboards, fills in a profile, uploads photos |
 | Mikael Lindqvist | 02/08/1992 | a second newcomer, for the walkthrough in Swedish |
-| Sanna Korhonen | 23/11/1989 | onboarded, with a complete profile |
+| Sanna Korhonen | 23/11/1989 | onboarded, with a profile that lacks only its photos until the photo loader has run |
 | Onni Mäkelä | 30/05/1995 | registered and never onboarded |
-| Noa Salmi | 09/01/1999 | two photos only: the profile says what is missing |
+| Noa Salmi | 09/01/1999 | onboarded, with a profile; two photos only once the photo loader has run, so the profile says what is missing |
 | Kerttu Åkerlund | 17/06/1985 | accepted an older wording of the terms: the app asks again |
 | Tapio Heikkinen | 05/02/1978 | a banned identity: the login is refused |
-| Ilona Öhman | 27/09/1993 | deleted her account yesterday: refused until the waiting time is over |
+| Ilona Öhman | 27/09/1993 | deleted her account: refused until the waiting time is over |
 | Eetu Laine | the 1st of last month, 18 years ago | the youngest who gets in |
 | Venla Nieminen | the 1st of this month, 18 years ago | refused until the last day of the month: age is counted from the end of the birth month (TD-14) |
 | Lauri Hämäläinen | the 1st of last month, 17 years ago | refused |
 | Helmi Koskinen | the 1st of last month, 99 years ago | the upper end of the age window |
 
-The first eight are the same identity on every day. What Kuutti holds about the six "with a history" comes from the seed, which does not know them yet (#73, the next change): until then they are newcomers like Aino and Mikael. The last four are born relative to today, so their age holds whenever this runs and their identity changes as the months pass; they carry no history.
+The first eight are the same identity on every day. What Kuutti holds about the six "with a history" is given by `pnpm demo:reset`; before it has run they are newcomers like Aino and Mikael. The last four are born relative to today, so their age holds whenever this runs and their identity changes as the months pass; they carry no history.
+
+## Resetting
+
+```bash
+pnpm demo:reset
+```
+
+Returns all twelve to where they begin, in a couple of seconds, with the local environment running (`pnpm env:up`). First every persona is forgotten: each live account goes through the erasure path, the function behind "delete my account", and then what erasure keeps of a person (the tombstone, the consents, the identity with its waiting time) is deleted too, which is right for a persona and never done for a person. Then the six histories are given anew: the command logs each persona in at this mock bank and sends the answers of onboarding and the profile through the API's own routes, as the app does. What no route does is done in the database afterwards: Kerttu's consent is given the version of an older wording, and Tapio's identity is banned. Ilona deletes her account herself.
+
+`pnpm demo:reset -- --bare` forgets everybody and gives no history. `pnpm demo:reset -- --objects-lost` goes ahead although the store does not hold the photos, for objects that are gone for good (a stand-in whose directory was emptied, or a reset that was taken back after some objects had been deleted). The histories are data in `packages/db/src/seed/histories.ts`.
+
+Everything the command touches is on this computer, and it looks before it acts: development or test; an API and a bank on a loopback address (a persona's claims are posted to the mock bank and to nobody else); configuration from its own environment, never from a parameter store; a database server that is not a deployed one, whatever the environment is called; no proxy for its own requests; an object store at `localhost`, a loopback address or one of this computer's own addresses (`S3_ENDPOINT` as a phone on the network needs it), addressed by path (`S3_FORCE_PATH_STYLE=true`, as `env.example` has it) in a bucket that is a name and not an ARN, never at another name or on another machine. No row of a photo goes while its objects stay, since the rows are what names them: with no store configured the reset goes ahead only while no persona has a photo; with one, the store is first asked whether it holds the personas' photos, because a store on this computer need not be the one the API wrote to; and after each erasure the deleted objects are counted, because the erasure path forgives a store that fails and a reset must not. Each of the three stops the reset with everybody as they were. Before anybody is erased for a history, the API is asked what it is: it answers `/health` itself, as ours does, with its database and migrations in order; the bank it sends a login to is on this computer; and its database is the command's, which is known because the login begun for the question is found there (an API started against another `DATABASE_URL` than the command's would be given the histories while the personas are erased here).
+
+Three things to know:
+
+- A second reset within a minute of the first takes up to a minute: the histories are some seventy requests against the API's limit of 120 a minute, and the command waits as long as the API asks and goes on.
+- The forgetting is one transaction: everybody is reset or nobody is. The personas' identities are locked while it runs, so a role granted at that moment waits and then finds the persona gone.
+- A persona that holds a staff row is left alone, whole, and named at the end. That happens when a persona was made a moderator on this machine (the moderator's command line grants the role to the identity that just logged in). Take the role away (`pnpm --filter @kuutti/db moderator -- revoke <hetu_hmac>`) and reset again: taking it away ends the persona's staff sessions, and the reset deletes ended sessions itself rather than wait for the nightly sweep. A persona that has looked at a photo or decided on one as a moderator stays until the database is made anew: both are lines in the audit log, which is never deleted from.
 
 Their personal identity codes are artificial: the individual number is in 900 to 999, which the population register does not give to a person. The page computes a code when its button is pressed, and the generator refuses a persona with any other number.
 

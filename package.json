@@ -31,7 +31,8 @@
     "check:schema-words": "node scripts/check-schema-words.ts",
     "check:licenses": "node scripts/check-licenses.ts",
     "demo:bank": "node packages/db/src/cli/demo-bank.ts",
-    "demo:population": "pnpm --filter @kuutti/api run demo:population"
+    "demo:population": "pnpm --filter @kuutti/api run demo:population",
+    "demo:reset": "pnpm --filter @kuutti/api run demo:reset"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.13",

@@ -68,7 +68,7 @@ export const DEMO_PERSONAS: readonly DemoPersona[] = [
     born: { year: 1989, month: 11, day: 23 },
     individual: 903,
     group: "history",
-    note: "Onboarded, with a complete profile.",
+    note: "Onboarded, with a profile that lacks only its photos until the photo loader has run.",
   },
   {
     key: "onni",
@@ -86,7 +86,7 @@ export const DEMO_PERSONAS: readonly DemoPersona[] = [
     born: { year: 1999, month: 1, day: 9 },
     individual: 905,
     group: "history",
-    note: "Two photos only: the profile says what is missing.",
+    note: "Onboarded, with a profile; two photos only once the photo loader has run, so the profile says what is missing.",
   },
   {
     key: "kerttu",
@@ -113,7 +113,7 @@ export const DEMO_PERSONAS: readonly DemoPersona[] = [
     born: { year: 1993, month: 9, day: 27 },
     individual: 908,
     group: "history",
-    note: "Deleted her account yesterday: refused until the waiting time is over.",
+    note: "Deleted her account: refused until the waiting time is over.",
   },
   {
     key: "eetu",
