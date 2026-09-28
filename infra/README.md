@@ -476,12 +476,39 @@ node -e 'const c=require("node:crypto");const [pem,use]=process.argv.slice(1);co
 
 `db-app-password` is created by `scripts/db-app-role.sh`; rotating it is `ALTER ROLE kuutti_app PASSWORD '…'` through the same tunnel, `put-parameter --overwrite`, and a restart of the API. The two signing keys are not random bytes: the CloudFront key is an RSA key pair whose public half becomes a CloudFront public-key resource (M3), and the Telia key is whatever the broker contract specifies (M2); their creation steps land with those milestones. The RDS master password is not managed here at all: `manage_master_user_password = true` leaves it with AWS so it never enters state.
 
-## Placeholder site
+## The website
 
-`kuutti.app` serves `site/index.html` from Amplify Hosting until there is a product site (ADR-001, 2026-09-18). The app is connected to this repository as a monorepo with root `site`; `amplify.yml` at the repository root is its build spec, and a push to `main` that changes something under `site/` deploys within a minute. Nothing else in the repository triggers it.
+`kuutti.app` is served by Amplify Hosting from the site's own repository, `kuutti-fi/kuutti-app-site`: its `amplify.yml` is the build spec, its `customHttp.yml` the headers, and a push to its `main` deploys. The placeholder page this repository served from `site/` until 2026-09-28 is gone.
 
-Setting it up, once, in the Amplify console (eu-central-1): *Create new app*, GitHub, install the Amplify GitHub App for `kuutti-fi/kuutti-app` only, branch `main`, tick *My app is a monorepo* and enter `site`; the build settings are read from `amplify.yml`. Then *Custom domains*, *Add domain*, pick `kuutti.app` from the Route 53 list, keep the `www` redirect: Amplify issues the certificate and writes the validation and alias records into the zone itself (10 to 30 minutes). Tag the app `Project=kuutti` so it appears under the cost allocation tag. To retire it: delete the app in the console, then the two records it left in the zone.
+The Amplify app is the console-created exception of ADR-001, and the one part that needs a browser is GitHub's consent: the Amplify GitHub App (`aws-amplify-eu-central-1`) must have access to the repository, and creating the app from the CLI takes a personal access token with `admin:repo_hook` that Amplify uses once, for the webhook, and does not store. Setting it up, once:
+
+```bash
+# GitHub: give the Amplify GitHub App access to the repository (an owner of the organisation).
+INSTALLATION=$(gh api /orgs/kuutti-fi/installations --jq '.installations[] | select(.app_slug == "aws-amplify-eu-central-1") | .id')
+gh api -X PUT "/user/installations/$INSTALLATION/repositories/$(gh api repos/kuutti-fi/kuutti-app-site --jq .id)"
+
+# AWS: the app, its production branch, the first build. The token is a classic one with
+# admin:repo_hook and a short expiry, read into the shell, never on a command line.
+read -rs GH_AMPLIFY_TOKEN
+APP=$(aws amplify create-app --name kuutti-site --platform WEB \
+  --repository https://github.com/kuutti-fi/kuutti-app-site --access-token "$GH_AMPLIFY_TOKEN" \
+  --enable-branch-auto-build \
+  --custom-rules source=https://www.kuutti.app,target=https://kuutti.app,status=301 \
+  --tags Project=kuutti --query app.appId --output text)
+aws amplify create-branch --app-id "$APP" --branch-name main --stage PRODUCTION --enable-auto-build
+aws amplify start-job --app-id "$APP" --branch-name main --job-type RELEASE
+aws amplify list-jobs --app-id "$APP" --branch-name main --query 'jobSummaries[0].status'
+
+# The domain. The zone is Route 53 in this account, so Amplify issues the certificate and
+# writes the validation and alias records into the zone itself (10 to 30 minutes).
+aws amplify create-domain-association --app-id "$APP" --domain-name kuutti.app \
+  --sub-domain-settings '[{"prefix":"","branchName":"main"},{"prefix":"www","branchName":"main"}]'
+aws amplify get-domain-association --app-id "$APP" --domain-name kuutti.app \
+  --query 'domainAssociation.[domainStatus,statusReason]'
+```
+
+A domain is associated with one app at a time: moving it from another app means `delete-domain-association` on that app first, and some minutes without the site while the certificate is issued anew. To retire the app: `delete-app`, then the records it left in the zone.
 
 ## What is not here
 
-Dokploy's own configuration (no provider exists; `user_data` installs it, its contents are backed up from `/etc/dokploy`), the registration of the domain itself (its zone and records are code), the Amplify Hosting app for the placeholder site (above), secret values, the EAS account side (the organisation and project, credentials, the robot token; `apps/mobile/README.md`), store setup, the Telia contract, and creation of the AWS account.
+Dokploy's own configuration (no provider exists; `user_data` installs it, its contents are backed up from `/etc/dokploy`), the registration of the domain itself (its zone and records are code), the Amplify Hosting app for the website (above), secret values, the EAS account side (the organisation and project, credentials, the robot token; `apps/mobile/README.md`), store setup, the Telia contract, and creation of the AWS account.

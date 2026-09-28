@@ -64,6 +64,8 @@ Added 2026-09-17. The project domain `kuutti.app` is registered through Route 53
 
 Added 2026-09-18. The placeholder page for `kuutti.app` (`site/`, no build step) is served by Amplify Hosting connected to this repository, which deploys on every push to `main` that touches `site/`. The Amplify app is created in the console, the second sanctioned console resource: connecting Amplify to GitHub is an installation of the Amplify GitHub App, a browser consent no provider can perform, and the alternative the provider offers, a personal access token stored in state, is what this ADR forbids. Amplify also writes the certificate-validation and alias records for the domain into the zone; they stay unmanaged, like the registration itself. The app holds no IAM role and no data, and is deleted with one call when a real site replaces it.
 
+Retired 2026-09-28: the site has a repository of its own, `kuutti-fi/kuutti-app-site`, and the Amplify app serving `kuutti.app` is connected to that one under the same exception (`infra/README.md`, "The website"); `site/` and `amplify.yml` are gone from this repository.
+
 ### GitHub OIDC trust, specific to this repository
 
 `kuutti-app` was created after 15 July 2026, so it uses GitHub's immutable subject claims. The subject is `repo:kuutti-fi@<owner_id>/kuutti-app@<repo_id>:...`, not the name-based form shown in most documentation and examples. Trust policies therefore condition on the `repository_id` and `repository_owner_id` claims, which are stable and survive renames, rather than pattern-matching the name inside `sub`. A policy copied from an older example will fail to assume with an unhelpful error.
