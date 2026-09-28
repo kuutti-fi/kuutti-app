@@ -16,6 +16,7 @@ export {
   neededFrom,
   placeAlone,
   readGateRow,
+  saidInStep,
   sayPlace,
   sayPool,
 } from "./gate.ts";

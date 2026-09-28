@@ -165,6 +165,21 @@ export function placeAlone(people: readonly Applicant[], id: string): number | n
 }
 
 /**
+ * A figure that was said, read in a step: itself while it is a whole number
+ * of the step, else rounded down to one, the side that says less. The step
+ * (`waitlist_k`) can be changed after a figure was said under another one,
+ * and the row holds the figure as it was said. What is served is a whole
+ * number of the step it is served with, and a raise says nothing anew of
+ * the pool: the figure read this way is a function of what was said, not of
+ * the pool. Lowered again, a figure of the coarser step stands as it is
+ * until the pool is a step away from it, what was said and not the pool a
+ * person later (as the counter keeps its figures through a raise, ADR-013).
+ */
+export function saidInStep(said: number, step: number): number {
+  return Math.floor(said / step) * step;
+}
+
+/**
  * The size of a person's pool as it is said to them: in whole steps, rounded
  * down, the first figure like every later one. An exact pool would answer
  * whatever a person asks of it: with a window of one year of birth it says
@@ -173,18 +188,22 @@ export function placeAlone(people: readonly Applicant[], id: string): number | n
  *
  * On top of the rounding the figure follows slowly: it moves when the pool
  * is a whole step away from what was said, so a pool that goes back and
- * forth over a ten does not show each crossing.
+ * forth over a ten does not show each crossing. What was said is read in the
+ * step of today first (`saidInStep`), and followed from there.
  */
 export function sayPool(said: number | null, pool: number, step: number): number {
   const rounded = Math.floor(pool / step) * step;
   if (said === null) return rounded;
-  return Math.abs(pool - said) >= step ? rounded : said;
+  const from = saidInStep(said, step);
+  return Math.abs(pool - from) >= step ? rounded : from;
 }
 
 /**
  * The place in the line as it is said: among the next ten, the next twenty.
  * The line is of people who do not seek their own gender, so an exact place
- * that moved by one would say that of the one person who came or went.
+ * that moved by one would say that of the one person who came or went. A
+ * place said under another step is read in this one the same way, never
+ * finer than it.
  */
 export function sayPlace(place: number, step: number): number {
   return Math.ceil(Math.max(1, place) / step) * step;

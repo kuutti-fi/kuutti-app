@@ -161,6 +161,60 @@ describe("the gate", () => {
     expect((await askedBy(ctx, men[12])).gate).toMatchObject({ state: "waiting", within: 20 });
   });
 
+  test("A change of the step says nothing anew", async ({ ctx }) => {
+    const pond = await setUp(ctx, "test-gate-step");
+    const [she] = await people(ctx.client, pond, 1, ALIKE);
+    const others = await people(ctx.client, pond, 20, ALIKE);
+    // Of the larger group one waits, first in line; none of them is in her pool.
+    const men = await people(ctx.client, pond, 3, MEN);
+    await people(ctx.client, pond, 1, WOMEN);
+    await counted(ctx, NIGHT_1);
+    expect((await askedBy(ctx, she)).gate).toMatchObject({ state: "closed", needed: 10, step: 10 });
+    expect((await askedBy(ctx, men[2])).gate).toMatchObject({
+      state: "waiting",
+      within: 10,
+      step: 10,
+    });
+    // Five of hers leave: fifteen are there, less than a step away, and twenty is said still.
+    await ctx.client.query("UPDATE account SET state = 'paused' WHERE id = ANY($1)", [
+      others.slice(0, 5),
+    ]);
+    await counted(ctx, NIGHT_2);
+    expect(await rowOf(ctx, she)).toMatchObject({ pool_said: 20 });
+
+    // The step is raised. What was said is read in twenties, by the route
+    // before the next count and by the count itself: a fresh figure of
+    // fifteen would say none, and with it that the pool fell below twenty.
+    await withMatchingConfig(ctx.client, { waitlist_k: 20 });
+    expect((await askedBy(ctx, she)).gate).toEqual({
+      state: "closed",
+      within: null,
+      needed: 10,
+      step: 20,
+    });
+    expect((await askedBy(ctx, men[2])).gate).toEqual({
+      state: "waiting",
+      within: 20,
+      needed: null,
+      step: 20,
+    });
+    await counted(ctx, NIGHT_3);
+    expect(await rowOf(ctx, she)).toMatchObject({ pool_said: 20 });
+    expect(await rowOf(ctx, men[2])).toMatchObject({ place_said: 20 });
+    expect((await askedBy(ctx, she)).gate).toMatchObject({ state: "closed", needed: 10, step: 20 });
+
+    // Lowered again, the figure stands: what was said, not the pool a person later.
+    await withMatchingConfig(ctx.client, { waitlist_k: 10 });
+    await counted(ctx, NIGHT_4);
+    expect(await rowOf(ctx, she)).toMatchObject({ pool_said: 20 });
+    expect((await askedBy(ctx, she)).gate).toMatchObject({ state: "closed", needed: 10, step: 10 });
+    expect((await askedBy(ctx, men[2])).gate).toMatchObject({
+      state: "waiting",
+      within: 10,
+      step: 10,
+    });
+  });
+
   test("Only a finished profile and current consents are counted", async ({ ctx }) => {
     const pond = await setUp(ctx, "test-gate-counted");
     // Ten who are there for each other: nine others each, which is said as none.

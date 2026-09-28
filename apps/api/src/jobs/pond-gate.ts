@@ -12,6 +12,7 @@ import {
   neededFrom,
   placeAlone,
   readGateRow,
+  saidInStep,
   sayPlace,
   sayPool,
   WAITLIST_K_KEY,
@@ -457,13 +458,20 @@ export async function gateOf(deps: GateDeps, accountId: string): Promise<GateRes
     return say({ state: "pending", ...nothing });
   }
   if (gate.openedAt) return say({ state: "open", ...nothing });
+  // The row holds what was said in the step of the count that wrote it. The
+  // step may have changed since: what is served is read in the step it is
+  // served with, never finer, until the next count writes the row that way.
   if (!gate.admittedAt) {
     return gate.placeSaid === null
       ? say({ state: "pending", ...nothing })
-      : say({ state: "waiting", within: gate.placeSaid, needed: null });
+      : say({ state: "waiting", within: sayPlace(gate.placeSaid, step), needed: null });
   }
   const gateK = await matchingConfigNumber(deps.db, GATE_K_KEY);
-  return say({ state: "closed", within: null, needed: neededFrom(gate.poolSaid, gateK) });
+  return say({
+    state: "closed",
+    within: null,
+    needed: neededFrom(saidInStep(gate.poolSaid, step), gateK),
+  });
 }
 
 /** The nightly job: every pond's gates. */

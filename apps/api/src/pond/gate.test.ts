@@ -8,6 +8,7 @@ import {
   joinsAGroupThatWaits,
   neededFrom,
   placeAlone,
+  saidInStep,
   sayPlace,
   sayPool,
 } from "./gate.ts";
@@ -355,6 +356,51 @@ describe("what is said", () => {
     expect(sayPool(null, 1, 10)).toBe(0);
     expect(sayPool(null, 9, 10)).toBe(0);
     expect(sayPool(null, 29, 10)).toBe(20);
+  });
+
+  it("a figure said under another step is read in the step of today, and followed from there", () => {
+    // Twenty was said under a step of ten, and the pool fell to fifteen since:
+    // less than a step, so twenty stands. The step is raised to twenty.
+    expect(saidInStep(20, 20)).toBe(20);
+    expect(sayPool(20, 15, 20)).toBe(20);
+    // A fresh figure would say none, and with it that the pool fell below twenty.
+    expect(sayPool(null, 15, 20)).toBe(0);
+    // Ten under a step of ten is none under a step of twenty, whatever the pool within a step.
+    expect(saidInStep(10, 20)).toBe(0);
+    expect(sayPool(10, 19, 20)).toBe(0);
+    // A whole new step away, it follows.
+    expect(sayPool(10, 35, 20)).toBe(20);
+    // Lowered again, a figure of the coarser step is one of the finer, and stands.
+    expect(saidInStep(20, 10)).toBe(20);
+    expect(sayPool(20, 15, 10)).toBe(20);
+    expect(sayPool(20, 25, 10)).toBe(20);
+    expect(sayPool(20, 30, 10)).toBe(30);
+    // Steps that are no multiples of one another are read down all the same.
+    expect(saidInStep(20, 15)).toBe(15);
+    expect(saidInStep(15, 10)).toBe(10);
+  });
+
+  it("for any figures: what was said under another step is read down to this one, and stands while the pool is within a step", () => {
+    fc.assert(
+      fc.property(
+        fc.integer({ min: 0, max: 50 }),
+        fc.integer({ min: 10, max: 50 }),
+        fc.integer({ min: 0, max: 500 }),
+        fc.integer({ min: 10, max: 50 }),
+        (steps, stepThen, pool, step) => {
+          const said = steps * stepThen;
+          const from = saidInStep(said, step);
+          expect(from % step).toBe(0);
+          expect(from).toBeLessThanOrEqual(said);
+          expect(said - from).toBeLessThan(step);
+          const now = sayPool(said, pool, step);
+          expect(now % step).toBe(0);
+          expect([from, Math.floor(pool / step) * step]).toContain(now);
+          expect(Math.abs(pool - now)).toBeLessThan(step);
+          if (Math.abs(pool - from) < step) expect(now).toBe(from);
+        },
+      ),
+    );
   });
 
   it("at least one more is needed while the gate is closed, whatever was said", () => {

@@ -77,6 +77,13 @@ Feature: The pond gate
     Then the first ten in the line are each told that they are among the next ten
     And the eleventh that they are among the next twenty
 
+  Scenario: A change of the step says nothing anew
+    Given a person told that about ten more are needed, whose pool has since shrunk by less than a step
+    When the step is raised to twenty
+    Then they are told ten still, before the gates are counted and after
+    When the step is lowered to ten again and the gates are counted
+    Then they are told ten still
+
   Scenario: Only a finished profile and current consents are counted
     Given a pond with a person whose profile lacks its photos, one whose consent is for an older wording, a shadow-banned one and a paused one
     When the gates are counted
