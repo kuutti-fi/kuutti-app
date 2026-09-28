@@ -9,9 +9,9 @@
 - actions: write only in the job of preview-cleanup.yml that cancels waiting
   runs (ADR-012 §8), and that job is what is written down here and nothing
   more: a checkout of the scripts and one script, the run's own token, no
-  environment and no secret, held to main by its own condition, in a
-  workflow no pull request starts. What the script does is not held here:
-  that is its test's and the review's;
+  environment and no secret, its condition, its runner and its shell to the
+  letter, in a workflow no pull request starts. What the script does is not
+  held here: that is its test's and the review's;
 - a job's permissions are a list of scopes, never a word (write-all), and a
   job that calls a reusable workflow is held to the same scopes;
 - every checkout sets persist-credentials: false;
@@ -28,6 +28,9 @@ ROOT = pathlib.Path(__file__).resolve().parents[1] / "workflows"
 
 # The one job with actions: write, whole (ADR-012 §8).
 WAITING_KEYS = {"name", "if", "runs-on", "permissions", "steps"}
+WAITING_IF = "vars.PREVIEWS_ENABLED == 'true' && github.ref == 'refs/heads/main'"
+WAITING_RUNNER = "ubuntu-24.04-arm"
+WAITING_DEFAULTS = {"run": {"shell": "bash"}}
 WAITING_PERMISSIONS = {"contents": "read", "actions": "write", "pull-requests": "read"}
 WAITING_CHECKOUT = {"persist-credentials": False, "sparse-checkout": ".github/scripts"}
 WAITING_SCRIPT = ".github/scripts/withdraw-waiting-runs.sh"
@@ -42,8 +45,14 @@ def waiting_job_problems(doc: dict, job: dict) -> list[str]:
         found.append(f"has {', '.join(extra)}")
     if job.get("permissions") != WAITING_PERMISSIONS:
         found.append("has other permissions than contents: read, actions: write, pull-requests: read")
-    if "github.ref == 'refs/heads/main'" not in str(job.get("if", "")):
-        found.append("is not held to main by its condition")
+    # The values, not only the keys: a condition with "|| true" behind it, a
+    # runner of somebody's own and another shell are each a different job.
+    if job.get("if") != WAITING_IF:
+        found.append(f"has another condition than {WAITING_IF}")
+    if job.get("runs-on") != WAITING_RUNNER:
+        found.append(f"runs on something else than {WAITING_RUNNER}")
+    if doc.get("defaults") != WAITING_DEFAULTS:
+        found.append("is in a workflow whose defaults are not the shell bash and nothing else")
     if "env" in doc:
         found.append("is in a workflow with an env of its own")
     if "secrets." in yaml.safe_dump(job):
