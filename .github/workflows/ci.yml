@@ -254,7 +254,8 @@ jobs:
   workflows:
     name: workflows
     # Static checks of the workflows themselves: zizmor for injection,
-    # permissions and pinning, and the #8 invariants script.
+    # permissions and pinning, and the #8 invariants script; then the one
+    # script that cancels runs, against a gh that answers from a file.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -268,3 +269,5 @@ jobs:
           pip install --quiet zizmor==1.30.1 pyyaml==6.0.2
           zizmor --no-progress --min-severity medium --min-confidence medium .github/workflows
           python .github/scripts/check-workflow-permissions.py
+      - name: what the sweep withdraws, and what it leaves
+        run: .github/scripts/withdraw-waiting-runs.test.sh

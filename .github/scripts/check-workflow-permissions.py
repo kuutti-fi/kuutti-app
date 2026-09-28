@@ -6,6 +6,11 @@
 - packages: write and attestations: write only in build.yml, contents: write
   only in release.yml, security-events: write only in scorecard.yml,
   id-token: write only in jobs that exchange the OIDC token;
+- actions: write only in the job of preview-cleanup.yml that cancels waiting
+  runs (ADR-012 §8): a job without an environment, held to main by its own
+  condition, in a workflow no pull request starts;
+- a job's permissions are a list of scopes, never a word (write-all), and a
+  job that calls a reusable workflow is held to the same scopes;
 - every checkout sets persist-credentials: false;
 - every third-party action is pinned to a 40-character commit SHA.
 """
@@ -25,28 +30,61 @@ def steps_text(job: dict) -> str:
     return "\n".join(str(step.get("run", "")) for step in job.get("steps", []) or [])
 
 
-for path in sorted(ROOT.glob("*.yml")):
+# Both spellings: GitHub runs a .yaml as it runs a .yml.
+WORKFLOWS = sorted([*ROOT.glob("*.yml"), *ROOT.glob("*.yaml")])
+
+for path in WORKFLOWS:
     doc = yaml.safe_load(path.read_text())
     name = path.name
-    triggers = doc.get("on") if "on" in doc else doc.get(True)  # PyYAML reads a bare `on` as True
-    if isinstance(triggers, dict):
-        for bad in ("pull_request_target", "workflow_run"):
-            if bad in triggers:
-                problems.append(f"{name}: uses the {bad} trigger")
+    on = doc.get("on") if "on" in doc else doc.get(True)  # PyYAML reads a bare `on` as True
+    # A map, a list or one word: the names are what is checked.
+    triggers = {str(t) for t in (on if isinstance(on, (dict, list)) else [on] if on else [])}
+    for bad in ("pull_request_target", "workflow_run"):
+        if bad in triggers:
+            problems.append(f"{name}: uses the {bad} trigger")
     if doc.get("permissions") != {"contents": "read"}:
         problems.append(f"{name}: top-level permissions must be exactly contents: read")
     for job_id, job in (doc.get("jobs") or {}).items():
-        if "uses" in job:  # a reusable-workflow call; its own file is checked on its own
-            continue
         perms = job.get("permissions") or {}
-        if perms.get("packages") == "write" and name != "build.yml":
+        if not isinstance(perms, dict):
+            problems.append(f"{name}/{job_id}: permissions must name scopes, not {perms!r}")
+            continue
+        # A job that calls a reusable workflow hands it its scopes, so what it
+        # may hold is what the workflow it calls may hold; one outside this
+        # repository is handed nothing to write with.
+        holder = name
+        uses = str(job.get("uses", ""))
+        if uses.startswith("./.github/workflows/"):
+            holder = uses.removeprefix("./.github/workflows/")
+        elif uses:
+            holder = ""
+            if any(value == "write" for value in perms.values()):
+                problems.append(f"{name}/{job_id}: hands a write scope to a workflow outside this repository")
+        if perms.get("packages") == "write" and holder != "build.yml":
             problems.append(f"{name}/{job_id}: packages: write belongs only in build.yml")
-        if perms.get("attestations") == "write" and name != "build.yml":
+        if perms.get("attestations") == "write" and holder != "build.yml":
             problems.append(f"{name}/{job_id}: attestations: write belongs only in build.yml")
-        if perms.get("security-events") == "write" and name != "scorecard.yml":
+        if perms.get("security-events") == "write" and holder != "scorecard.yml":
             problems.append(f"{name}/{job_id}: security-events: write belongs only in scorecard.yml")
-        if perms.get("contents") == "write" and name != "release.yml":
+        if perms.get("contents") == "write" and holder != "release.yml":
             problems.append(f"{name}/{job_id}: contents: write belongs only in release.yml")
+        # Cancelling a waiting run is all it is used for (ADR-012 §8). The
+        # scope is wider than that: it also re-runs and deletes runs, starts
+        # and disables workflows, approves the runs of fork pull requests and
+        # deletes caches and artifacts. So it stays in one job, which runs
+        # main's copy of one script and holds no secret.
+        if perms.get("actions") == "write":
+            if (name, job_id) != ("preview-cleanup.yml", "waiting"):
+                problems.append(f"{name}/{job_id}: actions: write belongs only in preview-cleanup.yml/waiting")
+            else:
+                if "environment" in job:
+                    problems.append(f"{name}/{job_id}: the job with actions: write takes no environment")
+                if "github.ref == 'refs/heads/main'" not in str(job.get("if", "")):
+                    problems.append(f"{name}/{job_id}: the job with actions: write runs from main only")
+                if any(t.startswith("pull_request") for t in triggers):
+                    problems.append(f"{name}: the workflow with actions: write is not started by a pull request")
+        if "uses" in job:  # a reusable-workflow call; its steps are in its own file, checked on its own
+            continue
         text = steps_text(job)
         # Two actions use the job's OIDC token themselves (#16): Scorecard to
         # publish its result, attest-build-provenance to sign the attestation.
@@ -88,4 +126,4 @@ for path in sorted((ROOT.parent / "actions").glob("*/action.yml")):
 if problems:
     print("\n".join(problems))
     sys.exit(1)
-print(f"workflow invariants hold across {len(list(ROOT.glob('*.yml')))} workflows")
+print(f"workflow invariants hold across {len(WORKFLOWS)} workflows")

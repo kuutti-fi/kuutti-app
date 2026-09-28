@@ -26,6 +26,11 @@ name: Preview cleanup
 # alias and branch, remove the Dokploy application (the sweep's work list).
 # A failed database drop leaves the application for the next sweep; a failed
 # EAS removal does not, it fails the run by name.
+#
+# Beside that, and needing none of it: the runs of preview.yml that still
+# wait for the reviewer of "preview" while their pull request has merged or
+# closed are cancelled (ADR-012 §8). They deployed nothing, so the sweep
+# above never finds them, and they would wait for thirty days.
 
 on:
   push:
@@ -114,6 +119,33 @@ jobs:
           fi
           echo "numbers=$numbers" >> "$GITHUB_OUTPUT"
           echo "cleaning: $numbers"
+
+  # The runs nobody will approve any more (ADR-012 §8). A job of its own, with
+  # no environment and no secret: it asks GitHub about runs and pull requests
+  # with the run's own token and cancels. Cancelling takes actions: write, a
+  # scope much wider than that use (it starts and disables workflows too), so
+  # this is the only job in the repository that has it, and it runs one
+  # script and nothing else (check-workflow-permissions.py holds both).
+  # Nothing waits for the job and it waits for nothing: a failure here never
+  # keeps a preview on the box.
+  waiting:
+    name: withdraw waiting runs
+    if: vars.PREVIEWS_ENABLED == 'true' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04-arm
+    permissions:
+      contents: read
+      actions: write
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: .github/scripts
+
+      - name: Cancel the preview runs that wait for a pull request that is not open
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: .github/scripts/withdraw-waiting-runs.sh
 
   # The database lives on the private RDS instance; only the box reaches it.
   # No GitHub environment here: the plan role trusts main, and a job with an
