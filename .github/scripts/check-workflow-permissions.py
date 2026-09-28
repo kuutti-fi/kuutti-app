@@ -7,8 +7,11 @@
   only in release.yml, security-events: write only in scorecard.yml,
   id-token: write only in jobs that exchange the OIDC token;
 - actions: write only in the job of preview-cleanup.yml that cancels waiting
-  runs (ADR-012 §8): a job without an environment, held to main by its own
-  condition, in a workflow no pull request starts;
+  runs (ADR-012 §8), and that job is what is written down here and nothing
+  more: a checkout of the scripts and one script, the run's own token, no
+  environment and no secret, held to main by its own condition, in a
+  workflow no pull request starts. What the script does is not held here:
+  that is its test's and the review's;
 - a job's permissions are a list of scopes, never a word (write-all), and a
   job that calls a reusable workflow is held to the same scopes;
 - every checkout sets persist-credentials: false;
@@ -22,6 +25,47 @@ import sys
 import yaml
 
 ROOT = pathlib.Path(__file__).resolve().parents[1] / "workflows"
+
+# The one job with actions: write, whole (ADR-012 §8).
+WAITING_KEYS = {"name", "if", "runs-on", "permissions", "steps"}
+WAITING_PERMISSIONS = {"contents": "read", "actions": "write", "pull-requests": "read"}
+WAITING_CHECKOUT = {"persist-credentials": False, "sparse-checkout": ".github/scripts"}
+WAITING_SCRIPT = ".github/scripts/withdraw-waiting-runs.sh"
+WAITING_ENV = {"GH_TOKEN": "${{ github.token }}"}
+
+
+def waiting_job_problems(doc: dict, job: dict) -> list[str]:
+    """What the job with actions: write is beyond what it may be."""
+    found = []
+    extra = sorted(set(job) - WAITING_KEYS)
+    if extra:
+        found.append(f"has {', '.join(extra)}")
+    if job.get("permissions") != WAITING_PERMISSIONS:
+        found.append("has other permissions than contents: read, actions: write, pull-requests: read")
+    if "github.ref == 'refs/heads/main'" not in str(job.get("if", "")):
+        found.append("is not held to main by its condition")
+    if "env" in doc:
+        found.append("is in a workflow with an env of its own")
+    if "secrets." in yaml.safe_dump(job):
+        found.append("names a secret")
+    steps = job.get("steps") or []
+    if len(steps) != 2:
+        found.append(f"has {len(steps)} steps, not a checkout and the script")
+        return found
+    checkout, script = steps
+    if (
+        set(checkout) != {"uses", "with"}
+        or not str(checkout.get("uses", "")).startswith("actions/checkout@")
+        or checkout.get("with") != WAITING_CHECKOUT
+    ):
+        found.append("does not begin with the checkout of .github/scripts alone")
+    if (
+        set(script) - {"name", "env", "run"}
+        or str(script.get("run", "")).strip() != WAITING_SCRIPT
+        or script.get("env") != WAITING_ENV
+    ):
+        found.append(f"does not end with {WAITING_SCRIPT} and the run's own token, and nothing else")
+    return found
 SHA_PIN = re.compile(r"^[^@]+@[0-9a-f]{40}$")
 problems: list[str] = []
 
@@ -71,16 +115,14 @@ for path in WORKFLOWS:
         # Cancelling a waiting run is all it is used for (ADR-012 §8). The
         # scope is wider than that: it also re-runs and deletes runs, starts
         # and disables workflows, approves the runs of fork pull requests and
-        # deletes caches and artifacts. So it stays in one job, which runs
-        # main's copy of one script and holds no secret.
+        # deletes caches and artifacts. So it stays in one job, and the job
+        # is held to its whole shape, not to a list of what it must not be.
         if perms.get("actions") == "write":
             if (name, job_id) != ("preview-cleanup.yml", "waiting"):
                 problems.append(f"{name}/{job_id}: actions: write belongs only in preview-cleanup.yml/waiting")
             else:
-                if "environment" in job:
-                    problems.append(f"{name}/{job_id}: the job with actions: write takes no environment")
-                if "github.ref == 'refs/heads/main'" not in str(job.get("if", "")):
-                    problems.append(f"{name}/{job_id}: the job with actions: write runs from main only")
+                for problem in waiting_job_problems(doc, job):
+                    problems.append(f"{name}/{job_id}: the job with actions: write {problem}")
                 if any(t.startswith("pull_request") for t in triggers):
                     problems.append(f"{name}: the workflow with actions: write is not started by a pull request")
         if "uses" in job:  # a reusable-workflow call; its steps are in its own file, checked on its own

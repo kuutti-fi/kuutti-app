@@ -124,8 +124,9 @@ jobs:
   # no environment and no secret: it asks GitHub about runs and pull requests
   # with the run's own token and cancels. Cancelling takes actions: write, a
   # scope much wider than that use (it starts and disables workflows too), so
-  # this is the only job in the repository that has it, and it runs one
-  # script and nothing else (check-workflow-permissions.py holds both).
+  # this is the only job in the repository that has it, and the job is one
+  # checkout and one script (check-workflow-permissions.py holds its whole
+  # shape: a step or a value more, and CI fails).
   # Nothing waits for the job and it waits for nothing: a failure here never
   # keeps a preview on the box.
   waiting:
