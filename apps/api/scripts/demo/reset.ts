@@ -45,6 +45,9 @@ export type ResetResult = {
 };
 
 export async function resetPersonas(deps: ResetDeps): Promise<ResetResult> {
+  // One instant for the question and for the deletion: a session is ended
+  // for both or for neither, whatever the clock does in between.
+  const at = deps.now();
   const { rows: identities } = await deps.db.query<{ id: string; key: string; staff: boolean }>(
     `SELECT i.id, i.broker_subject AS key,
             (EXISTS (SELECT 1 FROM moderator_roles m WHERE m.identity_id = i.id)
@@ -53,7 +56,7 @@ export async function resetPersonas(deps: ResetDeps): Promise<ResetResult> {
              OR EXISTS (SELECT 1 FROM audit_log a WHERE a.actor_identity_id = i.id)
              OR EXISTS (SELECT 1 FROM photo_review r WHERE r.decided_by = i.id)) AS staff
      FROM identity i WHERE i.broker_subject = ANY($1) AND $2 = ANY(i.amr)`,
-    [DEMO_PERSONAS.map((p) => p.key), MOCK_BANK_AMR, deps.now()],
+    [DEMO_PERSONAS.map((p) => p.key), MOCK_BANK_AMR, at],
   );
   const spared = [...new Set(identities.filter((r) => r.staff).map((r) => r.key))].sort();
   const ids = identities.filter((r) => !r.staff).map((r) => r.id);
@@ -78,7 +81,7 @@ export async function resetPersonas(deps: ResetDeps): Promise<ResetResult> {
     await tx.query(
       `DELETE FROM admin_session WHERE identity_id = ANY($1)
          AND (revoked_at IS NOT NULL OR expires_at < $2)`,
-      [ids, deps.now()],
+      [ids, at],
     );
     await deleteIdentities(tx, ids);
   });

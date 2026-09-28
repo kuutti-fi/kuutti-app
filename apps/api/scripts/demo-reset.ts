@@ -11,9 +11,10 @@
  * at the mock bank and talk to the API. Everything it touches is on this
  * computer, and it looks before it acts: development or test, an API and a
  * bank on a loopback address, configuration from this process alone (never
- * from a parameter store), a database server that is not a deployed one, an
- * object store at an address of this computer or none, and, where histories
- * are to be given, an API that answers as ours before anybody is erased.
+ * from a parameter store), no proxy, a database server that is not a
+ * deployed one, an object store at an address of this computer or none, and,
+ * where histories are to be given, an API that answers as ours before
+ * anybody is erased.
  */
 import { networkInterfaces } from "node:os";
 import { createPool } from "@kuutti/db";
@@ -27,7 +28,7 @@ import { takeSnapshot } from "../src/jobs/waitlist-snapshot.ts";
 import { parseConfig } from "../src/lib/config.ts";
 import { createLogger } from "../src/lib/logger.ts";
 import { createMediaDeps } from "../src/media/index.ts";
-import { DemoError, lookAtApi, ofThisComputer, onThisComputer } from "./demo/bank.ts";
+import { DemoError, lookAtApi, onThisComputer, whyNotTheLocalStore } from "./demo/bank.ts";
 import { giveHistory } from "./demo/histories.ts";
 import { resetPersonas } from "./demo/reset.ts";
 
@@ -58,6 +59,13 @@ if (!onThisComputer(apiUrl)) {
   fail(`refusing: the personas get their histories from a local API, not from ${apiUrl.host}`);
 }
 
+// Node sends fetch through a proxy when it is told to, loopback addresses
+// included unless NO_PROXY names them: a persona's claims and a session's
+// token would then pass through somebody else.
+if (process.env.NODE_USE_ENV_PROXY) {
+  fail("refusing: NODE_USE_ENV_PROXY is set, and nothing of this goes through a proxy; unset it");
+}
+
 const env = process.env.APP_ENV ?? "development";
 if (env !== "development" && env !== "test") {
   fail(
@@ -77,21 +85,29 @@ if (!issuer || !onThisComputer(new URL(issuer))) {
 }
 // Erasure deletes a photo's objects. The local stand-in's, or nobody's: a
 // bucket behind a distribution is a deployed one, and an endpoint is any
-// address somebody wrote into the configuration, so it is asked where it is:
-// on this computer, by a loopback address or by one of the computer's own
-// (a phone on the network reaches the stand-in by that one, env.example).
+// address somebody wrote into the configuration, so the store is asked where
+// it is: on this computer, by a loopback address or by one of the computer's
+// own (a phone on the network reaches the stand-in by that one, env.example),
+// addressed by path, in a bucket that is a name.
 const media = createMediaDeps(config);
 if (media.setup.mode === "cloudfront") {
   fail("refusing: the object store of this configuration is a deployed one");
 }
 if (media.setup.mode === "presigned") {
-  const endpoint = URL.canParse(media.setup.endpoint) ? new URL(media.setup.endpoint) : null;
   const own = Object.values(networkInterfaces()).flatMap((list) =>
     (list ?? []).map((a) => a.address),
   );
-  if (!endpoint || !ofThisComputer(endpoint, own)) {
+  const why = whyNotTheLocalStore(
+    {
+      endpoint: media.setup.endpoint,
+      bucket: media.setup.bucket,
+      pathStyle: config.S3_FORCE_PATH_STYLE,
+    },
+    own,
+  );
+  if (why) {
     fail(
-      `refusing: the object store of this configuration is at ${endpoint ? endpoint.host : "no address"}, not on this computer (S3_ENDPOINT is a loopback address or one of this computer's own)`,
+      `refusing: the object store of this configuration is not the stand-in on this computer: ${why}`,
     );
   }
 }

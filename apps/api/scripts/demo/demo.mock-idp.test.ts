@@ -34,6 +34,7 @@ import {
   loginAs,
   lookAtApi,
   ofThisComputer,
+  whyNotTheLocalStore,
 } from "./bank.ts";
 import { giveHistory } from "./histories.ts";
 import { resetPersonas } from "./reset.ts";
@@ -223,6 +224,37 @@ describe("the walk to the bank and back", () => {
     expect(ofThisComputer(new URL("http://192.168.1.20:9000"), [])).toBe(false);
   });
 
+  test("the object store is the stand-in by its address, its addressing and its bucket, all three", () => {
+    const own = ["127.0.0.1", "192.168.1.20"];
+    const standIn = { endpoint: "http://127.0.0.1:9000", bucket: "kuutti-media", pathStyle: true };
+    expect(whyNotTheLocalStore(standIn, own)).toBeNull();
+    expect(whyNotTheLocalStore({ ...standIn, endpoint: "http://localhost:9000" }, own)).toBeNull();
+    expect(
+      whyNotTheLocalStore({ ...standIn, endpoint: "http://192.168.1.20:9000" }, own),
+    ).toBeNull();
+
+    expect(
+      whyNotTheLocalStore({ ...standIn, endpoint: "https://s3.eu-central-1.amazonaws.com" }, own),
+    ).toMatch(/it is at s3\.eu-central-1\.amazonaws\.com, not on this computer/);
+    expect(whyNotTheLocalStore({ ...standIn, endpoint: "127.0.0.1:9000" }, own)).toMatch(
+      /not on this computer|no address/,
+    );
+    expect(whyNotTheLocalStore({ ...standIn, endpoint: "somewhere" }, own)).toBe(
+      "S3_ENDPOINT is no address",
+    );
+    // Without path style the client dials <bucket>.localhost, a name that is looked up.
+    expect(
+      whyNotTheLocalStore({ ...standIn, endpoint: "http://localhost:9000", pathStyle: false }, own),
+    ).toMatch(/S3_FORCE_PATH_STYLE is not true/);
+    // A bucket given as an ARN names its own endpoint, whatever S3_ENDPOINT says.
+    expect(
+      whyNotTheLocalStore(
+        { ...standIn, bucket: "arn:aws:s3::123456789012:accesspoint/kuutti.mrap" },
+        own,
+      ),
+    ).toMatch(/S3_BUCKET is an ARN/);
+  });
+
   const healthy = {
     status: "ok",
     version: "0.0.0",
@@ -275,6 +307,16 @@ describe("the walk to the bank and back", () => {
     // Two questions each time, and nothing posted to anybody.
     const questions = [`${API}/health`, `${API}/auth/start?platform=ios&locale=fi`];
     expect(asked).toEqual([...questions, ...questions]);
+  });
+
+  test("an API that sends the question of its health elsewhere is not followed there", async () => {
+    const asked: { url: string; redirect: string | undefined }[] = [];
+    const sending = asking(async (input, init) => {
+      asked.push({ url: String(input), redirect: init?.redirect });
+      return answer(302, { location: "https://api.staging.kuutti.app/health" });
+    });
+    await expect(lookAtApi(sending)).rejects.toThrow(/is not Kuutti's API/);
+    expect(asked).toEqual([{ url: `${API}/health`, redirect: "manual" }]);
   });
 });
 

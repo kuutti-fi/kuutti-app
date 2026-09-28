@@ -25,18 +25,43 @@ const LOOPBACK = new Set(["localhost", "127.0.0.1", "[::1]"]);
 export const onThisComputer = (url: URL): boolean => LOOPBACK.has(url.hostname);
 
 /**
- * Whether the address is this computer's own: a loopback one, or one of the
- * addresses of its network interfaces, which the caller reads. The object
- * store is named by the computer's address on the network when a phone has
- * to load photos from it (env.example), and that is this computer still.
- * Another machine on the same network is not, and neither is a name that
- * would have to be looked up: what a name resolves to can change between the
- * question and the deletion.
+ * Whether the address is this computer's own: `localhost`, a loopback
+ * address, or one of the addresses of its network interfaces, which the
+ * caller reads. The object store is named by the computer's address on the
+ * network when a phone has to load photos from it (env.example), and that is
+ * this computer still. Another machine on the same network is not, and
+ * neither is any other name: what a name resolves to is decided elsewhere,
+ * and can change between the question and the deletion.
  */
 export function ofThisComputer(url: URL, addresses: readonly string[]): boolean {
   if (onThisComputer(url)) return true;
   // An IPv6 address stands in brackets in a URL and without them on an interface.
   return addresses.includes(url.hostname.replace(/^\[|\]$/g, ""));
+}
+
+/**
+ * Why the object store of a configuration is not the stand-in on this
+ * computer, or null when it is. Three things decide where the client sends a
+ * deletion, and all three are asked. The endpoint's address. The addressing:
+ * without path style the client puts the bucket before the host and dials
+ * `<bucket>.localhost`, a name that is looked up, where the endpoint is a
+ * name. And the bucket: one given as an ARN names an endpoint of its own,
+ * and the client goes there whatever the endpoint says.
+ */
+export function whyNotTheLocalStore(
+  store: { endpoint: string; bucket: string; pathStyle: boolean },
+  addresses: readonly string[],
+): string | null {
+  const url = URL.canParse(store.endpoint) ? new URL(store.endpoint) : null;
+  if (!url) return "S3_ENDPOINT is no address";
+  if (!ofThisComputer(url, addresses)) {
+    return `it is at ${url.host}, not on this computer (S3_ENDPOINT is localhost, a loopback address or one of this computer's own)`;
+  }
+  if (!store.pathStyle) {
+    return "S3_FORCE_PATH_STYLE is not true, so the bucket's name would be part of the host's";
+  }
+  if (/^arn:/i.test(store.bucket)) return "S3_BUCKET is an ARN, which names an endpoint of its own";
+  return null;
 }
 
 /** The longest the walk waits for the rate limit's window, which is a minute. */
@@ -110,7 +135,10 @@ async function bankOf(context: BankContext, locale: Locale): Promise<URL> {
  * never finished; the API forgets it as it forgets any.
  */
 export async function lookAtApi(context: BankContext): Promise<{ commit: string; bank: string }> {
-  const health = await context.fetch(new URL("/health", context.api)).catch(() => null);
+  // Not followed anywhere: whoever answers here answers for itself.
+  const health = await context
+    .fetch(new URL("/health", context.api), { redirect: "manual" })
+    .catch(() => null);
   if (!health) {
     throw new DemoError(
       `nothing answers at ${context.api}: the histories need the local environment (pnpm env:up)`,
