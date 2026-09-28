@@ -1,3 +1,4 @@
+import type { Queryable } from "@kuutti/db";
 import { type DemoPersona, personaClaims } from "@kuutti/db/demo";
 import { AuthExchangeResponse, ErrorResponse, HealthResponse } from "@kuutti/schema";
 
@@ -130,11 +131,18 @@ async function bankOf(context: BankContext, locale: Locale): Promise<URL> {
 /**
  * Asks the API what it is, before anybody is erased for a history that
  * could then not be given: something answers, it answers as Kuutti's API
- * does, its database is there with its migrations, and the bank it sends a
- * login to is on this computer. One login is begun for the question and
- * never finished; the API forgets it as it forgets any.
+ * does, its database is there with its migrations, the bank it sends a
+ * login to is on this computer, and its database is this command's.
+ *
+ * The last is asked with the login that was begun for the question before
+ * it: the API wrote a row for it, and the row is looked for through the
+ * command's own connection. Found, the two have one database, and the row
+ * is taken away again. Not found, the API serves another: the personas
+ * would be erased here and given their histories there.
  */
-export async function lookAtApi(context: BankContext): Promise<{ commit: string; bank: string }> {
+export async function lookAtApi(
+  context: BankContext & { db: Queryable },
+): Promise<{ commit: string; bank: string }> {
   // Not followed anywhere: whoever answers here answers for itself.
   const health = await context
     .fetch(new URL("/health", context.api), { redirect: "manual" })
@@ -154,6 +162,18 @@ export async function lookAtApi(context: BankContext): Promise<{ commit: string;
     );
   }
   const bank = await bankOf(context, "fi");
+  const state = bank.searchParams.get("state");
+  if (!state) {
+    throw new DemoError(
+      `the API at ${context.api} began a login that names no state: whose database it serves cannot be told`,
+    );
+  }
+  const begun = await context.db.query("DELETE FROM auth_request WHERE state = $1", [state]);
+  if (begun.rowCount !== 1) {
+    throw new DemoError(
+      `the API at ${context.api} serves another database than this command's: the login it just began is not in the database of DATABASE_URL`,
+    );
+  }
   return { commit: answer.data.commit, bank: bank.origin };
 }
 

@@ -269,7 +269,14 @@ describe("the walk to the bank and back", () => {
     migrations: "current",
   };
   const json = (body: unknown, status: number) => new Response(JSON.stringify(body), { status });
-  const asking = (fetch: Fetch): BankContext => ({ api: API, now: () => new Date(), fetch });
+  // A database in which every login the API begins is found, once.
+  const found = { query: async () => ({ rows: [], rowCount: 1 }) } as unknown as Queryable;
+  const asking = (fetch: Fetch, db: Queryable = found) => ({
+    api: API,
+    now: () => new Date(),
+    fetch,
+    db,
+  });
 
   test("the API is asked what it is before anybody is erased: nobody there, somebody else, not ready", async () => {
     await expect(
@@ -311,6 +318,34 @@ describe("the walk to the bank and back", () => {
     // Two questions each time, and nothing posted to anybody.
     const questions = [`${API}/health`, `${API}/auth/start?platform=ios&locale=fi`];
     expect(asked).toEqual([...questions, ...questions]);
+  });
+
+  test("an API of another database than the command's is refused: the login it began is not here", async () => {
+    const asked: { text: string; values: unknown[] | undefined }[] = [];
+    const elsewhere = {
+      query: async (text: string, values?: unknown[]) => {
+        asked.push({ text, values });
+        return { rows: [], rowCount: 0 };
+      },
+    } as unknown as Queryable;
+    const api: Fetch = async (input) =>
+      String(input).endsWith("/health")
+        ? json(healthy, 200)
+        : answer(302, { location: "http://127.0.0.1:8080/ftn/authorize?state=the-state&nonce=n" });
+    await expect(lookAtApi(asking(api, elsewhere))).rejects.toThrow(
+      /serves another database than this command's/,
+    );
+    // Looked for by the state of that login, and by nothing else.
+    expect(asked).toEqual([
+      { text: "DELETE FROM auth_request WHERE state = $1", values: ["the-state"] },
+    ]);
+
+    // And a login without a state cannot be looked for.
+    const stateless: Fetch = async (input) =>
+      String(input).endsWith("/health")
+        ? json(healthy, 200)
+        : answer(302, { location: "http://127.0.0.1:8080/ftn/authorize?request=x" });
+    await expect(lookAtApi(asking(stateless))).rejects.toThrow(/names no state/);
   });
 
   test("an API that sends the question of its health elsewhere is not followed there", async () => {
@@ -484,8 +519,17 @@ describe.skipIf(!reachable)("the personas, through the mock bank", () => {
   test("the API of this repository, with the mock bank, is one the reset goes on with", async ({
     ctx,
   }) => {
-    const { bank } = await world(ctx);
-    expect(await lookAtApi(bank)).toMatchObject({ bank: new URL(ISSUER).origin });
+    const { context } = await world(ctx);
+    expect(await lookAtApi(context)).toMatchObject({ bank: new URL(ISSUER).origin });
+    // The login begun for the question was found here and taken away again.
+    const { rows } = await ctx.client.query("SELECT 1 FROM auth_request");
+    expect(rows).toHaveLength(0);
+
+    // The same API, asked by a command whose database is another.
+    const elsewhere = { query: async () => ({ rows: [], rowCount: 0 }) } as unknown as Queryable;
+    await expect(lookAtApi({ ...context, db: elsewhere })).rejects.toThrow(
+      /serves another database than this command's/,
+    );
   });
 
   test("a newcomer logs in with one posted form and is a fresh account", async ({ ctx }) => {

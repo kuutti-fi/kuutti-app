@@ -14,7 +14,7 @@
  * from a parameter store), no proxy, a database server that is not a
  * deployed one, an object store at an address of this computer (or none,
  * while no persona has a photo), and, where histories are to be given, an
- * API that answers as ours before anybody is erased.
+ * API that answers as ours, from this database, before anybody is erased.
  */
 import { networkInterfaces } from "node:os";
 import { createPool } from "@kuutti/db";
@@ -135,9 +135,10 @@ try {
 
   const now = () => new Date();
   // Before anybody is erased: an API that is not there, or not ours, or not
-  // ready, would leave the six without the history they were erased for.
+  // ready, or of another database than this one, would leave the six
+  // without the history they were erased for.
   if (!bare) {
-    const looked = await lookAtApi({ api: apiUrl.origin, fetch, now });
+    const looked = await lookAtApi({ api: apiUrl.origin, fetch, now, db: pool });
     console.log(JSON.stringify({ msg: "demo reset: the API", api: apiUrl.origin, ...looked }));
   }
   const reset = await resetPersonas({ db: pool, logger, now, ...(store ? { media: store } : {}) });
