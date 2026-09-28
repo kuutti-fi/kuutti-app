@@ -3,5 +3,10 @@
 // people; the rounds and their rules are the rest of M4.
 
 export { inEachOthersPool, type PoolPerson, passesFiltersOf } from "./pool.ts";
-export { deletePreferencesOfAccount, preferencesFrom, readPreferences } from "./preferences.ts";
+export {
+  deletePreferencesOfAccount,
+  preferencesFrom,
+  readPreferences,
+  savePreferences,
+} from "./preferences.ts";
 export { preferencesRoutes } from "./routes.ts";

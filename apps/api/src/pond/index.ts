@@ -12,6 +12,7 @@ export {
   exportGate,
   GATE_EMPTIED,
   type GateRow,
+  joinsAGroupThatWaits,
   neededFrom,
   readGateRow,
   sayPlace,

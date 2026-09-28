@@ -2489,7 +2489,7 @@ pond.gate.incomplete:
 
 pond.gate.pending:
   en: "Your profile is finished. Where you stand is counted tonight."
-  description: "Gate card when the person is complete and has not been counted yet. Rare: the first question counts them at once."
+  description: "Gate card when the person is complete and the next nightly count is to say where they stand: after they chose another area, after a change of gender or of whom they seek that needs deciding anew, or on a first look that could not be decided for them alone."
   fi: "Profiilisi on valmis. Tilanteesi lasketaan ensi yönä."
   sv: "Din profil är färdig. Var du står räknas i natt."
   machine: { fi: true, sv: true }

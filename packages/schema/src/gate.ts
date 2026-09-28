@@ -57,7 +57,7 @@ export const ExportedGate = z
     /** The size of the pool as it is said, in steps. */
     poolSaid: z.int().min(0),
     openedAt: z.iso.datetime().nullable(),
-    /** Null while the next count is to decide anew. */
+    /** When a count last changed what the row says; null while the next count is to decide anew. */
     countedAt: z.iso.datetime().nullable(),
   })
   .meta({ id: "ExportedGate" });

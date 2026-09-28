@@ -19,6 +19,8 @@ import { ponds } from "./ponds.ts";
  * back is the person's own doing: another pond, or a change of gender or of
  * whom they seek that brings them into a group that waits (ADR-015 §8, §9).
  * The row is then emptied, `counted_at` with it, and the next count decides.
+ * `counted_at` is when a count last wrote the row: a count that finds
+ * nothing to change writes nothing.
  *
  * The row goes with the account at erasure (TD-7).
  */

@@ -136,7 +136,9 @@ function subjectFrom(row: FactsRow, pondId: string, at: Date): Subject | null {
     },
     visible: row.state === "active",
     admittedAt: here ? row.admitted_at : null,
-    poolSaid: here && row.admitted_at !== null ? row.pool_said : null,
+    // Whatever the row says of admission: what was said of the pool outlives
+    // an emptying and a wait, so that neither makes the next figure a first one.
+    poolSaid: row.gate_pond === null ? null : row.pool_said,
     openedAt: here ? row.opened_at : null,
   };
 }
@@ -162,18 +164,29 @@ type Written = {
   countedAt: Date | null;
 };
 
+/**
+ * The count of one pond. At night (`only` undefined) `locked` are the
+ * accounts whose rows were locked before anything was read, and nobody else
+ * is counted: what is written for a person was read under their lock. On a
+ * first ask the whole pond is read and the asker's row alone is written.
+ */
 async function countPond(
   tx: Queryable,
   pondId: string,
   config: { gateK: number; shareMax: number; step: number },
   at: Date,
   only: string | undefined,
+  locked: readonly string[] | null,
 ): Promise<Omit<GateCount, "ponds">> {
-  const { rows } = await tx.query<FactsRow>(FACTS, [
-    pondId,
-    CURRENT_CONSENT_VERSIONS.terms,
-    CURRENT_CONSENT_VERSIONS.privacy,
-  ]);
+  const { rows } = await tx.query<FactsRow>(
+    locked === null ? FACTS : `${FACTS} AND a.id = ANY($4::uuid[])`,
+    [
+      pondId,
+      CURRENT_CONSENT_VERSIONS.terms,
+      CURRENT_CONSENT_VERSIONS.privacy,
+      ...(locked === null ? [] : [locked]),
+    ],
+  );
   const subjects = rows.flatMap((row) => subjectFrom(row, pondId, at) ?? []);
   const admission = admit(subjects, config.shareMax);
   const newly = new Set(admission.admitted);
@@ -194,7 +207,7 @@ async function countPond(
         accountId: subject.id,
         admittedAt: null,
         placeSaid: sayPlace(place, config.step),
-        poolSaid: 0,
+        poolSaid: subject.poolSaid ?? 0,
         openedAt: null,
         countedAt: at,
       });
@@ -207,7 +220,7 @@ async function countPond(
         accountId: subject.id,
         admittedAt: null,
         placeSaid: null,
-        poolSaid: 0,
+        poolSaid: subject.poolSaid ?? 0,
         openedAt: null,
         countedAt: null,
       });
@@ -230,9 +243,11 @@ async function countPond(
   }
 
   if (written.length > 0) {
-    // One statement for the pond. The account is asked once more, under a
-    // lock: an erasure that finished meanwhile gets no row, and a change of
-    // pond none for the pond that was left (ADR-015 §8).
+    // One statement for the pond. The account is asked once more: on a first
+    // ask the others of the pond are not locked, and the asker may have been
+    // erased or have moved since the route looked (ADR-015 §8). A row that
+    // would say what it says already is left as it is, its date with it, so
+    // counting twice changes nothing at all.
     await tx.query(
       `INSERT INTO gate (account_id, pond_id, admitted_at, place_said, pool_said, opened_at, counted_at)
        SELECT u.account_id, $2, u.admitted_at, u.place_said, u.pool_said, u.opened_at, u.counted_at
@@ -245,7 +260,12 @@ async function countPond(
        ON CONFLICT (account_id) DO UPDATE
          SET pond_id = EXCLUDED.pond_id, admitted_at = EXCLUDED.admitted_at,
              place_said = EXCLUDED.place_said, pool_said = EXCLUDED.pool_said,
-             opened_at = EXCLUDED.opened_at, counted_at = EXCLUDED.counted_at`,
+             opened_at = EXCLUDED.opened_at, counted_at = EXCLUDED.counted_at
+         WHERE gate.counted_at IS NULL
+            OR (gate.pond_id, gate.admitted_at, gate.place_said, gate.pool_said, gate.opened_at)
+               IS DISTINCT FROM
+               (EXCLUDED.pond_id, EXCLUDED.admitted_at, EXCLUDED.place_said, EXCLUDED.pool_said,
+                EXCLUDED.opened_at)`,
       [
         written.map((w) => w.accountId),
         pondId,
@@ -287,6 +307,23 @@ export async function countGates(
   const result = await transaction(deps.db, async (tx) => {
     await tx.query("SELECT pg_advisory_xact_lock($1)", [GATE_LOCK_KEY]);
     const config = await readConfig(tx);
+    // Every account that may have a row, locked before anything about it is
+    // read, in a statement of its own so that what is read afterwards is what
+    // stands after the wait. Whoever changes a declaration, a pond or erases
+    // an account takes the account's lock first (`savePreferences`,
+    // `declareGender`, `setPondOfAccount`, `eraseAccount`) and so finishes
+    // before this count reads, or waits until it has written. Without it a
+    // change that commits between the reading and the writing would have its
+    // emptied row written over with what the old declaration earned.
+    // Before any row of the gate is touched, too: a writer holds the account
+    // and waits for the row, never the other way round, so the two cannot
+    // wait for each other.
+    const { rows: accounts } = await tx.query<{ id: string }>(
+      `SELECT id FROM account
+       WHERE state <> 'deleted' AND pond_id IS NOT NULL
+       ORDER BY id FOR SHARE`,
+    );
+    const locked = accounts.map((row) => row.id);
     // What a statement elsewhere should have done and a race kept it from
     // (ADR-015 §8): the row of an account that is gone goes, and the row of a
     // pond that was left is emptied, for this count to decide anew.
@@ -314,7 +351,7 @@ export async function countGates(
       opened: 0,
     };
     for (const pondId of ponds) {
-      const pond = await countPond(tx, pondId, config, at, undefined);
+      const pond = await countPond(tx, pondId, config, at, undefined, locked);
       total.counted += pond.counted;
       total.admitted += pond.admitted;
       total.waiting += pond.waiting;
@@ -348,10 +385,16 @@ async function countFirst(deps: GateDeps, pondId: string, accountId: string): Pr
       [GATE_LOCK_KEY],
     );
     if (!lock[0]?.got) return false;
+    // The asker's account, locked before anything is read: a change of their
+    // own declaration that runs beside the asking is finished by then, and
+    // what is written was read after it.
+    await tx.query("SELECT 1 FROM account WHERE id = $1 AND state <> 'deleted' FOR SHARE", [
+      accountId,
+    ]);
     // Asked again under the lock: of several first asks at once, one counts.
     const { rows } = await tx.query("SELECT 1 FROM gate WHERE account_id = $1", [accountId]);
     if (rows.length > 0) return false;
-    await countPond(tx, pondId, await readConfig(tx), at, accountId);
+    await countPond(tx, pondId, await readConfig(tx), at, accountId, null);
     return true;
   });
   if (counted) deps.logger.info({}, "pond gate counted on a first ask");
@@ -376,11 +419,11 @@ export async function gateOf(deps: GateDeps, accountId: string): Promise<GateRes
   );
   const pondId = mine[0]?.pond_id ?? null;
   if (!pondId) return say({ state: "incomplete", ...nothing });
-  const { rows } = await deps.db.query<FactsRow>(`${FACTS} AND a.id = $4`, [
+  const { rows } = await deps.db.query<FactsRow>(`${FACTS} AND a.id = ANY($4::uuid[])`, [
     pondId,
     CURRENT_CONSENT_VERSIONS.terms,
     CURRENT_CONSENT_VERSIONS.privacy,
-    accountId,
+    [accountId],
   ]);
   const row = rows[0];
   if (!row || !subjectFrom(row, pondId, deps.now())) {

@@ -1,9 +1,14 @@
+import { resolve } from "node:path";
+import { setTimeout as sleep } from "node:timers/promises";
+import { createPool, migrate, withTemporaryDatabase } from "@kuutti/db";
 import { GateResponse } from "@kuutti/schema";
+import { it } from "vitest";
 import { eraseAccount, exportAccount } from "../identity/index.ts";
+import { savePreferences } from "../matching/index.ts";
 import { signInAs, withMatchingConfig } from "../test/account.ts";
 import { captureLogger, describe, expect, type TestContext, test } from "../test/harness.ts";
 import { type PeopleOptions, people, pondNamed } from "../test/people.ts";
-import { countGates, gateJob, gateOf } from "./pond-gate.ts";
+import { countGates, GATE_LOCK_KEY, gateJob, gateOf } from "./pond-gate.ts";
 
 // features/pond/gate.feature (#94, ADR-015): the count over a database, and
 // the route a person asks about themselves. The rules are pond/gate.test.ts and
@@ -74,13 +79,8 @@ async function put(ctx: TestContext, accountId: string | undefined, path: string
 }
 
 const WINDOW = { min: 25, max: 40 };
-const EMPTIED = {
-  admitted_at: null,
-  place_said: null,
-  pool_said: 0,
-  opened_at: null,
-  counted_at: null,
-};
+/** An emptied row: neither let in nor in the line. What was said of the pool stays. */
+const EMPTIED = { admitted_at: null, place_said: null, opened_at: null, counted_at: null };
 /** A time of the day after the first night: people of separate calls register in the order meant. */
 const at = (time: string) => new Date(`2026-10-05T${time}:00Z`);
 const MEN: PeopleOptions = { ...ALIKE, gender: "man", seeks: ["woman"] };
@@ -210,11 +210,12 @@ describe("the gate", () => {
     // One group is the larger: some of it waits.
     expect(first.result.waiting).toBeGreaterThan(0);
 
-    const at = new Date(NIGHT_1.getTime() + 1000);
-    const second = await counted(ctx, at);
+    const second = await counted(ctx, new Date(NIGHT_1.getTime() + 1000));
     expect(second.result).toMatchObject({ counted: 17, admitted: 0, opened: 0 });
-    // Every place, figure and date but the mark of the count itself.
-    expect(await rowsOf(ctx, pond)).toEqual(rows.map((row) => ({ ...row, counted_at: at })));
+    expect(await rowsOf(ctx, pond)).toEqual(rows);
+    // Nor on the next night, while nothing has moved.
+    await counted(ctx, NIGHT_2);
+    expect(await rowsOf(ctx, pond)).toEqual(rows);
   });
 
   test("the count says how many, never who or what they seek", async ({ ctx }) => {
@@ -301,12 +302,12 @@ describe("the person's own gate", () => {
       needed: null,
       step: 10,
     });
-    expect(await rowOf(ctx, later)).toEqual({ account_id: later, pond_id: pond, ...EMPTIED });
+    expect(await rowOf(ctx, later)).toMatchObject({ account_id: later, pond_id: pond, ...EMPTIED });
     expect(await rowOf(ctx, earlier)).toBeUndefined();
     expect((await rowsOf(ctx, pond)).filter((row) => row.account_id !== later)).toEqual(before);
     // Asking again counts nothing: the row is there, and it says that the night will.
     expect((await askedBy(ctx, later)).gate.state).toBe("pending");
-    expect(await rowOf(ctx, later)).toEqual({ account_id: later, pond_id: pond, ...EMPTIED });
+    expect(await rowOf(ctx, later)).toMatchObject({ account_id: later, pond_id: pond, ...EMPTIED });
 
     // The earlier one is first of his group, and three and three let him in as they stand.
     expect((await askedBy(ctx, earlier)).gate).toMatchObject({ state: "closed", needed: 30 });
@@ -329,7 +330,7 @@ describe("the person's own gate", () => {
     await people(ctx.client, pond, 1, { ...WOMEN, registeredAt: at("09:00") });
     const [he] = await people(ctx.client, pond, 1, { ...MEN, registeredAt: at("10:00") });
     expect((await askedBy(ctx, he)).gate.state).toBe("pending");
-    expect(await rowOf(ctx, he)).toEqual({ account_id: he, pond_id: pond, ...EMPTIED });
+    expect(await rowOf(ctx, he)).toMatchObject({ account_id: he, pond_id: pond, ...EMPTIED });
 
     await counted(ctx, NIGHT_2);
     expect(await rowOf(ctx, he)).toMatchObject({ admitted_at: NIGHT_2 });
@@ -419,7 +420,7 @@ describe("the person's own gate", () => {
     expect(await rowOf(ctx, she)).toMatchObject({ pond_id: pond, opened_at: NIGHT_1 });
 
     expect((await put(ctx, she, "/account/pond", { pondId: next })).status).toBe(204);
-    expect(await rowOf(ctx, she)).toEqual({ account_id: she, pond_id: next, ...EMPTIED });
+    expect(await rowOf(ctx, she)).toMatchObject({ account_id: she, pond_id: next, ...EMPTIED });
 
     // Asking counts nothing: however often she moves, she cannot put questions to the figure.
     for (const _ of [1, 2]) {
@@ -430,9 +431,11 @@ describe("the person's own gate", () => {
         step: 10,
       });
     }
-    expect(await rowOf(ctx, she)).toEqual({ account_id: she, pond_id: next, ...EMPTIED });
+    expect(await rowOf(ctx, she)).toMatchObject({ account_id: she, pond_id: next, ...EMPTIED });
 
     await counted(ctx, NIGHT_2);
+    // Twelve are there for her. Thirty was said in the pond she left, and the
+    // figure follows from that: a whole step away, so it is said anew.
     expect(await rowOf(ctx, she)).toMatchObject({
       pond_id: next,
       admitted_at: NIGHT_2,
@@ -444,6 +447,28 @@ describe("the person's own gate", () => {
     const row = await rowOf(ctx, she);
     expect((await put(ctx, she, "/account/pond", { pondId: next })).status).toBe(204);
     expect(await rowOf(ctx, she)).toEqual(row);
+  });
+
+  test("a pond there and back gives no fresh figure", async ({ ctx }) => {
+    const pond = await setUp(ctx, "test-gate-back");
+    const next = await pondNamed(ctx.client, "test-gate-forth");
+    const [she] = await people(ctx.client, pond, 1, ALIKE);
+    const others = await people(ctx.client, pond, 10, ALIKE);
+    await counted(ctx, NIGHT_1);
+    expect((await askedBy(ctx, she)).gate).toMatchObject({ state: "closed", needed: 20 });
+    // One leaves: nine are there, and twenty is said still.
+    await ctx.client.query("UPDATE account SET state = 'paused' WHERE id = $1", [others[0]]);
+    await counted(ctx, NIGHT_2);
+    expect((await askedBy(ctx, she)).gate).toMatchObject({ state: "closed", needed: 20 });
+
+    // She leaves and comes back on one day. A first figure would say thirty,
+    // and with it that somebody left: what was said stays with the row.
+    expect((await put(ctx, she, "/account/pond", { pondId: next })).status).toBe(204);
+    expect((await put(ctx, she, "/account/pond", { pondId: pond })).status).toBe(204);
+    expect(await rowOf(ctx, she)).toMatchObject({ pond_id: pond, pool_said: 10, ...EMPTIED });
+    await counted(ctx, NIGHT_3);
+    expect(await rowOf(ctx, she)).toMatchObject({ admitted_at: NIGHT_3, pool_said: 10 });
+    expect((await askedBy(ctx, she)).gate).toMatchObject({ state: "closed", needed: 20 });
   });
 
   test("Admission is decided anew for a person who joins a group that waits", async ({ ctx }) => {
@@ -466,7 +491,7 @@ describe("the person's own gate", () => {
     // And takes it back. What he was given for it goes with it, then and there.
     const back = { seeks: ["woman"], ageWindow: WINDOW };
     expect((await put(ctx, other, "/preferences", back)).status).toBe(200);
-    expect(await rowOf(ctx, other)).toEqual({ account_id: other, pond_id: pond, ...EMPTIED });
+    expect(await rowOf(ctx, other)).toMatchObject({ account_id: other, pond_id: pond, ...EMPTIED });
     expect((await askedBy(ctx, other)).gate.state).toBe("pending");
 
     // A newcomer of the smaller group makes room for one: for the one who came first.
@@ -496,7 +521,7 @@ describe("the person's own gate", () => {
     expect(await rowOf(ctx, he)).toMatchObject({ admitted_at: NIGHT_1 });
 
     expect((await put(ctx, they, "/account/gender", { gender: "man" })).status).toBe(204);
-    expect(await rowOf(ctx, they)).toEqual({ account_id: they, pond_id: pond, ...EMPTIED });
+    expect(await rowOf(ctx, they)).toMatchObject({ account_id: they, pond_id: pond, ...EMPTIED });
 
     // He seeks non-binary people too from now on: the group he waits with is the same.
     const wider = { seeks: ["woman", "non_binary"], ageWindow: WINDOW };
@@ -525,7 +550,11 @@ describe("the person's own gate", () => {
     expect(await rowsOf(ctx, pond)).toEqual([]);
     expect(await rowOf(ctx, gone)).toBeUndefined();
     // Emptied, in the pond the person lives in, for the count of that pond to decide.
-    expect(await rowOf(ctx, moved)).toEqual({ account_id: moved, pond_id: other, ...EMPTIED });
+    expect(await rowOf(ctx, moved)).toMatchObject({
+      account_id: moved,
+      pond_id: other,
+      ...EMPTIED,
+    });
     expect((await askedBy(ctx, moved)).gate.state).toBe("pending");
   });
 
@@ -581,5 +610,93 @@ describe("the person's own gate", () => {
     const gate = await gateOf({ db: ctx.client, logger, now: () => NIGHT_1 }, ids[0] as string);
     expect(gate).toMatchObject({ state: "closed" });
     expect((await rowsOf(ctx, pond)).map((row) => row.account_id)).toEqual([ids[0]]);
+  });
+});
+
+// A change of declaration beside the count, in sessions of their own: a pool
+// and a database of its own, as for the two counts of the waitlist.
+//
+// Inside the harness every test is one transaction, and the lock of a count
+// is the transaction's: it is held until the test is rolled back. While this
+// is the only file that counts gates nothing meets it. A second file that
+// does (#95) would make a first ask here find the lock held now and then and
+// answer `pending`; it then needs a database of its own like the two below.
+describe("a count and a change of declaration at once", () => {
+  it("the count waits for the change, and writes what stands after it", async () => {
+    await withTemporaryDatabase(async (url) => {
+      const pool = createPool({ connectionString: url, max: 4, applicationName: "kuutti-gates" });
+      try {
+        await migrate(pool, resolve(import.meta.dirname, "../../../../packages/db/drizzle"));
+        await withMatchingConfig(pool, { gate_k: 30, majority_share_max: 0.6 });
+        const { logger } = await captureLogger();
+        const pond = await pondNamed(pool, "test-gate-parallel");
+        await people(pool, pond, 6, MEN);
+        await people(pool, pond, 4, WOMEN);
+        // He seeks his own gender too, so he waits with nobody and is let in.
+        const [he] = await people(pool, pond, 1, { ...MEN, seeks: ["woman", "man"] });
+        await countGates({ db: pool, logger, now: () => NIGHT_1 });
+        const row = async () =>
+          (await pool.query<Row>(`SELECT ${COLUMNS} FROM gate WHERE account_id = $1`, [he]))
+            .rows[0];
+        expect(await row()).toMatchObject({ admitted_at: NIGHT_1 });
+
+        // He takes it back, and the night's count begins before he has committed.
+        const writer = await pool.connect();
+        let count: Promise<unknown>;
+        try {
+          await writer.query("BEGIN");
+          const back = { seeks: ["woman" as const], ageWindow: WINDOW };
+          expect(await savePreferences(writer, he as string, back, NIGHT_2)).toBe(true);
+          count = countGates({ db: pool, logger, now: () => NIGHT_2 });
+          const waited = await Promise.race([count.then(() => "ran"), sleep(300, "waited")]);
+          expect(waited).toBe("waited");
+          await writer.query("COMMIT");
+        } finally {
+          writer.release();
+        }
+        await count;
+        // Read before the change, the count would have found him let in and
+        // written that over the emptied row. Seven of eleven is over the share: he waits.
+        expect(await row()).toMatchObject({
+          admitted_at: null,
+          place_said: 10,
+          opened_at: null,
+          counted_at: NIGHT_2,
+        });
+      } finally {
+        await pool.end();
+      }
+    });
+  });
+
+  it("a first ask that finds a count running does not wait, and counts the next time", async () => {
+    await withTemporaryDatabase(async (url) => {
+      const pool = createPool({ connectionString: url, max: 4, applicationName: "kuutti-gates" });
+      try {
+        await migrate(pool, resolve(import.meta.dirname, "../../../../packages/db/drizzle"));
+        await withMatchingConfig(pool, { gate_k: 30, majority_share_max: 0.6 });
+        const { logger } = await captureLogger();
+        const pond = await pondNamed(pool, "test-gate-held");
+        const [she] = await people(pool, pond, 1, ALIKE);
+        const deps = { db: pool, logger, now: () => NIGHT_1 };
+
+        const counting = await pool.connect();
+        try {
+          await counting.query("BEGIN");
+          await counting.query("SELECT pg_advisory_xact_lock($1)", [GATE_LOCK_KEY]);
+          const asked = gateOf(deps, she as string);
+          const answer = await Promise.race([asked, sleep(1000, "waited")]);
+          expect(answer).toMatchObject({ state: "pending" });
+          const { rows } = await pool.query("SELECT 1 FROM gate WHERE account_id = $1", [she]);
+          expect(rows).toEqual([]);
+          await counting.query("COMMIT");
+        } finally {
+          counting.release();
+        }
+        expect(await gateOf(deps, she as string)).toMatchObject({ state: "closed", needed: 30 });
+      } finally {
+        await pool.end();
+      }
+    });
   });
 });

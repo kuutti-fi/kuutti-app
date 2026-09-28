@@ -210,9 +210,12 @@ export async function readGateRow(db: Queryable, accountId: string): Promise<Gat
  * person is neither let in nor in the line until the next count has decided.
  * The row itself stays, so that asking does not count them then and there
  * (ADR-015 §7): only a person who was never counted is counted on asking.
+ * What was said of the pool stays too. It is what the next figure follows
+ * slowly from, and a person who could empty it, by a pond there and back,
+ * would have a fresh figure every night and see every crossing of a ten.
  */
 export const GATE_EMPTIED =
-  "admitted_at = NULL, place_said = NULL, pool_said = 0, opened_at = NULL, counted_at = NULL";
+  "admitted_at = NULL, place_said = NULL, opened_at = NULL, counted_at = NULL";
 
 /** What a person declares of themselves, as far as admission reads it. */
 export type Declared = { gender: string | null; seeks: readonly string[] | null };
