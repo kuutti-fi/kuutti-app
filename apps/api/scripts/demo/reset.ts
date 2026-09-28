@@ -1,8 +1,9 @@
 import { type Queryable, transaction } from "@kuutti/db";
 import { DEMO_PERSONAS, deleteIdentities, MOCK_BANK_AMR } from "@kuutti/db/demo";
+import { PHOTO_VARIANTS } from "@kuutti/schema";
 import { type ErasureSummary, eraseAccount } from "../../src/identity/index.ts";
 import type { Logger } from "../../src/lib/logger.ts";
-import type { MediaDeps } from "../../src/media/index.ts";
+import { type MediaDeps, objectKey } from "../../src/media/index.ts";
 import { DemoError } from "./bank.ts";
 
 /**
@@ -44,12 +45,28 @@ import { DemoError } from "./bank.ts";
  * objects before this transaction has ended, so a reset that fails after
  * that leaves rows without their objects; the next reset takes them.
  *
- * Without an object store the erasure deletes the rows of the photos and
- * leaves the objects, and the rows are what names them. A persona with
- * photos therefore stops a reset that has no store, before anybody is
- * erased.
+ * The rows of the photos are what names their objects, so no row goes
+ * while its objects stay. Three questions hold that, and each stops the
+ * reset with everybody as they were:
+ *
+ * - without an object store, a persona with photos is not erased;
+ * - with one, the store is asked before anybody is erased whether it holds
+ *   the photos. A store on this computer need not be the API's: in another
+ *   one the deletion of what is not there succeeds, and the objects stay
+ *   where they are. `objectsLost` goes ahead without the question, for
+ *   objects that are gone for good;
+ * - after each erasure the objects it deleted are counted. The erasure path
+ *   forgives a store that fails, as it must for a person who leaves; a
+ *   reset does not.
  */
-export type ResetDeps = { db: Queryable; logger: Logger; now: () => Date; media?: MediaDeps };
+export type ResetDeps = {
+  db: Queryable;
+  logger: Logger;
+  now: () => Date;
+  media?: MediaDeps;
+  /** Go ahead although the store does not hold the photos' objects: they are lost. */
+  objectsLost?: boolean;
+};
 
 export type ResetResult = {
   identities: number;
@@ -87,16 +104,34 @@ export async function resetPersonas(deps: ResetDeps): Promise<ResetResult> {
     const ids = identities.filter((r) => !r.staff).map((r) => r.id);
     if (ids.length === 0) return { identities: 0, erased: 0, objects: 0, spared };
 
-    if (!deps.media) {
-      const { rows: withPhotos } = await tx.query<{ key: string }>(
-        `SELECT DISTINCT i.broker_subject AS key FROM photo p
-           JOIN account a ON a.id = p.account_id JOIN identity i ON i.id = a.identity_id
-         WHERE i.id = ANY($1) ORDER BY 1`,
-        [ids],
+    const { rows: photos } = await tx.query<{ key: string; account: string; content: string }>(
+      `SELECT DISTINCT i.broker_subject AS key, a.id AS account, p.key AS content FROM photo p
+         JOIN account a ON a.id = p.account_id JOIN identity i ON i.id = a.identity_id
+       WHERE i.id = ANY($1) ORDER BY 1, 3`,
+      [ids],
+    );
+    const named = (rows: readonly { key: string }[]) =>
+      [...new Set(rows.map((r) => r.key))].join(", ");
+    if (!deps.media && photos.length > 0) {
+      throw new DemoError(
+        `no object store is configured, and there are photos of ${named(photos)}: their rows would go and their objects stay, with nothing left to find them by. Set S3_ENDPOINT to the stand-in (env.example) and reset again; nobody was erased`,
       );
-      if (withPhotos.length > 0) {
+    }
+    if (deps.media && !deps.objectsLost) {
+      const { store } = deps.media;
+      const absent: { key: string }[] = [];
+      for (const photo of photos) {
+        // The smallest of the three stands for them: they are written together.
+        const held = await store.get(objectKey(photo.content, "thumb")).catch((error: unknown) => {
+          throw new DemoError(
+            `the object store of this configuration does not answer (${error instanceof Error ? error.name : "unknown"}): is the stand-in running, and are S3_ENDPOINT and S3_BUCKET the API's? Nobody was erased`,
+          );
+        });
+        if (held === null) absent.push(photo);
+      }
+      if (absent.length > 0) {
         throw new DemoError(
-          `no object store is configured, and there are photos of ${withPhotos.map((r) => r.key).join(", ")}: their rows would go and their objects stay, with nothing left to find them by. Set S3_ENDPOINT to the stand-in (env.example) and reset again; nobody was erased`,
+          `the object store of this configuration does not hold the photos of ${named(absent)}. Either it is not the store the API put them in (S3_ENDPOINT and S3_BUCKET are the API's), or the objects are lost, and then --objects-lost goes ahead without them. Nobody was erased`,
         );
       }
     }
@@ -112,6 +147,21 @@ export async function resetPersonas(deps: ResetDeps): Promise<ResetResult> {
       const summary: ErasureSummary = await eraseAccount({ ...deps, db: tx }, account.id);
       erased += 1;
       objects += summary.objects;
+      // What the erasure had to delete: the objects of the content no row
+      // names any more (the media slice's own rule). It answers 0 when the
+      // store failed, and throwing here takes the rows back with it.
+      const mine = photos.filter((photo) => photo.account === account.id);
+      const { rows: orphaned } = await tx.query(
+        `SELECT 1 FROM unnest($1::text[]) AS k(key)
+         WHERE NOT EXISTS (SELECT 1 FROM photo p WHERE p.key = k.key)`,
+        [[...new Set(mine.map((photo) => photo.content))]],
+      );
+      const due = orphaned.length * PHOTO_VARIANTS.length;
+      if (summary.objects !== due) {
+        throw new DemoError(
+          `the objects of the photos of ${named(mine)} were not deleted (${summary.objects} of ${due}): is the object store running? The reset is taken back: everybody's rows are as they were, and objects deleted before this one are gone (--objects-lost goes ahead without them)`,
+        );
+      }
     }
     // The ended ones only, by the sweep's own rule (deleteDeadAdminSessions).
     await tx.query(

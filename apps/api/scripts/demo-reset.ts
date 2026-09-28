@@ -6,6 +6,7 @@
  *   pnpm demo:reset                  reset, then the histories
  *   pnpm demo:reset -- --bare        reset only: all twelve are newcomers
  *   pnpm demo:reset -- --api http://localhost:3000
+ *   pnpm demo:reset -- --objects-lost   although the store does not hold the photos
  *
  * Needs the local environment running (`pnpm env:up`): the histories log in
  * at the mock bank and talk to the API. Everything it touches is on this
@@ -41,6 +42,7 @@ function fail(message: string, code = 2): never {
 const args = process.argv.slice(2).filter((arg, i) => !(arg === "--" && i === 0));
 let api = "http://localhost:3000";
 let bare = false;
+let objectsLost = false;
 const seen = new Set<string>();
 for (let i = 0; i < args.length; i += 1) {
   const arg = args[i] as string;
@@ -48,11 +50,12 @@ for (let i = 0; i < args.length; i += 1) {
   if (seen.has(flag)) fail(`${flag} is given twice`);
   seen.add(flag);
   if (arg === "--bare") bare = true;
+  else if (arg === "--objects-lost") objectsLost = true;
   else if (arg === "--api") {
     i += 1;
     api = args[i] ?? fail("--api takes the address of the API");
   } else if (arg.startsWith("--api=")) api = arg.slice("--api=".length);
-  else fail(`unknown argument ${arg}: --bare and --api are all there is`);
+  else fail(`unknown argument ${arg}: --bare, --api and --objects-lost are all there is`);
 }
 const apiUrl = URL.canParse(api) ? new URL(api) : fail(`--api is no address: ${api}`);
 if (!onThisComputer(apiUrl)) {
@@ -141,7 +144,13 @@ try {
     const looked = await lookAtApi({ api: apiUrl.origin, fetch, now, db: pool });
     console.log(JSON.stringify({ msg: "demo reset: the API", api: apiUrl.origin, ...looked }));
   }
-  const reset = await resetPersonas({ db: pool, logger, now, ...(store ? { media: store } : {}) });
+  const reset = await resetPersonas({
+    db: pool,
+    logger,
+    now,
+    objectsLost,
+    ...(store ? { media: store } : {}),
+  });
   console.log(JSON.stringify({ msg: "demo reset: personas forgotten", ...reset }));
 
   if (!bare) {

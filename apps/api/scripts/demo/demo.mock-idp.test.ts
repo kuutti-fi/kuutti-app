@@ -21,7 +21,7 @@ import {
   OidcBroker,
   REREGISTER_COOLDOWN_DAYS,
 } from "../../src/identity/index.ts";
-import type { MediaDeps } from "../../src/media/index.ts";
+import { type MediaDeps, memoryMediaStore, objectKey } from "../../src/media/index.ts";
 import {
   captureLogger,
   describe,
@@ -410,6 +410,16 @@ describe("the reset and the photos", () => {
     expect(rows).toHaveLength(1);
   });
 
+  /** The API's store, with the three objects of the one picture in it. */
+  const storeWithThePicture = async () => {
+    const store = memoryMediaStore();
+    for (const variant of ["thumb", "card", "full"] as const) {
+      await store.put(objectKey("c".repeat(64), variant), new Uint8Array([1]), "image/webp");
+    }
+    return store;
+  };
+  const withStore = (store: unknown) => ({ store }) as unknown as MediaDeps;
+
   test("with a store the objects go with the rows, and without photos no store is needed", async ({
     ctx,
   }) => {
@@ -426,23 +436,85 @@ describe("the reset and the photos", () => {
 
     const aino = await personaInTheDatabase(ctx.client, "aino");
     await photoOf(ctx.client, aino.accountId);
-    const deleted: string[] = [];
-    const media = {
-      store: {
-        delete: async (keys: string[]) => {
-          deleted.push(...keys);
-        },
-      },
-    } as unknown as MediaDeps;
-    expect(await resetPersonas({ db: ctx.client, logger, now, media })).toEqual({
+    const store = await storeWithThePicture();
+    expect(await resetPersonas({ db: ctx.client, logger, now, media: withStore(store) })).toEqual({
       identities: 1,
       erased: 1,
       // One picture is three objects: thumb, card and full.
       objects: 3,
       spared: [],
     });
-    expect(deleted).toHaveLength(3);
-    for (const key of deleted) expect(key).toContain("c".repeat(64));
+    expect(store.objects.size).toBe(0);
+  });
+
+  test("a store that does not hold the photos is not the API's: nobody is erased, unless the objects are lost", async ({
+    ctx,
+  }) => {
+    const { logger } = await captureLogger();
+    const now = () => new Date();
+    const aino = await personaInTheDatabase(ctx.client, "aino");
+    const mikael = await personaInTheDatabase(ctx.client, "mikael");
+    await photoOf(ctx.client, aino.accountId);
+    // A store on this computer, and another one than the API wrote to.
+    const another = memoryMediaStore();
+    await another.put("media/somebody-elses/thumb.webp", new Uint8Array([1]), "image/webp");
+
+    const media = withStore(another);
+    await expect(resetPersonas({ db: ctx.client, logger, now, media })).rejects.toThrow(
+      /does not hold the photos of aino\. .*--objects-lost.* Nobody was erased/,
+    );
+    expect(await stateOfAccount(ctx.client, aino.accountId)).toBe("active");
+    expect(await stateOfAccount(ctx.client, mikael.accountId)).toBe("active");
+    expect(another.objects.size).toBe(1);
+
+    // Said to be lost, the reset goes ahead, and touches nothing else in the store.
+    expect(
+      await resetPersonas({ db: ctx.client, logger, now, media, objectsLost: true }),
+    ).toMatchObject({ identities: 2, erased: 2, spared: [] });
+    expect([...another.objects.keys()]).toEqual(["media/somebody-elses/thumb.webp"]);
+  });
+
+  test("a store that does not answer, or does not delete, takes the reset back", async ({
+    ctx,
+  }) => {
+    const { logger } = await captureLogger();
+    const now = () => new Date();
+    const aino = await personaInTheDatabase(ctx.client, "aino");
+    await photoOf(ctx.client, aino.accountId);
+    const whole = async () => {
+      expect(await stateOfAccount(ctx.client, aino.accountId)).toBe("active");
+      const { rows } = await ctx.client.query("SELECT 1 FROM photo WHERE account_id = $1", [
+        aino.accountId,
+      ]);
+      expect(rows).toHaveLength(1);
+    };
+
+    const stopped = {
+      get: async () => {
+        throw Object.assign(new Error("connect ECONNREFUSED 127.0.0.1:9000"), {
+          name: "TimeoutError",
+        });
+      },
+    };
+    await expect(
+      resetPersonas({ db: ctx.client, logger, now, media: withStore(stopped) }),
+    ).rejects.toThrow(/does not answer \(TimeoutError\).* Nobody was erased/);
+    await whole();
+
+    // It holds the photos and answers, and then the deletion fails: the
+    // erasure path forgives that and says 0, the reset does not.
+    const store = await storeWithThePicture();
+    const failing = {
+      ...store,
+      delete: async () => {
+        throw new Error("DeleteObjects left 3 of 3 objects (InternalError)");
+      },
+    };
+    await expect(
+      resetPersonas({ db: ctx.client, logger, now, media: withStore(failing) }),
+    ).rejects.toThrow(/photos of aino were not deleted \(0 of 3\)/);
+    await whole();
+    expect(store.objects.size).toBe(3);
   });
 });
 
