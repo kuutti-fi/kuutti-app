@@ -14,6 +14,7 @@ import {
   teliaKeyIds,
 } from "./identity/index.ts";
 import { type NightlyJob, scheduleNightly } from "./jobs/nightly.ts";
+import { gateJob } from "./jobs/pond-gate.ts";
 import { ensureFirstSnapshot, waitlistJob } from "./jobs/waitlist-snapshot.ts";
 import { type Config, ConfigError, loadConfig } from "./lib/config.ts";
 import { createLogger } from "./lib/logger.ts";
@@ -182,6 +183,8 @@ async function main(): Promise<void> {
     researchEventsJob({ db: pool, now }),
     // The day's waitlist figures (#54): taken once a day, served all day.
     waitlistJob({ db: pool, logger, now }),
+    // Who is let into each pond, and for whom matching opens (#94).
+    gateJob({ db: pool, logger, now }),
   ];
   // Photos the automatic check missed get one more look (#49); none without a moderator.
   const mediaDeps = media.deps;

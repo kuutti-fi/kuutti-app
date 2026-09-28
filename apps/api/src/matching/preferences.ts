@@ -6,6 +6,7 @@ import {
   type PreferencesUpdate,
 } from "@kuutti/schema";
 import { z } from "zod";
+import { admissionAnew } from "../pond/index.ts";
 
 // Raw parameterised SQL for the same reason as identity/repo.ts: Deps.db is
 // the Queryable seam the test harness hands a rolled-back transaction through.
@@ -59,11 +60,13 @@ export async function savePreferences(
   return transaction(db, async (tx) => {
     // The lock erasure takes first (ADR-009 §8): a save racing an erasure
     // lands before the deletes or sees the tombstone and writes nothing.
-    const live = await tx.query(
-      "SELECT 1 FROM account WHERE id = $1 AND state <> 'deleted' FOR UPDATE",
+    const live = await tx.query<{ gender: string | null }>(
+      "SELECT gender FROM account WHERE id = $1 AND state <> 'deleted' FOR UPDATE",
       [accountId],
     );
-    if (live.rows.length === 0) return false;
+    const account = live.rows[0];
+    if (!account) return false;
+    const before = await readPreferences(tx, accountId);
     let written = 0;
     for (const [field, value] of [
       [SEEKS, update.seeks],
@@ -79,6 +82,14 @@ export async function savePreferences(
       );
       written += result.rowCount ?? 0;
     }
+    // Whom one seeks decides with whom one waits at the pond gate (#94,
+    // ADR-015 §9): joining a group that waits is decided anew by the next count.
+    await admissionAnew(
+      tx,
+      accountId,
+      { gender: account.gender, seeks: before.seeks },
+      { gender: account.gender, seeks: update.seeks },
+    );
     return written === 2;
   });
 }

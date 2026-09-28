@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { AccountState } from "./account-state.ts";
+import { ExportedGate } from "./gate.ts";
 import { AuthPlatform } from "./identity.ts";
 import { Photo, PhotoRejectionReason, PhotoVariant } from "./media.ts";
 import { ConsentRecord, Gender, PondSummary, PreferencesResponse } from "./onboarding.ts";
@@ -96,6 +97,8 @@ export const AccountExport = z
       .max(1000),
     /** What research holds (#50, ADR-011): the enrolment and the events, never the research_id. */
     research: ResearchExport,
+    /** The place at the pond gate (#94, ADR-015); null before the first count. */
+    gate: ExportedGate.nullable(),
   })
   .meta({ id: "AccountExport" });
 export type AccountExport = z.infer<typeof AccountExport>;

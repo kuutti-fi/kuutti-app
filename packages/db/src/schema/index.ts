@@ -8,6 +8,7 @@ export {
 } from "./admin.ts";
 export { type AuthRequest, authRequest, type NewAuthRequest } from "./auth-request.ts";
 export { type Consent, consent, consentKind, type NewConsent } from "./consent.ts";
+export { type Gate, gate, type NewGate } from "./gate.ts";
 export {
   type Account,
   type AccountState,

@@ -1,0 +1,511 @@
+import { GateResponse } from "@kuutti/schema";
+import { eraseAccount, exportAccount } from "../identity/index.ts";
+import { signInAs, withMatchingConfig } from "../test/account.ts";
+import { captureLogger, describe, expect, type TestContext, test } from "../test/harness.ts";
+import { type PeopleOptions, people, pondNamed } from "../test/people.ts";
+import { countGates, gateJob, gateOf } from "./pond-gate.ts";
+
+// features/pond/gate.feature (#94, ADR-015): the count over a database, and
+// the route a person asks about themselves. The rules are pond/gate.test.ts and
+// matching/pool.test.ts.
+
+const NIGHT_1 = new Date("2026-10-05T01:00:00Z"); // 04:00 in Helsinki
+const NIGHT_2 = new Date("2026-10-06T01:00:00Z");
+const NIGHT_3 = new Date("2026-10-07T01:00:00Z");
+const NIGHT_4 = new Date("2026-10-08T01:00:00Z");
+
+/** Women who seek women: they wait with nobody, and every two of them are in the pool of the other. */
+const ALIKE: PeopleOptions = {
+  gender: "woman",
+  seeks: ["woman"],
+  complete: true,
+  consented: true,
+};
+
+async function setUp(ctx: TestContext, slug: string) {
+  await withMatchingConfig(ctx.client, { gate_k: 30, majority_share_max: 0.6 });
+  return pondNamed(ctx.client, slug);
+}
+
+async function counted(ctx: TestContext, at: Date, scope: { pondId?: string } = {}) {
+  const { logger, lines } = await captureLogger();
+  const result = await countGates({ db: ctx.client, logger, now: () => at }, scope);
+  return { result, lines };
+}
+
+type Row = {
+  account_id: string;
+  pond_id: string;
+  admitted_at: Date | null;
+  place_said: number | null;
+  pool_said: number;
+  opened_at: Date | null;
+  counted_at: Date | null;
+};
+
+const COLUMNS = "account_id, pond_id, admitted_at, place_said, pool_said, opened_at, counted_at";
+
+const rowsOf = async (ctx: TestContext, pond: string) =>
+  (
+    await ctx.client.query<Row>(
+      `SELECT ${COLUMNS} FROM gate WHERE pond_id = $1 ORDER BY account_id`,
+      [pond],
+    )
+  ).rows;
+
+const rowOf = async (ctx: TestContext, id: string | undefined) =>
+  (await ctx.client.query<Row>(`SELECT ${COLUMNS} FROM gate WHERE account_id = $1`, [id])).rows[0];
+
+async function askedBy(ctx: TestContext, accountId: string | undefined) {
+  if (!accountId) throw new Error("nobody to ask as");
+  const who = await signInAs(ctx.client, accountId);
+  const response = await ctx.app.request("/gate", { headers: who.headers });
+  return { response, gate: GateResponse.parse(await response.json()) };
+}
+
+async function put(ctx: TestContext, accountId: string | undefined, path: string, body: unknown) {
+  if (!accountId) throw new Error("nobody to write as");
+  const who = await signInAs(ctx.client, accountId);
+  return ctx.app.request(path, {
+    method: "PUT",
+    headers: { ...who.headers, "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
+const WINDOW = { min: 25, max: 40 };
+const EMPTIED = {
+  admitted_at: null,
+  place_said: null,
+  pool_said: 0,
+  opened_at: null,
+  counted_at: null,
+};
+const MEN: PeopleOptions = { ...ALIKE, gender: "man", seeks: ["woman"] };
+const WOMEN: PeopleOptions = { ...ALIKE, gender: "woman", seeks: ["man"] };
+
+describe("the gate", () => {
+  test("Matching opens when the pool reaches gate_k, and stays open", async ({ ctx }) => {
+    const pond = await setUp(ctx, "test-gate-opens");
+    const [she] = await people(ctx.client, pond, 1, ALIKE);
+    const others = await people(ctx.client, pond, 29, ALIKE);
+    await counted(ctx, NIGHT_1);
+    // Twenty-nine are there for her: said as twenty, so about ten more are needed.
+    expect(await rowOf(ctx, she)).toMatchObject({ pool_said: 20, opened_at: null });
+    expect((await askedBy(ctx, she)).gate).toEqual({
+      state: "closed",
+      within: null,
+      needed: 10,
+      step: 10,
+    });
+
+    await people(ctx.client, pond, 1, ALIKE);
+    const { result } = await counted(ctx, NIGHT_2);
+    // For all thirty-one of them: each has thirty others now.
+    expect(result.opened).toBe(31);
+    expect(await rowOf(ctx, she)).toMatchObject({ pool_said: 30, opened_at: NIGHT_2 });
+    expect((await askedBy(ctx, she)).gate.state).toBe("open");
+
+    await ctx.client.query("UPDATE account SET state = 'paused' WHERE id = ANY($1)", [
+      others.slice(0, 5),
+    ]);
+    await counted(ctx, NIGHT_3);
+    expect(await rowOf(ctx, she)).toMatchObject({ opened_at: NIGHT_2 });
+    expect((await askedBy(ctx, she)).gate.state).toBe("open");
+  });
+
+  test("What a person is told is said in tens, and follows slowly", async ({ ctx }) => {
+    const pond = await setUp(ctx, "test-gate-steps");
+    const [she] = await people(ctx.client, pond, 1, ALIKE);
+    await people(ctx.client, pond, 17, ALIKE);
+    await counted(ctx, NIGHT_1);
+    expect(await rowOf(ctx, she)).toMatchObject({ pool_said: 10 });
+    expect((await askedBy(ctx, she)).gate).toMatchObject({ state: "closed", needed: 20 });
+
+    await people(ctx.client, pond, 2, ALIKE);
+    await counted(ctx, NIGHT_2);
+    expect((await askedBy(ctx, she)).gate).toMatchObject({ state: "closed", needed: 20 });
+
+    const [twentieth] = await people(ctx.client, pond, 1, ALIKE);
+    await counted(ctx, NIGHT_3);
+    expect(await rowOf(ctx, she)).toMatchObject({ pool_said: 20 });
+    expect((await askedBy(ctx, she)).gate).toMatchObject({ state: "closed", needed: 10 });
+
+    // The twentieth leaves again: back over the ten, and it does not show.
+    await ctx.client.query("UPDATE account SET state = 'paused' WHERE id = $1", [twentieth]);
+    await counted(ctx, new Date(NIGHT_3.getTime() + 86_400_000));
+    expect((await askedBy(ctx, she)).gate).toMatchObject({ state: "closed", needed: 10 });
+  });
+
+  test("The place in the line is said in tens", async ({ ctx }) => {
+    const pond = await setUp(ctx, "test-gate-line");
+    const men = await people(ctx.client, pond, 13, MEN);
+    await people(ctx.client, pond, 1, WOMEN);
+    // The first man, the woman, and a second man while the groups are equal: eleven wait.
+    const { result } = await counted(ctx, NIGHT_1);
+    expect(result).toMatchObject({ counted: 14, admitted: 3, waiting: 11 });
+    for (const id of men.slice(2, 12)) {
+      expect(await rowOf(ctx, id), id).toMatchObject({ admitted_at: null, place_said: 10 });
+    }
+    expect((await askedBy(ctx, men[2])).gate).toEqual({
+      state: "waiting",
+      within: 10,
+      needed: null,
+      step: 10,
+    });
+    // The first and the tenth in the line are told the same; the eleventh is among the next twenty.
+    expect((await askedBy(ctx, men[11])).gate).toEqual((await askedBy(ctx, men[2])).gate);
+    expect(await rowOf(ctx, men[12])).toMatchObject({ admitted_at: null, place_said: 20 });
+    expect((await askedBy(ctx, men[12])).gate).toMatchObject({ state: "waiting", within: 20 });
+  });
+
+  test("Only a finished profile and current consents are counted", async ({ ctx }) => {
+    const pond = await setUp(ctx, "test-gate-counted");
+    // Ten who are there for each other: nine others each, which is said as none.
+    // One more in any of their pools would make it ten, and show.
+    const [she] = await people(ctx.client, pond, 10, ALIKE);
+    // No profile at all, and so no photos.
+    const [unfinished] = await people(ctx.client, pond, 1, {
+      gender: "woman",
+      state: "active",
+      consented: true,
+    });
+    // Everything, but the consents are for an older wording.
+    const [outdated] = await people(ctx.client, pond, 1, { ...ALIKE, consented: false });
+    await ctx.client.query(
+      `INSERT INTO consent (account_id, kind, version, locale_shown)
+       VALUES ($1, 'terms', 'an-older-wording', 'fi'), ($1, 'privacy', 'an-older-wording', 'fi')`,
+      [outdated],
+    );
+    const [shadow] = await people(ctx.client, pond, 1, ALIKE);
+    await ctx.client.query("UPDATE account SET state = 'shadow_banned' WHERE id = $1", [shadow]);
+    const [paused] = await people(ctx.client, pond, 1, ALIKE);
+    await ctx.client.query("UPDATE account SET state = 'paused' WHERE id = $1", [paused]);
+    const [banned] = await people(ctx.client, pond, 1, { ...ALIKE, standing: "banned" });
+
+    const { result } = await counted(ctx, NIGHT_1);
+    expect(result).toMatchObject({ ponds: 1, counted: 11, admitted: 11, waiting: 0 });
+    expect(await rowOf(ctx, she)).toMatchObject({ pool_said: 0, admitted_at: NIGHT_1 });
+    expect((await askedBy(ctx, she)).gate).toMatchObject({ state: "closed", needed: 30 });
+    // The shadow-banned person has a gate like anybody, and the ten are in it.
+    expect(await rowOf(ctx, shadow)).toMatchObject({ pool_said: 10, admitted_at: NIGHT_1 });
+    expect((await askedBy(ctx, shadow)).gate).toMatchObject({ state: "closed", needed: 20 });
+    for (const id of [unfinished, outdated, paused, banned]) {
+      expect(await rowOf(ctx, id), id).toBeUndefined();
+    }
+    expect((await askedBy(ctx, unfinished)).gate.state).toBe("incomplete");
+    expect((await askedBy(ctx, outdated)).gate.state).toBe("incomplete");
+  });
+
+  test("Counting twice changes nothing", async ({ ctx }) => {
+    const pond = await setUp(ctx, "test-gate-twice");
+    await people(ctx.client, pond, 4, MEN);
+    await people(ctx.client, pond, 1, WOMEN);
+    await people(ctx.client, pond, 12, ALIKE);
+    const first = await counted(ctx, NIGHT_1);
+    const rows = await rowsOf(ctx, pond);
+    expect(rows).toHaveLength(17);
+    // One group is the larger: some of it waits.
+    expect(first.result.waiting).toBeGreaterThan(0);
+
+    const at = new Date(NIGHT_1.getTime() + 1000);
+    const second = await counted(ctx, at);
+    expect(second.result).toMatchObject({ counted: 17, admitted: 0, opened: 0 });
+    // Every place, figure and date but the mark of the count itself.
+    expect(await rowsOf(ctx, pond)).toEqual(rows.map((row) => ({ ...row, counted_at: at })));
+  });
+
+  test("the count says how many, never who or what they seek", async ({ ctx }) => {
+    const pond = await setUp(ctx, "test-gate-log");
+    const ids = await people(ctx.client, pond, 3, ALIKE);
+    const { lines } = await counted(ctx, NIGHT_1);
+    const logged = JSON.stringify(lines());
+    expect(logged).toContain("pond gates counted");
+    for (const id of [...ids, pond]) expect(logged).not.toContain(id);
+    expect(logged).not.toMatch(/seeks|woman|"man"|non_binary/);
+  });
+
+  test("the nightly job counts every pond, and the ponds apart", async ({ ctx }) => {
+    const one = await setUp(ctx, "test-gate-one");
+    const two = await pondNamed(ctx.client, "test-gate-two");
+    const [inOne] = await people(ctx.client, one, 5, ALIKE);
+    const [inTwo] = await people(ctx.client, two, 16, ALIKE);
+    const { logger } = await captureLogger();
+    const job = gateJob({ db: ctx.client, logger, now: () => NIGHT_1 });
+    expect(job.name).toBe("pond-gate");
+    expect(await job.run()).toMatchObject({ counted: 21, admitted: 21, waiting: 0, opened: 0 });
+    // Four others in one pond and fifteen in the other; taken together they would be twenty.
+    expect(await rowOf(ctx, inOne)).toMatchObject({ pool_said: 0 });
+    expect(await rowOf(ctx, inTwo)).toMatchObject({ pool_said: 10 });
+  });
+
+  test("nothing finer than what is said is kept", async ({ ctx }) => {
+    const { rows } = await ctx.client.query<{ column_name: string }>(
+      `SELECT column_name FROM information_schema.columns
+       WHERE table_name = 'gate' ORDER BY column_name`,
+    );
+    expect(rows.map((row) => row.column_name)).toEqual(COLUMNS.split(", ").sort());
+    const pond = await setUp(ctx, "test-gate-kept");
+    await people(ctx.client, pond, 13, MEN);
+    await people(ctx.client, pond, 27, ALIKE);
+    await counted(ctx, NIGHT_1);
+    for (const row of await rowsOf(ctx, pond)) {
+      expect(row.pool_said % 10, "a pool is kept in tens").toBe(0);
+      expect((row.place_said ?? 0) % 10, "a place is kept in tens").toBe(0);
+    }
+  });
+});
+
+describe("the person's own gate", () => {
+  test("A person learns where they stand the first time they ask", async ({ ctx }) => {
+    const pond = await setUp(ctx, "test-gate-first");
+    await people(ctx.client, pond, 11, ALIKE);
+    await counted(ctx, NIGHT_1);
+    const before = await rowsOf(ctx, pond);
+
+    const [newcomer] = await people(ctx.client, pond, 1, ALIKE);
+    expect(await rowOf(ctx, newcomer)).toBeUndefined();
+    const { response, gate } = await askedBy(ctx, newcomer);
+    expect(response.status).toBe(200);
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    expect(gate).toEqual({ state: "closed", within: null, needed: 20, step: 10 });
+    // No figure of anybody else has moved: the night moves those.
+    expect((await rowsOf(ctx, pond)).filter((row) => row.account_id !== newcomer)).toEqual(before);
+    // And asking again counts nothing again.
+    const row = await rowOf(ctx, newcomer);
+    await askedBy(ctx, newcomer);
+    expect(await rowOf(ctx, newcomer)).toEqual(row);
+  });
+
+  test("the first count says nothing of its outcome in the log", async ({ ctx }) => {
+    const pond = await setUp(ctx, "test-gate-first-log");
+    await people(ctx.client, pond, 3, MEN);
+    await people(ctx.client, pond, 1, WOMEN);
+    await counted(ctx, NIGHT_1);
+    const [newcomer] = await people(ctx.client, pond, 1, MEN);
+    const { logger, lines } = await captureLogger();
+    const gate = await gateOf({ db: ctx.client, logger, now: () => NIGHT_2 }, newcomer as string);
+    expect(gate.state).toBe("waiting");
+    const logged = JSON.stringify(lines());
+    expect(logged).toContain("pond gate counted on a first ask");
+    expect(logged).not.toMatch(/waiting|admitted|opened|seeks/);
+    expect(logged).not.toContain('"counted":');
+    expect(logged).not.toContain(newcomer);
+  });
+
+  test("Another person's gate is never served", async ({ ctx }) => {
+    const pond = await setUp(ctx, "test-gate-own");
+    const men = await people(ctx.client, pond, 3, MEN);
+    const [woman] = await people(ctx.client, pond, 1, WOMEN);
+    await counted(ctx, NIGHT_1);
+    const waiting = await askedBy(ctx, men[2]);
+    const other = await askedBy(ctx, woman);
+    expect(waiting.gate.state).toBe("waiting");
+    // She is let in, and is told hers and nothing of his.
+    expect(other.gate).toEqual({ state: "closed", within: null, needed: 30, step: 10 });
+    // The route takes no id: there is no other gate to ask for.
+    const asOther = await signInAs(ctx.client, woman as string);
+    const tried = await ctx.app.request(`/gate?accountId=${men[2]}`, { headers: asOther.headers });
+    expect(GateResponse.parse(await tried.json())).toEqual(other.gate);
+  });
+
+  test("the gate is not served without a session", async ({ ctx }) => {
+    await setUp(ctx, "test-gate-session");
+    expect((await ctx.app.request("/gate")).status).toBe(401);
+    const forged = await ctx.app.request("/gate", {
+      headers: { authorization: `Bearer ${"x".repeat(43)}` },
+    });
+    expect(forged.status).toBe(401);
+  });
+
+  test("a person without a pond or a profile is told that something is missing, and is not counted", async ({
+    ctx,
+  }) => {
+    const pond = await setUp(ctx, "test-gate-missing");
+    const [noPond] = await people(ctx.client, null, 1, { ...ALIKE });
+    const [registered] = await people(ctx.client, pond, 1, { gender: "woman" });
+    for (const id of [noPond, registered]) {
+      expect((await askedBy(ctx, id)).gate).toEqual({
+        state: "incomplete",
+        within: null,
+        needed: null,
+        step: 10,
+      });
+      expect(await rowOf(ctx, id)).toBeUndefined();
+    }
+  });
+
+  test("The place stays behind with the pond, and the night says the new one", async ({ ctx }) => {
+    const pond = await setUp(ctx, "test-gate-left");
+    const next = await pondNamed(ctx.client, "test-gate-next");
+    const [she] = await people(ctx.client, pond, 1, ALIKE);
+    await people(ctx.client, pond, 30, ALIKE);
+    await people(ctx.client, next, 12, ALIKE);
+    await counted(ctx, NIGHT_1);
+    expect(await rowOf(ctx, she)).toMatchObject({ pond_id: pond, opened_at: NIGHT_1 });
+
+    expect((await put(ctx, she, "/account/pond", { pondId: next })).status).toBe(204);
+    expect(await rowOf(ctx, she)).toEqual({ account_id: she, pond_id: next, ...EMPTIED });
+
+    // Asking counts nothing: however often she moves, she cannot put questions to the figure.
+    for (const _ of [1, 2]) {
+      expect((await askedBy(ctx, she)).gate).toEqual({
+        state: "pending",
+        within: null,
+        needed: null,
+        step: 10,
+      });
+    }
+    expect(await rowOf(ctx, she)).toEqual({ account_id: she, pond_id: next, ...EMPTIED });
+
+    await counted(ctx, NIGHT_2);
+    expect(await rowOf(ctx, she)).toMatchObject({
+      pond_id: next,
+      admitted_at: NIGHT_2,
+      pool_said: 10,
+      opened_at: null,
+    });
+    expect((await askedBy(ctx, she)).gate).toMatchObject({ state: "closed", needed: 20 });
+    // Choosing the same pond again leaves the place where it is.
+    const row = await rowOf(ctx, she);
+    expect((await put(ctx, she, "/account/pond", { pondId: next })).status).toBe(204);
+    expect(await rowOf(ctx, she)).toEqual(row);
+  });
+
+  test("Admission is decided anew for a person who joins a group that waits", async ({ ctx }) => {
+    const pond = await setUp(ctx, "test-gate-anew");
+    await people(ctx.client, pond, 6, MEN);
+    await people(ctx.client, pond, 4, WOMEN);
+    await counted(ctx, NIGHT_1);
+    // Two more of the larger group; the one who came first keeps to what he declared.
+    const [honest, other] = await people(ctx.client, pond, 2, MEN);
+    await counted(ctx, NIGHT_2);
+    expect(await rowOf(ctx, honest)).toMatchObject({ admitted_at: null, place_said: 10 });
+    expect(await rowOf(ctx, other)).toMatchObject({ admitted_at: null, place_said: 10 });
+
+    // The other declares that he seeks his own gender too: nobody like that waits.
+    const both = { seeks: ["woman", "man"], ageWindow: WINDOW };
+    expect((await put(ctx, other, "/preferences", both)).status).toBe(200);
+    await counted(ctx, NIGHT_3);
+    expect(await rowOf(ctx, other)).toMatchObject({ admitted_at: NIGHT_3 });
+
+    // And takes it back. What he was given for it goes with it, then and there.
+    const back = { seeks: ["woman"], ageWindow: WINDOW };
+    expect((await put(ctx, other, "/preferences", back)).status).toBe(200);
+    expect(await rowOf(ctx, other)).toEqual({ account_id: other, pond_id: pond, ...EMPTIED });
+    expect((await askedBy(ctx, other)).gate.state).toBe("pending");
+
+    // A newcomer of the smaller group makes room for one: for the one who came first.
+    await people(ctx.client, pond, 1, WOMEN);
+    await counted(ctx, NIGHT_4);
+    expect(await rowOf(ctx, honest)).toMatchObject({ admitted_at: NIGHT_4 });
+    expect(await rowOf(ctx, other)).toMatchObject({ admitted_at: null, place_said: 10 });
+  });
+
+  test("a change of gender into a group that waits is decided anew, a change within the group is not", async ({
+    ctx,
+  }) => {
+    const pond = await setUp(ctx, "test-gate-gender");
+    await people(ctx.client, pond, 6, MEN);
+    await people(ctx.client, pond, 4, WOMEN);
+    const [they] = await people(ctx.client, pond, 1, {
+      ...ALIKE,
+      gender: "non_binary",
+      seeks: ["woman"],
+    });
+    const [he] = await people(ctx.client, pond, 1, {
+      ...MEN,
+      registeredAt: new Date("2026-01-01"),
+    });
+    await counted(ctx, NIGHT_1);
+    expect(await rowOf(ctx, they)).toMatchObject({ admitted_at: NIGHT_1 });
+    expect(await rowOf(ctx, he)).toMatchObject({ admitted_at: NIGHT_1 });
+
+    expect((await put(ctx, they, "/account/gender", { gender: "man" })).status).toBe(204);
+    expect(await rowOf(ctx, they)).toEqual({ account_id: they, pond_id: pond, ...EMPTIED });
+
+    // He seeks non-binary people too from now on: the group he waits with is the same.
+    const wider = { seeks: ["woman", "non_binary"], ageWindow: WINDOW };
+    expect((await put(ctx, he, "/preferences", wider)).status).toBe(200);
+    expect(await rowOf(ctx, he)).toMatchObject({ admitted_at: NIGHT_1 });
+    // And a narrower window of ages takes nothing back either.
+    const narrow = { seeks: ["woman", "non_binary"], ageWindow: { min: 30, max: 31 } };
+    expect((await put(ctx, he, "/preferences", narrow)).status).toBe(200);
+    expect(await rowOf(ctx, he)).toMatchObject({ admitted_at: NIGHT_1 });
+  });
+
+  test("a row that a change of pond or an erasure left behind is put right by the next count", async ({
+    ctx,
+  }) => {
+    const pond = await setUp(ctx, "test-gate-behind");
+    const other = await pondNamed(ctx.client, "test-gate-elsewhere");
+    const [moved, gone] = await people(ctx.client, pond, 2, ALIKE);
+    await counted(ctx, NIGHT_1);
+    // As if the statements that see to the row had not run.
+    await ctx.client.query("UPDATE account SET pond_id = $2 WHERE id = $1", [moved, other]);
+    await ctx.client.query(
+      "UPDATE account SET state = 'deleted', pond_id = NULL, gender = NULL WHERE id = $1",
+      [gone],
+    );
+    await counted(ctx, NIGHT_2, { pondId: pond });
+    expect(await rowsOf(ctx, pond)).toEqual([]);
+    expect(await rowOf(ctx, gone)).toBeUndefined();
+    // Emptied, in the pond the person lives in, for the count of that pond to decide.
+    expect(await rowOf(ctx, moved)).toEqual({ account_id: moved, pond_id: other, ...EMPTIED });
+    expect((await askedBy(ctx, moved)).gate.state).toBe("pending");
+  });
+
+  test("Erasure removes the place at the gate", async ({ ctx }) => {
+    const pond = await setUp(ctx, "test-gate-erased");
+    const [she] = await people(ctx.client, pond, 1, ALIKE);
+    await people(ctx.client, pond, 9, ALIKE);
+    await counted(ctx, NIGHT_1);
+    expect(await rowOf(ctx, she)).toBeDefined();
+    const { logger } = await captureLogger();
+    await eraseAccount({ db: ctx.client, logger, now: () => NIGHT_2 }, she as string);
+    expect(await rowOf(ctx, she)).toBeUndefined();
+    const { rows } = await ctx.client.query("SELECT 1 FROM gate WHERE account_id = $1", [she]);
+    expect(rows).toEqual([]);
+    // And she is in no pool from the next count on: with her a newcomer would have ten.
+    const [newcomer] = await people(ctx.client, pond, 1, ALIKE);
+    await counted(ctx, NIGHT_2);
+    expect(await rowOf(ctx, newcomer)).toMatchObject({ pool_said: 0 });
+  });
+
+  test("the export has the place at the gate as it is held", async ({ ctx }) => {
+    const pond = await setUp(ctx, "test-gate-export");
+    const [she] = await people(ctx.client, pond, 1, ALIKE);
+    await people(ctx.client, pond, 14, ALIKE);
+    const [waits] = (await people(ctx.client, pond, 3, MEN)).slice(2);
+    await people(ctx.client, pond, 1, WOMEN);
+    const { logger } = await captureLogger();
+    const deps = { db: ctx.client, logger, now: () => NIGHT_2 };
+    expect((await exportAccount(deps, she as string)).gate).toBeNull();
+
+    await counted(ctx, NIGHT_1);
+    expect((await exportAccount(deps, she as string)).gate).toEqual({
+      pondId: pond,
+      admittedAt: NIGHT_1.toISOString(),
+      placeSaid: null,
+      poolSaid: 10,
+      openedAt: null,
+      countedAt: NIGHT_1.toISOString(),
+    });
+    expect((await exportAccount(deps, waits as string)).gate).toMatchObject({
+      admittedAt: null,
+      placeSaid: 10,
+      poolSaid: 0,
+    });
+  });
+
+  test("gateOf counts the person alone: the rows of the others are written by the night", async ({
+    ctx,
+  }) => {
+    const pond = await setUp(ctx, "test-gate-alone");
+    const ids = await people(ctx.client, pond, 3, ALIKE);
+    const { logger } = await captureLogger();
+    const gate = await gateOf({ db: ctx.client, logger, now: () => NIGHT_1 }, ids[0] as string);
+    expect(gate).toMatchObject({ state: "closed" });
+    expect((await rowsOf(ctx, pond)).map((row) => row.account_id)).toEqual([ids[0]]);
+  });
+});

@@ -85,6 +85,7 @@ describe("migrate", () => {
           "card_shown",
           "consent",
           "events",
+          "gate",
           "identity",
           "matching_config",
           "moderator_roles",

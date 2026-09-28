@@ -127,6 +127,13 @@
       "when": 1790523461626,
       "tag": "0017_waitlist_k",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1790594421514,
+      "tag": "0018_gate",
+      "breakpoints": true
     }
   ]
 }
