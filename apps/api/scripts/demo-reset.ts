@@ -12,9 +12,9 @@
  * computer, and it looks before it acts: development or test, an API and a
  * bank on a loopback address, configuration from this process alone (never
  * from a parameter store), no proxy, a database server that is not a
- * deployed one, an object store at an address of this computer or none, and,
- * where histories are to be given, an API that answers as ours before
- * anybody is erased.
+ * deployed one, an object store at an address of this computer (or none,
+ * while no persona has a photo), and, where histories are to be given, an
+ * API that answers as ours before anybody is erased.
  */
 import { networkInterfaces } from "node:os";
 import { createPool } from "@kuutti/db";

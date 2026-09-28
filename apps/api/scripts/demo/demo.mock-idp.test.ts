@@ -1,6 +1,9 @@
 import { randomBytes } from "node:crypto";
+import { resolve } from "node:path";
+import { createPool, migrate, type Queryable, withTemporaryDatabase } from "@kuutti/db";
 import {
   DEMO_PERSONAS,
+  MOCK_BANK_AMR,
   OLDER_TERMS_VERSION,
   PERSONA_HISTORIES,
   personaHetu,
@@ -18,6 +21,7 @@ import {
   OidcBroker,
   REREGISTER_COOLDOWN_DAYS,
 } from "../../src/identity/index.ts";
+import type { MediaDeps } from "../../src/media/index.ts";
 import {
   captureLogger,
   describe,
@@ -317,6 +321,162 @@ describe("the walk to the bank and back", () => {
     });
     await expect(lookAtApi(sending)).rejects.toThrow(/is not Kuutti's API/);
     expect(asked).toEqual([{ url: `${API}/health`, redirect: "manual" }]);
+  });
+});
+
+/** A persona as a login at the mock bank leaves it: an identity and a live account. */
+async function personaInTheDatabase(db: Queryable, key: string) {
+  const identity = await db.query<{ id: string }>(
+    `INSERT INTO identity (hetu_hmac, broker_subject, acr, amr)
+     VALUES ($1, $2, 'x', ARRAY[$3]) RETURNING id`,
+    [`a hash for ${key}`, key, MOCK_BANK_AMR],
+  );
+  const identityId = identity.rows[0]?.id;
+  if (!identityId) throw new Error("no identity written");
+  const account = await db.query<{ id: string }>(
+    `INSERT INTO account (identity_id, state, birth_year, birth_month)
+     VALUES ($1, 'active', 1997, 3) RETURNING id`,
+    [identityId],
+  );
+  const accountId = account.rows[0]?.id;
+  if (!accountId) throw new Error("no account written");
+  return { identityId, accountId };
+}
+
+const stateOfAccount = async (db: Queryable, accountId: string) =>
+  (await db.query<{ state: string }>("SELECT state FROM account WHERE id = $1", [accountId]))
+    .rows[0]?.state;
+
+describe("the reset and the photos", () => {
+  const photoOf = (db: Queryable, accountId: string) =>
+    db.query(
+      `INSERT INTO photo (account_id, key, blurhash, width, height, position)
+       VALUES ($1, $2, 'LEHV6nWB2yk8pyo0adR*.7kCMdnj', 1200, 1600, 0)`,
+      [accountId, "c".repeat(64)],
+    );
+
+  test("without an object store a persona with photos stops the reset, before anybody is erased", async ({
+    ctx,
+  }) => {
+    const { logger } = await captureLogger();
+    const aino = await personaInTheDatabase(ctx.client, "aino");
+    const mikael = await personaInTheDatabase(ctx.client, "mikael");
+    await photoOf(ctx.client, aino.accountId);
+
+    const reset = resetPersonas({ db: ctx.client, logger, now: () => new Date() });
+    await expect(reset).rejects.toThrow(DemoError);
+    await expect(reset).rejects.toThrow(/photos of aino: .* nobody was erased/);
+    // Neither she nor the one without photos.
+    expect(await stateOfAccount(ctx.client, aino.accountId)).toBe("active");
+    expect(await stateOfAccount(ctx.client, mikael.accountId)).toBe("active");
+    const { rows } = await ctx.client.query("SELECT 1 FROM photo WHERE account_id = $1", [
+      aino.accountId,
+    ]);
+    expect(rows).toHaveLength(1);
+  });
+
+  test("with a store the objects go with the rows, and without photos no store is needed", async ({
+    ctx,
+  }) => {
+    const { logger } = await captureLogger();
+    const now = () => new Date();
+    const mikael = await personaInTheDatabase(ctx.client, "mikael");
+    expect(await resetPersonas({ db: ctx.client, logger, now })).toEqual({
+      identities: 1,
+      erased: 1,
+      objects: 0,
+      spared: [],
+    });
+    expect(await stateOfAccount(ctx.client, mikael.accountId)).toBeUndefined();
+
+    const aino = await personaInTheDatabase(ctx.client, "aino");
+    await photoOf(ctx.client, aino.accountId);
+    const deleted: string[] = [];
+    const media = {
+      store: {
+        delete: async (keys: string[]) => {
+          deleted.push(...keys);
+        },
+      },
+    } as unknown as MediaDeps;
+    expect(await resetPersonas({ db: ctx.client, logger, now, media })).toEqual({
+      identities: 1,
+      erased: 1,
+      // One picture is three objects: thumb, card and full.
+      objects: 3,
+      spared: [],
+    });
+    expect(deleted).toHaveLength(3);
+    for (const key of deleted) expect(key).toContain("c".repeat(64));
+  });
+});
+
+// A session of its own for the grant, so a database of its own: what waits
+// for what is only seen between two sessions, and nothing here may be seen
+// by another test file.
+describe("a role granted while the reset runs", () => {
+  const sleep = <T>(ms: number, value: T) =>
+    new Promise<T>((done) => setTimeout(() => done(value), ms));
+
+  test("waits for the reset and then finds the persona gone, whole", async () => {
+    await withTemporaryDatabase(async (url) => {
+      const pool = createPool({ connectionString: url, max: 4, applicationName: "kuutti-reset" });
+      try {
+        await migrate(pool, resolve(import.meta.dirname, "../../../../packages/db/drizzle"));
+        const { logger } = await captureLogger();
+        const { identityId } = await personaInTheDatabase(pool, "aino");
+
+        // As the moderator's command line writes it, tried at the worst
+        // moment: she has been asked about and erased, and is not deleted yet.
+        let granted: Promise<string> | undefined;
+        const grant = () =>
+          pool
+            .query(
+              `INSERT INTO moderator_roles (identity_id, role, granted_by)
+               VALUES ($1, 'moderator', 'test')`,
+              [identityId],
+            )
+            .then(
+              () => "granted",
+              (error: { code?: string }) => `refused: ${error.code}`,
+            );
+
+        const session = await pool.connect();
+        try {
+          await session.query("BEGIN");
+          const watched = {
+            query: async (text: string, values?: unknown[]) => {
+              if (granted === undefined && text.includes("DELETE FROM admin_session")) {
+                granted = grant();
+                // Time for the grant to get to where it waits.
+                await sleep(300, null);
+              }
+              return session.query(text, values);
+            },
+          } as Queryable;
+          expect(await resetPersonas({ db: watched, logger, now: () => new Date() })).toEqual({
+            identities: 1,
+            erased: 1,
+            objects: 0,
+            spared: [],
+          });
+          if (!granted) throw new Error("the grant was never tried");
+          // The reset has not ended: the grant waits for it.
+          expect(await Promise.race([granted, sleep(200, "waiting")])).toBe("waiting");
+          await session.query("COMMIT");
+        } finally {
+          session.release();
+        }
+        // Nobody to grant it to: the foreign key finds no identity.
+        expect(await granted).toBe("refused: 23503");
+        const { rows } = await pool.query(
+          "SELECT 1 FROM identity WHERE broker_subject = 'aino' UNION ALL SELECT 1 FROM account",
+        );
+        expect(rows).toHaveLength(0);
+      } finally {
+        await pool.end();
+      }
+    });
   });
 });
 
