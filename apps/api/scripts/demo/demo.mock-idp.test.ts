@@ -264,7 +264,7 @@ describe("the walk to the bank and back", () => {
     version: "0.0.0",
     commit: "abc1234",
     builtAt: "2026-09-01T09:00:00.000Z",
-    source: "https://github.com/kuutti-fi/kuutti-app",
+    source: "https://github.com/kuutti-ry/kuutti-app",
     db: "ok",
     migrations: "current",
   };

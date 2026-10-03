@@ -51,7 +51,7 @@ Commits made through the GitHub web editor are signed off automatically.
 Fifteen minutes from clone to a running app. Prerequisites: Node 22.18 or newer, Docker Desktop or OrbStack, git.
 
 ```bash
-git clone https://github.com/kuutti-fi/kuutti-app.git && cd kuutti-app
+git clone https://github.com/kuutti-ry/kuutti-app.git && cd kuutti-app
 corepack enable                     # pnpm at the version pinned in package.json
 cp env.example .env                 # local values only, nothing secret
 pnpm install

@@ -8,7 +8,7 @@ const ok = {
   version: "0.0.0-test",
   commit: "abc1234",
   builtAt: "2026-09-13T00:00:00.000Z",
-  source: "https://github.com/kuutti-fi/kuutti-app",
+  source: "https://github.com/kuutti-ry/kuutti-app",
   db: "ok",
   migrations: "current",
 };
@@ -57,12 +57,12 @@ describe("SmokeScreen", () => {
     mockFetch(async () => jsonResponse(ok));
     await renderWithTheme(<SmokeScreen />);
     const link = await screen.findByRole("link", { name: "Open the source code in the browser" });
-    expect(screen.getByText("https://github.com/kuutti-fi/kuutti-app")).toBeTruthy();
+    expect(screen.getByText("https://github.com/kuutti-ry/kuutti-app")).toBeTruthy();
     expect(
       screen.getByText("Kuutti is free software under the AGPL-3.0 licence, published at:"),
     ).toBeTruthy();
     await fireEvent.press(link);
-    expect(openURL).toHaveBeenCalledWith("https://github.com/kuutti-fi/kuutti-app");
+    expect(openURL).toHaveBeenCalledWith("https://github.com/kuutti-ry/kuutti-app");
   });
 
   it("refuses a health answer whose source is not an https address", async () => {

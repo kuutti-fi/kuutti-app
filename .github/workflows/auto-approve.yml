@@ -28,11 +28,16 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
+          # The owner is read from the run, not written here: a name written
+          # here outlived the organisation's rename (#110) and the job ran
+          # green while it approved nothing. Empty, the step fails instead.
+          OWNER: ${{ github.repository_owner }}
         run: |
           set -euo pipefail
+          : "${OWNER:?the run names no repository owner}"
           gh pr list --repo "$REPO" --author superseacat --state open \
             --json number,isDraft,reviewDecision,headRepositoryOwner \
-            --jq '.[] | select(.isDraft == false and .reviewDecision != "APPROVED" and .headRepositoryOwner.login == "kuutti-fi") | .number' |
+            --jq '.[] | select(.isDraft == false and .reviewDecision != "APPROVED" and .headRepositoryOwner.login == env.OWNER) | .number' |
           while read -r n; do
             # A native review record needs a person's approval on record (#55).
             # The diff is read first and the guard fails closed: no diff, no approval.

@@ -246,7 +246,7 @@ jobs:
             echo '::error::The pull request body names no issue. Add "Refs #<n>".'
             exit 1
           fi
-          if grep -Eiq '\b(close|closes|closed|fix|fixes|fixed|resolve|resolves|resolved)\b[[:space:]]*(kuutti-fi/kuutti-app)?#[0-9]+' <<< "$PR_BODY"; then
+          if grep -Eiq '\b(close|closes|closed|fix|fixes|fixed|resolve|resolves|resolved)\b[[:space:]]*([a-z0-9._-]+/[a-z0-9._-]+)?#[0-9]+' <<< "$PR_BODY"; then
             echo '::error::A closing keyword would close the issue on merge. Write "Refs #<n>"; the maintainer closes the issue after testing.'
             exit 1
           fi

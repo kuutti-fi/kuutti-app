@@ -34,7 +34,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  IMAGE: ghcr.io/kuutti-fi/kuutti-api
+  IMAGE: ghcr.io/kuutti-ry/kuutti-api
   PREVIEW_LIMIT: "3"
 
 jobs:

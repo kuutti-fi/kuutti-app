@@ -28,7 +28,7 @@ case "$env" in
   prod)    app_env=production; api_host=api.kuutti.app; dokploy_host=dokploy.kuutti.app ;;
   *) echo "environment must be staging or prod" >&2; exit 2 ;;
 esac
-image="ghcr.io/kuutti-fi/kuutti-api:main"
+image="ghcr.io/kuutti-ry/kuutti-api:main"
 url="${DOKPLOY_URL%/}"
 
 api() { curl -fsS --max-time 30 -H "x-api-key: $DOKPLOY_TOKEN" -H 'content-type: application/json' "$@"; }

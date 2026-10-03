@@ -129,7 +129,7 @@ const Env = z.object({
   // commit, and the app and the admin panel show both. A fork that deploys
   // changes sets it to its own repository; https only, because it is a link
   // people are asked to follow.
-  SOURCE_URL: z.url({ protocol: /^https$/ }).default("https://github.com/kuutti-fi/kuutti-app"),
+  SOURCE_URL: z.url({ protocol: /^https$/ }).default("https://github.com/kuutti-ry/kuutti-app"),
   BODY_LIMIT_BYTES: z.coerce.number().int().min(1024).default(1_048_576),
   RATE_LIMIT_PER_MINUTE: z.coerce.number().int().min(1).optional(),
   // Whose word the rate limiter takes for the client address (#52, F19,
