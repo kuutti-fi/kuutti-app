@@ -20,7 +20,7 @@ vi.mock("@sentry/node", () => ({
   ),
 }));
 
-import { sentryOptions, sentryReporter, stripRequestData } from "./sentry.ts";
+import { collectNothing, sentryOptions, sentryReporter, stripRequestData } from "./sentry.ts";
 
 const base = { APP_ENV: "staging" as const, APP_VERSION: "1.2.3", GIT_COMMIT: "abc1234" };
 
@@ -31,7 +31,10 @@ describe("sentry options", () => {
     expect(on.enabled).toBe(true);
     expect(on.environment).toBe("staging");
     expect(on.release).toBe("kuutti-api@1.2.3+abc1234");
-    expect(on.sendDefaultPii).toBe(false);
+    expect(on.dataCollection).toBe(collectNothing);
+    expect(on.includeLocalVariables).toBe(false);
+    expect(on.enableRuntimeChannelInjection).toBe(false);
+    expect(on.tracePropagationTargets).toEqual([]);
     expect(on.sampleRate).toBe(1);
     expect(on.tracesSampleRate).toBe(0);
     expect(on.beforeSend).toBe(stripRequestData);
@@ -52,6 +55,38 @@ describe("sentry options", () => {
     expect(event.user).toEqual({ id: "acc-1" });
     expect(event.breadcrumbs?.[0]?.data).toBeUndefined();
     expect(JSON.stringify(event)).not.toMatch(/010190-123A|a@b\.fi|private words|session=abc/);
+  });
+
+  it("strips the values of local variables from every stack frame, and extra", () => {
+    const event = stripRequestData({
+      type: undefined,
+      extra: { __serialized__: { hetu: "010190-123A" } },
+      exception: {
+        values: [
+          {
+            type: "Error",
+            value: "boom",
+            stacktrace: {
+              frames: [
+                {
+                  function: "callback",
+                  lineno: 12,
+                  vars: { hetu: "010190-123A", body: "private words" },
+                },
+                { function: "handler", lineno: 40 },
+              ],
+            },
+          },
+        ],
+      },
+    });
+    const frames = event.exception?.values?.[0]?.stacktrace?.frames;
+    expect(frames).toEqual([
+      { function: "callback", lineno: 12 },
+      { function: "handler", lineno: 40 },
+    ]);
+    expect(event.extra).toBeUndefined();
+    expect(JSON.stringify(event)).not.toMatch(/010190-123A|private words/);
   });
 
   it("reports an exception with the request id and route as tags", () => {

@@ -51,6 +51,15 @@ overrides:
   "brace-expansion@2": ">=2.1.6 <3"
   "brace-expansion@5": ">=5.0.11 <6"
   "joi@17": ">=17.13.7 <18"
+  # Not installed at all. @sentry/node 11 lists its bundler plugins as a
+  # dependency for the entry points ./vite, ./rollup, ./webpack and ./esbuild,
+  # which the API does not import, and they bring Sentry's command-line tool
+  # (`sentry`, FSL-1.1-Apache-2.0, outside the licence policy) and a native
+  # parser for every platform. The image's build, which installs for the API
+  # alone, fails if the API ever comes to need them; a whole-workspace install
+  # would find the copy of an older major that @sentry/react-native brings.
+  # Remove this when the plugins are an optional peer.
+  "@sentry/node>@sentry/bundler-plugins": "-"
 
 # pnpm audit: two advisories set aside, each with its reason. Neither has a
 # patched version, and neither package is in the API's image or the app's

@@ -5,6 +5,28 @@ import type { ErrorReporter } from "./errors.ts";
 type SentryConfig = Pick<Config, "SENTRY_DSN" | "APP_ENV" | "APP_VERSION" | "GIT_COMMIT">;
 
 /**
+ * Every category of data the SDK would collect by itself, switched off. Since
+ * version 11 the SDK collects all of them unless told otherwise (cookies,
+ * headers, request and response bodies, query strings, database parameters),
+ * where `sendDefaultPii: false` used to keep them out. A body can carry a
+ * message text or, during the bank callback, the hetu (rule 1), so nothing is
+ * left to a default: a test holds the resolved options of the real SDK to
+ * this, and fails when a later version adds a category.
+ */
+export const collectNothing = {
+  userInfo: false,
+  cookies: false,
+  httpHeaders: false,
+  httpBodies: [],
+  urlQueryParams: false,
+  graphQL: { document: false, variables: false },
+  genAI: { inputs: false, outputs: false },
+  databaseQueryData: false,
+  queues: false,
+  stackFrameVariables: false,
+} satisfies NonNullable<Sentry.NodeOptions["dataCollection"]>;
+
+/**
  * Error reporting only (TD-19, #11): every unhandled error, no tracing, and
  * nothing Sentry would attach by default that the logs may not carry either.
  * The DSN is public by design and comes from /kuutti/<env>/sentry-dsn; with
@@ -16,7 +38,13 @@ export function sentryOptions(config: SentryConfig): Sentry.NodeOptions {
     enabled: config.SENTRY_DSN !== undefined,
     environment: config.APP_ENV,
     release: `kuutti-api@${config.APP_VERSION}+${config.GIT_COMMIT ?? "unknown"}`,
-    sendDefaultPii: false,
+    dataCollection: collectNothing,
+    includeLocalVariables: false,
+    // Nothing is injected into the modules the API loads: what is reported
+    // stays the error handler's decision, not a framework integration's.
+    enableRuntimeChannelInjection: false,
+    // No tracing, so no trace headers on our own requests to Telia or AWS.
+    tracePropagationTargets: [],
     sampleRate: 1,
     tracesSampleRate: 0,
     beforeSend: stripRequestData,
@@ -27,6 +55,9 @@ export function sentryOptions(config: SentryConfig): Sentry.NodeOptions {
  * Request bodies, headers, cookies and query strings never leave the box: a
  * body can carry a message text or, during the bank callback, the hetu. What
  * remains identifies the request (requestId tag, route) and nothing else.
+ * The values of local variables and anything in `extra` go the same way,
+ * whatever attached them. This is the second net under `collectNothing`, not a
+ * replacement for it.
  */
 export function stripRequestData<T extends Sentry.ErrorEvent>(event: T): T {
   delete event.request;
@@ -35,6 +66,13 @@ export function stripRequestData<T extends Sentry.ErrorEvent>(event: T): T {
   }
   if (event.breadcrumbs) {
     event.breadcrumbs = event.breadcrumbs.map((crumb) => ({ ...crumb, data: undefined }));
+  }
+  // A thrown or rejected plain object is serialised whole into `extra`.
+  delete event.extra;
+  for (const exception of event.exception?.values ?? []) {
+    for (const frame of exception.stacktrace?.frames ?? []) {
+      delete frame.vars;
+    }
   }
   return event;
 }
