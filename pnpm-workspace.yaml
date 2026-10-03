@@ -37,11 +37,38 @@ allowBuilds:
 # (pnpm's default, stated explicitly). Exclusions are a decision, not a convenience.
 minimumReleaseAge: 1440
 
-# Patched transitive versions the audit gate requires. All three sit under
-# eas-cli (a CLI run only in CI), which still ships older ranges; the majors
-# are unchanged, so nothing else in the tree moves. Remove an entry once
-# eas-cli's own range is at or above it.
+# Patched transitive versions the audit gate requires. The first three and joi
+# sit under eas-cli (a CLI run only in CI), which still ships older ranges;
+# brace-expansion sits under the globbing of eas-cli, the Expo tooling and jest
+# (GHSA-6j4f-fj2g-mc7p and GHSA-qhr7-859c-m2p7, 2026-09-29). The majors are
+# unchanged, so nothing else in the tree moves. Remove an entry once the
+# range of whoever asks for the package is at or above it.
 overrides:
   "minimatch@5": ">=5.1.8 <6"
   "nanoid@3": ">=3.3.18 <4"
   "tar@7": ">=7.5.21 <8"
+  "brace-expansion@1": ">=1.1.20 <2"
+  "brace-expansion@2": ">=2.1.6 <3"
+  "brace-expansion@5": ">=5.0.11 <6"
+  "joi@17": ">=17.13.7 <18"
+
+# pnpm audit: two advisories set aside, each with its reason. Neither has a
+# patched version, and neither package is in the API's image or the app's
+# bundle. Remove an entry when a patched version exists or the package is gone
+# from the tree. Every other advisory still fails the job.
+#
+# GHSA-86w9-cpqp-85rv (node-forge <= 1.4.0): a forged RSA PKCS#1 v1.5 signature
+# is accepted for keys with a low exponent. node-forge is asked for by
+# @expo/code-signing-certificates, @expo/pkcs12 and eas-cli only: tooling on a
+# developer's machine and in CI, which checks certificates and signatures it
+# made itself. The app verifies an update's signature with the platform's own
+# cryptography, not with this package.
+#
+# GHSA-vfj7-8cjw-p6xm (braces <= 3.0.3): a deeply nested brace pattern
+# exhausts the stack. braces is asked for by micromatch only, under fast-glob,
+# jest, Metro's file map and tailwindcss: build and test tools that expand the
+# patterns of our own configuration, never a pattern somebody sends us.
+auditConfig:
+  ignoreGhsas:
+    - GHSA-86w9-cpqp-85rv
+    - GHSA-vfj7-8cjw-p6xm
