@@ -25,7 +25,7 @@
     "@kuutti/db": "workspace:*",
     "@kuutti/i18n": "workspace:*",
     "@kuutti/schema": "workspace:*",
-    "@sentry/node": "^10.75.0",
+    "@sentry/node": "^11.1.0",
     "blurhash": "^2.0.5",
     "hono": "^4.13.12",
     "jose": "^6.2.12",
