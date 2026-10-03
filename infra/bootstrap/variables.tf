@@ -17,13 +17,13 @@ variable "region" {
 }
 
 # kuutti-app was created after 15 July 2026, so GitHub issues immutable subject
-# claims: the sub is repo:kuutti-fi@<owner_id>/kuutti-app@<repo_id>:... rather
+# claims: the sub is repo:kuutti-ry@<owner_id>/kuutti-app@<repo_id>:... rather
 # than the name-based form. Trust policies below key on these numeric IDs, which
 # are stable across renames. Get them with:
-#   gh api repos/kuutti-fi/kuutti-app --jq '{repo_id: .id, owner_id: .owner.id}'
+#   gh api repos/kuutti-ry/kuutti-app --jq '{repo_id: .id, owner_id: .owner.id}'
 
 variable "github_owner_id" {
-  description = "Numeric ID of the kuutti-fi organisation."
+  description = "Numeric ID of the kuutti-ry organisation."
   type        = string
 }
 
@@ -55,7 +55,7 @@ variable "monthly_budget_usd" {
 }
 
 variable "github_domain_verification" {
-  description = "GitHub organisation domain verification (#16 B.1): the record name GitHub shows, without the domain (for example _gh-kuutti-fi-o), and its code. Null until an owner has started the verification."
+  description = "GitHub organisation domain verification (#16 B.1): the record name GitHub shows, without the domain (for example _gh-kuutti-ry-o), and its code. Null until an owner has started the verification."
   type = object({
     name = string
     code = string
@@ -64,6 +64,6 @@ variable "github_domain_verification" {
 
   validation {
     condition     = var.github_domain_verification == null || !strcontains(var.github_domain_verification.name, ".")
-    error_message = "name is the record's first label only (for example _gh-kuutti-fi-o): the domain is appended here."
+    error_message = "name is the record's first label only (for example _gh-kuutti-ry-o): the domain is appended here."
   }
 }

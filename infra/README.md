@@ -43,7 +43,7 @@ Sign in from your own terminal. An agent working in this repository never types,
 GitHub's immutable subject claims mean the trust policy keys on numeric IDs, not names. Get them:
 
 ```sh
-gh api repos/kuutti-fi/kuutti-app --jq '{repo_id: .id, owner_id: .owner.id}'
+gh api repos/kuutti-ry/kuutti-app --jq '{repo_id: .id, owner_id: .owner.id}'
 ```
 
 Then:
@@ -102,7 +102,7 @@ gh variable set AWS_PERMISSIONS_BOUNDARY_ARN --body "$(tofu output -raw permissi
 The apply role trusts exactly two subjects, `environment:staging` and `environment:prod`, so the production approval lives in GitHub's environment protection, not in AWS. Create the environments with the same names (the GitHub Terraform provider is not adopted; `infra/github/` stays empty until that question is settled):
 
 ```sh
-R=repos/kuutti-fi/kuutti-app
+R=repos/kuutti-ry/kuutti-app
 # staging: deployable from main only, no reviewers
 gh api -X PUT "$R/environments/staging" --input - <<'JSON'
 {"wait_timer":0,"reviewers":[],"deployment_branch_policy":{"protected_branches":false,"custom_branch_policies":true}}
@@ -131,7 +131,7 @@ for e in staging prod; do gh api "$R/environments/$e/deployment-branch-policies"
 With the checks on `main`, the ruleset `23053522` carries a pull-request rule and the required checks, and direct pushes have ended. Code-owner review stays off: the only code owner is the maintainer, and an author cannot approve their own pull request, so requiring it would block every merge.
 
 ```sh
-gh api -X PUT repos/kuutti-fi/kuutti-app/rulesets/23053522 --input - <<'JSON'
+gh api -X PUT repos/kuutti-ry/kuutti-app/rulesets/23053522 --input - <<'JSON'
 {"name":"Protect main","target":"branch","enforcement":"active",
  "bypass_actors":[{"actor_id":5,"actor_type":"RepositoryRole","bypass_mode":"always"}],
  "conditions":{"ref_name":{"include":["~DEFAULT_BRANCH"],"exclude":[]}},
@@ -144,7 +144,7 @@ gh api -X PUT repos/kuutti-fi/kuutti-app/rulesets/23053522 --input - <<'JSON'
 JSON
 ```
 
-The rules above are the live ones as of 2026-09-26: fourteen checks, `i18n` (#13) and `licenses` (#16) among them; one approving review since the `contributors` team got write (2026-09-25), and one more for changes no person is attributed to, such as a pull request Copilot's coding agent wrote (`require_extra_approval_for_unattributed_changes`); approvals are dismissed when new commits arrive (the native review of #55 relies on that); squash merges only. `dependency review` runs on every pull request without being required. The ruleset on GitHub is the source of truth (`gh api repos/kuutti-fi/kuutti-app/rulesets/23053522`), and a PUT replaces all of it, `bypass_actors` included: the snippet carries the live value, repository role 5 (admin) bypassing always, which only an admin token can read back, so compare before a PUT. `required_review_thread_resolution` is off, although #8 item 7 asked for it: with Copilot reviewing every pull request, an unresolved bot thread would block every merge until someone clicked; turning it on is a one-line change here and in the live rule, the maintainer's call. A change to the ruleset updates this snippet, `CLAUDE.md` (Git) and `CONTRIBUTING.md` in the same pull request.
+The rules above are the live ones as of 2026-09-26: fourteen checks, `i18n` (#13) and `licenses` (#16) among them; one approving review since the `contributors` team got write (2026-09-25), and one more for changes no person is attributed to, such as a pull request Copilot's coding agent wrote (`require_extra_approval_for_unattributed_changes`); approvals are dismissed when new commits arrive (the native review of #55 relies on that); squash merges only. `dependency review` runs on every pull request without being required. The ruleset on GitHub is the source of truth (`gh api repos/kuutti-ry/kuutti-app/rulesets/23053522`), and a PUT replaces all of it, `bypass_actors` included: the snippet carries the live value, repository role 5 (admin) bypassing always, which only an admin token can read back, so compare before a PUT. `required_review_thread_resolution` is off, although #8 item 7 asked for it: with Copilot reviewing every pull request, an unresolved bot thread would block every merge until someone clicked; turning it on is a one-line change here and in the live rule, the maintainer's call. A change to the ruleset updates this snippet, `CLAUDE.md` (Git) and `CONTRIBUTING.md` in the same pull request.
 
 ### Hardening settings (#16), maintainer only
 
@@ -153,7 +153,7 @@ Settings of the repository and the organisation exist only on GitHub, so the com
 **Tag ruleset.** A `v*` tag deploys production, so creating, moving and deleting one is for repository admins only:
 
 ```sh
-gh api -X POST repos/kuutti-fi/kuutti-app/rulesets --input - <<'JSON'
+gh api -X POST repos/kuutti-ry/kuutti-app/rulesets --input - <<'JSON'
 {"name":"Protect release tags","target":"tag","enforcement":"active",
  "bypass_actors":[{"actor_id":5,"actor_type":"RepositoryRole","bypass_mode":"always"}],
  "conditions":{"ref_name":{"include":["refs/tags/v*"],"exclude":[]}},
@@ -166,7 +166,7 @@ JSON
 **Code scanning, secret scanning, Actions allow-list:**
 
 ```sh
-R=repos/kuutti-fi/kuutti-app
+R=repos/kuutti-ry/kuutti-app
 gh api -X PATCH "$R/code-scanning/default-setup" -f state=configured -f 'languages[]=actions' -f 'languages[]=javascript-typescript'
 gh api -X PATCH "$R" --input - <<'JSON'
 {"security_and_analysis":{"secret_scanning_non_provider_patterns":{"status":"enabled"},"secret_scanning_validity_checks":{"status":"enabled"}}}
@@ -185,9 +185,17 @@ JSON
 **Build provenance.** `build.yml` signs a provenance attestation for every image it pushes from `main`, and again under the tag when a release retags that digest (job `attest`). Before deploying an image by hand, in a recovery, check that it is one of ours, built by that workflow from that ref:
 
 ```sh
-gh attestation verify oci://ghcr.io/kuutti-fi/kuutti-api:<sha> --repo kuutti-fi/kuutti-app \
-  --signer-workflow kuutti-fi/kuutti-app/.github/workflows/build.yml --source-ref refs/heads/main
+gh attestation verify oci://ghcr.io/kuutti-ry/kuutti-api:<sha> --repo kuutti-ry/kuutti-app \
+  --signer-workflow kuutti-ry/kuutti-app/.github/workflows/build.yml --source-ref refs/heads/main
 # a release: oci://...:vX.Y.Z with --source-ref refs/tags/vX.Y.Z
+```
+
+An image built before 2026-10-03 was attested when the organisation was still `kuutti-fi` (#110), and its certificate says so: verify it with `--repo kuutti-fi/kuutti-app --signer-workflow kuutti-fi/kuutti-app/.github/workflows/build.yml`, at the image's present path `ghcr.io/kuutti-ry/kuutti-api`. With the new name it is refused. The old name proves less than it did, because a name can change hands and the IDs cannot: for such an image, read the IDs the certificate carries as well and hold them against this repository's (`gh api repos/kuutti-ry/kuutti-app --jq '{repo_id: .id, owner_id: .owner.id}'`):
+
+```sh
+gh attestation verify oci://ghcr.io/kuutti-ry/kuutti-api:<sha> --repo kuutti-fi/kuutti-app \
+  --signer-workflow kuutti-fi/kuutti-app/.github/workflows/build.yml --source-ref refs/heads/main \
+  --format json --jq '.[].verificationResult.signature.certificate | {sourceRepositoryIdentifier, sourceRepositoryOwnerIdentifier}'
 ```
 
 `--repo` alone is not enough: a pull request from this repository runs its own copy of `build.yml` and could push and attest an image under any tag. Its certificate carries `refs/pull/<n>/merge`, so `--source-ref` refuses it, and `--signer-workflow` refuses any other workflow file. Images built before #16 landed have no attestation.
@@ -243,7 +251,7 @@ The same in `infra/envs/prod`. Applies run through CI (#8): plans on every pull 
 | `infra-prod.yml` | `v*` tags | `kuutti-ci-apply` | applies `envs/prod` after the `prod` reviewer approves |
 | `infra-oidc.yml` | changes under `infra/**` | `kuutti-ci-plan` | proves the plan role still cannot decrypt a SecureString |
 | `eas-build.yml` | `main` (fingerprint changed), `v*` tags, by hand | none (GitHub environment `staging` or `prod`) | native builds on EAS: `development` and `preview` when the fingerprint of `main` differs from the last development build's, `production` on a tag; links on the pinned builds issue (`apps/mobile/README.md`) |
-| `build.yml` | every push and pull request | none | builds the API image on arm64 and smoke-tests it; on `main` pushes `ghcr.io/kuutti-fi/kuutti-api:<sha>` and `:main`, on a pull request from this repository `:pr-<n>-<sha7>` for its preview, on a tag retags that same image as `:vX.Y.Z`, then calls `deploy.yml` (Dokploy, `/health`, then the EAS Update to the environment's channel, #10) and, for tags, `release.yml` |
+| `build.yml` | every push and pull request | none | builds the API image on arm64 and smoke-tests it; on `main` pushes `ghcr.io/kuutti-ry/kuutti-api:<sha>` and `:main`, on a pull request from this repository `:pr-<n>-<sha7>` for its preview, on a tag retags that same image as `:vX.Y.Z`, then calls `deploy.yml` (Dokploy, `/health`, then the EAS Update to the environment's channel, #10) and, for tags, `release.yml` |
 | `preview.yml` | pull requests from this repository | none (GitHub environment `preview`) | the three previews of #9: the pull request's image as Dokploy application `api-pr-<n>` on the staging box with database `kuutti_pr_<n>`, the web export on EAS Hosting as alias `pr-<n>`, an EAS Update on branch `pr-<n>` when native code changed; one sticky comment |
 | `preview-cleanup.yml` | on every push to `main`, on a schedule and by hand, from `main` only (GitHub environment `preview-cleanup`, no reviewer; ADR-012) | `kuutti-ci-plan` | removes the Dokploy application, the EAS alias and branch, and drops `kuutti_pr_<n>` through the `kuutti-staging-preview-database` Run Command document, the Dokploy application last so a failed step is retried by the next sweep; the sweep also retires previews older than 7 days, and cancels the runs of `preview.yml` that wait for approval while their pull request is no longer open (the run's own token, no role) |
 
@@ -393,7 +401,7 @@ Once, after staging is applied and its Dokploy is configured:
 6. **GitHub.** The environment `preview` with the maintainer as required reviewer (Trust, above) and no deployment branch restriction (pull requests deploy from any branch of this repository), four variables and two secrets; the environment `preview-cleanup` with no reviewer and the same four variables and two secrets (ADR-012); then the switch:
 
    ```sh
-   R=repos/kuutti-fi/kuutti-app
+   R=repos/kuutti-ry/kuutti-app
    gh api -X PUT "$R/environments/preview" --input - <<'JSON'
    {"wait_timer":0,"reviewers":[],"deployment_branch_policy":null}
    JSON
@@ -478,9 +486,9 @@ node -e 'const c=require("node:crypto");const [pem,use]=process.argv.slice(1);co
 
 ## The website
 
-`kuutti.app` is served by Amplify Hosting from the site's own repository, `kuutti-fi/kuutti-app-site`: its `amplify.yml` is the build spec, its `customHttp.yml` the headers, and a push to its `main` deploys. The placeholder page this repository served from `site/` until 2026-09-28 is gone.
+`kuutti.app` is served by Amplify Hosting from the site's own repository, `kuutti-ry/kuutti-app-site`: its `amplify.yml` is the build spec, its `customHttp.yml` the headers, and a push to its `main` deploys. The placeholder page this repository served from `site/` until 2026-09-28 is gone.
 
-The Amplify app (`kuutti-app-site`, eu-central-1) is the console-created exception of ADR-001: connecting Amplify to a repository is an installation of the Amplify GitHub App, a browser consent that no provider and no CLI call performs without a personal access token, which the ADR forbids. Creating it, once, in the Amplify console: *Create new app*, GitHub; on GitHub's page give the Amplify GitHub App access to `kuutti-app-site` (*Only select repositories*); repository `kuutti-fi/kuutti-app-site`, branch `main`, not a monorepo; the build settings are read from the repository's `amplify.yml`; *Save and deploy*. Then *Custom domains*, *Add domain*, `kuutti.app` from the Route 53 list: Amplify issues the certificate and writes the validation and alias records into the zone itself (10 to 30 minutes).
+The Amplify app (`kuutti-app-site`, eu-central-1) is the console-created exception of ADR-001: connecting Amplify to a repository is an installation of the Amplify GitHub App, a browser consent that no provider and no CLI call performs without a personal access token, which the ADR forbids. Creating it, once, in the Amplify console: *Create new app*, GitHub; on GitHub's page give the Amplify GitHub App access to `kuutti-app-site` (*Only select repositories*); repository `kuutti-ry/kuutti-app-site`, branch `main`, not a monorepo; the build settings are read from the repository's `amplify.yml`; *Save and deploy*. Then *Custom domains*, *Add domain*, `kuutti.app` from the Route 53 list: Amplify issues the certificate and writes the validation and alias records into the zone itself (10 to 30 minutes).
 
 The console leaves three things to put right, from the CLI after `pnpm aws:login`, no token involved: it adds a catch-all rewrite (`/<*>` to `/index.html`, 404-200) that would answer every missing address with the home page, and the site has real pages and a 404 of its own; the redirect from `www` and the cost allocation tag are not set.
 

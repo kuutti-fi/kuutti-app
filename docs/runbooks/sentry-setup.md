@@ -2,7 +2,7 @@
 
 Error reporting only (TD-19, #11): unhandled errors from the API and the app, with readable stack traces. No tracing, no session replay, no user data: the code strips request bodies, headers and breadcrumb data before anything leaves (`apps/api/src/lib/sentry.ts`, `apps/mobile/src/lib/sentry.ts`, both asserted by tests). Until a DSN is configured the SDK is off everywhere, which is today.
 
-The site is sentry.io. **The data region is chosen when the organisation is created and cannot be changed afterwards: choose the EU.** The organisation lives at `https://kuutti-fi.sentry.io` (slug `kuutti-fi`: `kuutti` was already taken on 2026-09-20) and its API at `https://de.sentry.io`. The `app.json` plugin block and the upload step in `deploy.yml` (`SENTRY_ORG`) both name it.
+The site is sentry.io. **The data region is chosen when the organisation is created and cannot be changed afterwards: choose the EU.** The organisation lives at `https://kuutti-fi.sentry.io` (slug `kuutti-fi`: `kuutti` was already taken on 2026-09-20; it is Sentry's own name and stayed when the GitHub organisation became `kuutti-ry`, #110) and its API at `https://de.sentry.io`. The `app.json` plugin block and the upload step in `deploy.yml` (`SENTRY_ORG`) both name it.
 
 Done on 2026-09-20: every section. Both proofs of section 5 passed on staging (the API's self-test at boot; the app's test error from both phones with symbolicated frames), the test issues were deleted. What the events still carried afterwards, a per-install user id and a city, is #28: the app now strips the user before sending; the geo is an organisation-level scrubbing rule.
 

@@ -1,5 +1,5 @@
 # cp to terraform.tfvars and fill in. terraform.tfvars is gitignored.
-# gh api repos/kuutti-fi/kuutti-app --jq '{repo_id: .id, owner_id: .owner.id}'
+# gh api repos/kuutti-ry/kuutti-app --jq '{repo_id: .id, owner_id: .owner.id}'
 
 github_owner_id      = "000000000"
 github_repository_id = "000000000"
@@ -14,6 +14,6 @@ billing_alert_email = "billing@example.invalid"
 # organisation, Verified and approved domains, Add a domain: copy the record
 # name (without the domain) and the code here, apply, then press Verify.
 # github_domain_verification = {
-#   name = "_gh-kuutti-fi-o"
+#   name = "_gh-kuutti-ry-o"
 #   code = "0123abcdef"
 # }

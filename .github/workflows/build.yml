@@ -22,7 +22,7 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
-  IMAGE: ghcr.io/kuutti-fi/kuutti-api
+  IMAGE: ghcr.io/kuutti-ry/kuutti-api
 
 jobs:
   image:
@@ -249,7 +249,7 @@ jobs:
     uses: ./.github/workflows/deploy.yml
     with:
       environment: staging
-      image: ghcr.io/kuutti-fi/kuutti-api:${{ github.sha }}
+      image: ghcr.io/kuutti-ry/kuutti-api:${{ github.sha }}
       commit: ${{ needs.image.outputs.short_sha }}
     # Environment-scoped secrets (DOKPLOY_TOKEN) only reach the called job
     # through inherit; an explicit pass would resolve at the caller, which
@@ -263,7 +263,7 @@ jobs:
     uses: ./.github/workflows/deploy.yml
     with:
       environment: prod
-      image: ghcr.io/kuutti-fi/kuutti-api:${{ github.ref_name }}
+      image: ghcr.io/kuutti-ry/kuutti-api:${{ github.ref_name }}
       commit: ${{ needs.image.outputs.short_sha }}
     secrets: inherit # zizmor: ignore[secrets-inherit]
 
@@ -276,4 +276,4 @@ jobs:
       contents: write
     with:
       tag: ${{ github.ref_name }}
-      image: ghcr.io/kuutti-fi/kuutti-api@${{ needs.image.outputs.digest }}
+      image: ghcr.io/kuutti-ry/kuutti-api@${{ needs.image.outputs.digest }}

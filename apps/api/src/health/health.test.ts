@@ -22,7 +22,7 @@ describe("GET /health", () => {
     ctx,
   }) => {
     const body = HealthResponse.parse(await (await ctx.app.request("/health")).json());
-    expect(body.source).toBe("https://github.com/kuutti-fi/kuutti-app");
+    expect(body.source).toBe("https://github.com/kuutti-ry/kuutti-app");
     expect(body.commit).toBe("test");
   });
 

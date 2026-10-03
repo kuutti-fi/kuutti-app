@@ -1,6 +1,6 @@
 # Kuutti
 
-[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/kuutti-fi/kuutti-app/badge)](https://scorecard.dev/viewer/?uri=github.com/kuutti-fi/kuutti-app)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/kuutti-ry/kuutti-app/badge)](https://scorecard.dev/viewer/?uri=github.com/kuutti-ry/kuutti-app)
 
 A free, open-source dating app for Finland. No ads, no premium tiers, no data sales. Every account is a real adult verified through Finnish bank identification. Run by a non-profit association, built as a hobby by volunteers, with research partners onboard.
 
@@ -11,7 +11,7 @@ Milestone 1 (the skeleton) is in progress: a Hono API on AWS (`infra/`), an Expo
 You need git, Node 22.18 or newer, and Docker (Docker Desktop or OrbStack). Six commands, about fifteen minutes; [CONTRIBUTING.md](CONTRIBUTING.md#local-setup) has the detail.
 
 ```bash
-git clone https://github.com/kuutti-fi/kuutti-app.git && cd kuutti-app
+git clone https://github.com/kuutti-ry/kuutti-app.git && cd kuutti-app
 corepack enable                    # pnpm, at the version the project pins
 cp env.example .env                # local values only, nothing secret
 pnpm install

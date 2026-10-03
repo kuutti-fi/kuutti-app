@@ -112,6 +112,8 @@ jobs:
       # The organisation is named here because the uploader reads these
       # variables before the app.json plugin block, and the slug `kuutti` was
       # taken when the organisation was created (2026-09-20): it is kuutti-fi.
+      # That is Sentry's organisation, which kept its slug when the GitHub
+      # organisation became kuutti-ry (#110).
       # app.json follows with the next native change (a fingerprint change).
       - name: Upload the update's source maps to Sentry
         if: steps.ready.outputs.ready == 'true' && vars.EAS_ENABLED == 'true'

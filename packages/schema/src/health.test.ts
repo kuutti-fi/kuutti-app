@@ -6,7 +6,7 @@ const base = {
   version: "0.0.0-dev",
   commit: "abc1234",
   builtAt: "2026-09-13T00:00:00.000Z",
-  source: "https://github.com/kuutti-fi/kuutti-app",
+  source: "https://github.com/kuutti-ry/kuutti-app",
   db: "ok",
   migrations: "current",
 };

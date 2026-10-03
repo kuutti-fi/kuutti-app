@@ -6,7 +6,7 @@ Please do not report security problems through public issues, discussions, or pu
 
 Report them privately through GitHub's vulnerability reporting form:
 
-https://github.com/kuutti-fi/kuutti-app/security/advisories/new
+https://github.com/kuutti-ry/kuutti-app/security/advisories/new
 
 Include what you found, how to reproduce it, the affected commit or version, and any proof of concept. You will get an acknowledgement within 7 days and a status update once the issue has been assessed.
 
