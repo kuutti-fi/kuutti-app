@@ -59,7 +59,7 @@
     "@react-native/jest-preset": "^0.86.3",
     "@testing-library/react-native": "^14.0.1",
     "@types/jest": "29.5.14",
-    "@types/node": "^22.20.2",
+    "@types/node": "^26.6.3",
     "@types/react": "catalog:",
     "jest": "~29.7.0",
     "jest-expo": "~57.0.5",
